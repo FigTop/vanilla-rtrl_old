@@ -11,7 +11,17 @@ from utils import *
 
 class RNN():
     
-    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, loss):
+    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, output, loss):
+        '''
+        Initializes a vanilla RNN object that follows the forward equation
+        
+        h_t = W_rec * phi(h_{t-1}) + W_in * x_t + b_rec
+        z_t = W_out * h_t + b_out
+        
+        with initial parameter values given by W_in, W_rec, W_out, b_rec, b_in
+        and specified activation and loss functions, which must be function
+        objects--see utils.py.
+        '''
         
         #Initial parameter values
         self.W_in  = W_in
@@ -33,8 +43,10 @@ class RNN():
         assert self.n_hidden==b_rec.shape[0]
         assert self.n_out==b_out.shape[0]
         
-        #Activation function
+        #Activation and loss functions
         self.activation = activation
+        self.output     = output
+        self.loss       = loss
         
         #Number of parameters
         self.n_params = self.W_rec.size +\
@@ -61,10 +73,13 @@ class RNN():
         self.A = np.random.normal(0, 1, (self.n_hidden, self.n_hidden))
         self.u = np.random.normal(0, 1, (self.n_hidden + self.n_in + 1))
         
-        #Loss function
-        self.loss = loss
-        
     def next_state(self, x):
+        '''
+        Accepts as argument the current time step's input x and updates
+        the state of the RNN, while storing the previous state h
+        and activatation a.
+        '''
+        
         
         if type(x) is np.ndarray:
             self.x = x
@@ -79,7 +94,7 @@ class RNN():
         
     def z_out(self):
         
-        self.z = self.W_out.dot(self.h) + self.b_out
+        self.z = self.W_out.dot(self.h_prev) + self.b_out
         
     def reset_network(self, h=None):
         
@@ -96,11 +111,30 @@ class RNN():
     
     def get_partial_h_partial_w(self):
         
-        dhdw_rec = np.kron(self.a, np.eye(self.n_hidden))
-        dhdw_in  = np.kron(self.x, np.eye(self.n_hidden))
-        dhdb_rec = np.eye(self.n_hidden)
+        #dhdw_rec = np.kron(self.a_prev, np.eye(self.n_hidden))
+        #dhdw_in  = np.kron(self.x, np.eye(self.n_hidden))
+        #dhdb_rec = np.eye(self.n_hidden)
+        #self.partial_h_partial_w = np.concatenate([dhdw_rec, dhdw_in, dhdb_rec], axis=1)
         
-        self.partial_h_partial_w = np.concatenate([dhdw_rec, dhdw_in, dhdb_rec], axis=1)
+        dsdw_rec = np.multiply.outer(self.activation.f_prime(self.h), self.a_prev)
+        dsdw_rec = np.multiply.outer(np.ones(self.n_hidden), dsdw_rec)
+        dsdw_rec = (np.eye(dsdw_rec.shape[0])[:,:,np.newaxis]*dsdw_rec).reshape(self.n_hidden, -1)
+        
+        dsdw_in = np.multiply.outer(self.activation.f_prime(self.h), self.x)
+        dsdw_in = np.multiply.outer(np.ones(self.n_hidden), dsdw_in)
+        dsdw_in = (np.eye(dsdw_in.shape[0])[:,:,np.newaxis]*dsdw_in).reshape(self.n_hidden, -1)
+        
+        #dsdb_rec = np.multiply.outer(self.phi_derivative(self.h), x)
+        #dsdb_rec = np.multiply.outer(np.ones(self.n_hidden), dsdb_rec)
+        #dsdb_rec = (np.eye(dsdb_rec.shape[0])[:,:,np.newaxis]*dsdb_rec).reshape(self.n_hidden, -1)
+        
+        dsdb_rec = np.diag(self.activation.f_prime(self.h))
+        
+        self.partial_h_partial_w = np.concatenate([dsdw_rec, dsdw_in, dsdb_rec], axis=1)
+        
+        if False:
+            h_hat = np.concatenate([self.a_prev, self.x, np.array([1])])
+            self.partial_h_partial_w = np.kron(h_hat, np.eye(self.n_hidden))
     
     def update_dhdw(self, method='rtrl'):
         
@@ -108,6 +142,7 @@ class RNN():
         
         if method=='rtrl':
             
+            self.get_partial_h_partial_w()
             self.dhdw = self.h_J.dot(self.dhdw) + self.partial_h_partial_w
         
         if method=='uoro':
@@ -184,13 +219,11 @@ class RNN():
             self.next_state(x)
             self.z_out()
             
-            #TODO make this more general
-            y_hat = sigmoid.f(self.z)
+            y_hat = self.output.f(self.z)
             losses.append(self.loss.f(self.z, y))
             y_hats.append(y_hat)
             
             self.get_h_jacobian()
-            self.get_partial_h_partial_w()
             self.update_dhdw(method=method)
             self.update_params(y, learning_rate=learning_rate, method=method)
             
