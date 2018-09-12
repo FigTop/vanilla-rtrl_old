@@ -8,7 +8,7 @@ Created on Mon Sep 10 14:25:20 2018
 
 import numpy as np
 
-class function():
+class function:
     
     def __init__(self, f, f_prime):
         
@@ -86,6 +86,20 @@ softmax = function(softmax_, softmax_derivative)
 
 ### --- Define softmax cross-entropy --- ###
 
+def softmax_cross_entropy_(z, y):
+    
+    p = softmax_(z)
+    
+    return -y.dot(np.log(p))
+
+def softmax_cross_entropy_derivative(z, y):
+    
+    p = softmax_(z)
+    
+    #return (-y/p).dot(softmax_derivative(z))
+    return softmax_(z) - y
+
+softmax_cross_entropy = function(softmax_cross_entropy_, softmax_cross_entropy_derivative)
 
 
 
