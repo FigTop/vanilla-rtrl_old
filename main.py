@@ -13,7 +13,7 @@ from gen_data import gen_data
 import matplotlib.pyplot as plt
 import time
 
-X, Y = gen_data(10000, 2, 5)
+X, Y = gen_data(40000, 3, 7)
 
 n_in     = 1
 n_hidden = 32
@@ -29,7 +29,7 @@ b_out = np.zeros(n_out)
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out, activation=relu, output=sigmoid, loss=sigmoid_cross_entropy)
 
 t1 = time.time()
-losses, y_hats = rnn.run(X, Y, learning_rate=0.001, method='rtrl')
+losses, y_hats = rnn.run(X, Y, learning_rate=0.005, method='rtrl')
 t2 = time.time()
 
 print(t2 - t1)

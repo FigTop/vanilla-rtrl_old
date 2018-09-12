@@ -65,10 +65,10 @@ class RNN():
         self.a = self.activation.f(self.h)
 
         #Standard RTRL
-        self.dhdw  = np.zeros((self.n_hidden, self.n_hidden_params))     
+        self.dadw  = np.zeros((self.n_hidden, self.n_hidden_params))     
         #UORO
         self.theta_tilde = np.zeros(self.n_hidden_params)
-        self.h_tilde     = np.zeros(self.n_hidden)
+        self.a_tilde     = np.zeros(self.n_hidden)
         #KF
         self.A = np.random.normal(0, 1, (self.n_hidden, self.n_hidden))
         self.u = np.random.normal(0, 1, (self.n_hidden + self.n_in + 1))
@@ -87,14 +87,14 @@ class RNN():
             self.x = np.array([x])
         
         self.h_prev = np.copy(self.h)
-        self.a_prev = self.activation.f(self.h_prev)
+        self.a_prev = np.copy(self.a)
         
         self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
         self.a = self.activation.f(self.h)
         
     def z_out(self):
         
-        self.z = self.W_out.dot(self.h_prev) + self.b_out
+        self.z = self.W_out.dot(self.h) + self.b_out
         
     def reset_network(self, h=None):
         
@@ -105,45 +105,45 @@ class RNN():
             
         self.a = self.activation.f(self.h)
             
-    def get_h_jacobian(self):
+    def get_a_jacobian(self):
         
-        self.h_J = self.W_rec.dot(np.diag(self.activation.f_prime(self.h_prev)))
+        self.a_J = np.diag(self.activation.f_prime(self.h)).dot(self.W_rec)
     
-    def get_partial_h_partial_w(self):
+    def get_partial_a_partial_w(self):
         
         #dhdw_rec = np.kron(self.a_prev, np.eye(self.n_hidden))
         #dhdw_in  = np.kron(self.x, np.eye(self.n_hidden))
         #dhdb_rec = np.eye(self.n_hidden)
         #self.partial_h_partial_w = np.concatenate([dhdw_rec, dhdw_in, dhdb_rec], axis=1)
         
-        dsdw_rec = np.multiply.outer(self.activation.f_prime(self.h), self.a_prev)
-        dsdw_rec = np.multiply.outer(np.ones(self.n_hidden), dsdw_rec)
-        dsdw_rec = (np.eye(dsdw_rec.shape[0])[:,:,np.newaxis]*dsdw_rec).reshape(self.n_hidden, -1)
+        #dsdw_rec = np.multiply.outer(self.activation.f_prime(self.h), self.a_prev)
+        #dsdw_rec = np.multiply.outer(np.ones(self.n_hidden), dsdw_rec)
+        #dsdw_rec = (np.eye(dsdw_rec.shape[0])[:,:,np.newaxis]*dsdw_rec).reshape(self.n_hidden, -1)
         
-        dsdw_in = np.multiply.outer(self.activation.f_prime(self.h), self.x)
-        dsdw_in = np.multiply.outer(np.ones(self.n_hidden), dsdw_in)
-        dsdw_in = (np.eye(dsdw_in.shape[0])[:,:,np.newaxis]*dsdw_in).reshape(self.n_hidden, -1)
+        #dsdw_in = np.multiply.outer(self.activation.f_prime(self.h), self.x)
+        #dsdw_in = np.multiply.outer(np.ones(self.n_hidden), dsdw_in)
+        #dsdw_in = (np.eye(dsdw_in.shape[0])[:,:,np.newaxis]*dsdw_in).reshape(self.n_hidden, -1)
         
         #dsdb_rec = np.multiply.outer(self.phi_derivative(self.h), x)
         #dsdb_rec = np.multiply.outer(np.ones(self.n_hidden), dsdb_rec)
         #dsdb_rec = (np.eye(dsdb_rec.shape[0])[:,:,np.newaxis]*dsdb_rec).reshape(self.n_hidden, -1)
         
-        dsdb_rec = np.diag(self.activation.f_prime(self.h))
+        #dsdb_rec = np.diag(self.activation.f_prime(self.h))
         
-        self.partial_h_partial_w = np.concatenate([dsdw_rec, dsdw_in, dsdb_rec], axis=1)
+        #self.partial_h_partial_w = np.concatenate([dsdw_rec, dsdw_in, dsdb_rec], axis=1)
         
-        if False:
-            h_hat = np.concatenate([self.a_prev, self.x, np.array([1])])
-            self.partial_h_partial_w = np.kron(h_hat, np.eye(self.n_hidden))
+        if True:
+            a_hat = np.concatenate([self.a_prev, self.x, np.array([1])])
+            self.partial_a_partial_w = np.kron(a_hat, np.diag(self.activation.f_prime(self.h)))
     
-    def update_dhdw(self, method='rtrl'):
+    def update_dadw(self, method='rtrl'):
         
         assert method in ['rtrl', 'uoro', 'kf']
         
         if method=='rtrl':
             
-            self.get_partial_h_partial_w()
-            self.dhdw = self.h_J.dot(self.dhdw) + self.partial_h_partial_w
+            self.get_partial_a_partial_w()
+            self.dadw = self.a_J.dot(self.dadw) + self.partial_a_partial_w
         
         if method=='uoro':
             
@@ -173,19 +173,19 @@ class RNN():
         #Compute error term via loss derivative for label y
         e = self.loss.f_prime(self.z, y)
         
-        #Compute the dependence of the error on the hidden state
+        #Compute the dependence of the error on the previous activation
         try:
-            q = e.dot(self.W_out)
+            q = (e.dot(self.W_out)).dot(self.W_rec)#.dot(np.diag(self.activation.f_prime(self.h)))
         except AttributeError: #In case e is a scalar
-            q = np.array([e]).dot(self.W_out)
+            q = (np.array([e]).dot(self.W_out)).dot(self.W_rec)#.dot(np.diag(self.activation.f_prime(self.h)))
         
         
         #Calculate the gradient using preferred method
         if method=='rtrl':
-            gradient = q.dot(self.dhdw)
+            gradient = q.dot(self.dadw)
             
         if method=='uoro':
-            gradient = q.dot(self.h_tilde)*self.theta_tilde
+            gradient = q.dot(self.a_tilde)*self.theta_tilde
             
         if method=='kf':
             gradient = np.kron(self.u, q.dot(self.A))
@@ -193,7 +193,7 @@ class RNN():
         n = np.cumsum([w.size for w in [self.W_rec,
                                         self.W_in,
                                         self.b_rec]])
-        
+
         
         #Update "hidden" parameters
         self.W_rec -= learning_rate*gradient[0:n[0]].reshape((self.n_hidden, self.n_hidden))
@@ -223,9 +223,9 @@ class RNN():
             losses.append(self.loss.f(self.z, y))
             y_hats.append(y_hat)
             
-            self.get_h_jacobian()
-            self.update_dhdw(method=method)
             self.update_params(y, learning_rate=learning_rate, method=method)
+            self.get_a_jacobian()
+            self.update_dadw(method=method)
             
         return losses, y_hats
             
