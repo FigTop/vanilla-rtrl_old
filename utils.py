@@ -8,20 +8,12 @@ Created on Mon Sep 10 14:25:20 2018
 
 import numpy as np
 
-class function():
+class function:
     
     def __init__(self, f, f_prime):
         
         self.f       = f
         self.f_prime = f_prime
-        
-    def deriv(self, x):
-        
-        return self.f_prime(x)
-        
-    def __call__(self, x):
-        
-        return self.f(x)
         
 ### --- Define sigmoid --- ###
         
@@ -82,12 +74,33 @@ def softmax_(z):
     
     z = z - np.amax(z)
     
-    return np.exp(-z)/np.sum(z)
+    return np.exp(z)/np.sum(np.exp(z))
 
-def softmax_derivative(h):
+def softmax_derivative(z):
     
-    return 5
+    z = z - np.amax(z)
+    
+    return np.multiply.outer(softmax_(z), 1 - softmax_(z))
 
+softmax = function(softmax_, softmax_derivative)
+
+### --- Define softmax cross-entropy --- ###
+
+def softmax_cross_entropy_(z, y, epsilon=0.0001):
+    
+    p = softmax_(z)
+    p = np.maximum(p, epsilon)
+    
+    return -y.dot(np.log(p))
+
+def softmax_cross_entropy_derivative(z, y):
+    
+    p = softmax_(z)
+    
+    #return (-y/p).dot(softmax_derivative(z))
+    return softmax_(z) - y
+
+softmax_cross_entropy = function(softmax_cross_entropy_, softmax_cross_entropy_derivative)
 
 
 
