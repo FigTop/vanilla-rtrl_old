@@ -47,7 +47,6 @@ class Adam:
             norm = np.sqrt(sum([np.sum(np.square(g)) for g in grads]))
             grads = [self.clip_norm(g, norm) for g in grads]
             
-            
         '''
         if hasattr(self, 'clipvalue') and self.clipvalue > 0:
             grads = [K.clip(g, -self.clipvalue, self.clipvalue) for g in grads]
@@ -84,7 +83,7 @@ class Adam:
     def clip_norm(self, g, norm):
         
         if norm>self.clipnorm:
-            return g/norm*self.clipnorm
+            return (g/norm)*self.clipnorm
         else:
             return g
 

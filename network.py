@@ -182,15 +182,36 @@ class RNN:
             gradient = np.concatenate([np.kron(self.u, q.dot(self.A))]+outer_grads)
 
         #Reshape gradient into correct sizes
-        grads = [gradient[self.flat_idx[i]:self.flat_idx[i+1]].reshape(s).T for i, s in enumerate(self.shapes)]
-    
+        grads = [gradient[self.flat_idx[i]:self.flat_idx[i+1]].reshape(s, order='F') for i, s in enumerate(self.shapes)]
+        
+        if self.l2_reg>0:
+            for i in [0, 1, 3]:
+                grads[i] += self.l2_reg*self.params[i]
+        
+        self.grads = grads
+        
         #Use optimizer object to update parameters
         self.params = optimizer.get_update(self.params, grads)
         self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
         
-    def run(self, x_inputs, y_labels, optimizer, method='rtrl'):
+    def run(self, x_inputs, y_labels, optimizer, method='rtrl', **kwargs):
         
+        allowed_kwargs = {'l2_reg', 't_stop_learning'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to self.run: ' + str(k))
+        
+        self.__dict__.update(kwargs)
         self.reset_network()
+        
+        if hasattr(self, 't_stop_learning'):
+            t_stop_learning = self.t_stop_learning
+        else:
+            t_stop_learning = len(x_inputs)
+            
+        if not hasattr(self, 'l2_reg'):
+            self.l2_reg = 0
         
         losses = []
         y_hats = []
@@ -207,9 +228,10 @@ class RNN:
             losses.append(self.loss.f(self.z, y))
             y_hats.append(y_hat)
             
-            self.get_a_jacobian()
-            self.update_dadw(method=method)
-            self.update_params(y, optimizer=optimizer, method=method)
+            if i_t < t_stop_learning:
+                self.get_a_jacobian()
+                self.update_dadw(method=method)
+                self.update_params(y, optimizer=optimizer, method=method)
             
         return losses, y_hats
             

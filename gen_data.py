@@ -8,7 +8,7 @@ Created on Mon Sep 10 16:30:03 2018
 
 import numpy as np
 
-def gen_data(N, n1, n2, one_hot=True):
+def gen_data(N, n1, n2, one_hot=True, deterministic=False):
     
     if one_hot:
         
@@ -30,7 +30,10 @@ def gen_data(N, n1, n2, one_hot=True):
             except IndexError:
                 pass
             
-            y = np.random.binomial(1, p)
+            if not deterministic:
+                y = np.random.binomial(1, p)
+            else:
+                y = p
             Y.append(np.array([y, 1-y]))
         
     else:
