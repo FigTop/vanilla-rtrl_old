@@ -46,13 +46,13 @@ sigmoid_cross_entropy = function(sigmoid_cross_entropy_, sigmoid_cross_entropy_d
 
 ### --- Define ReLu --- ###
 
-def relu_(h):
+def relu_(h, right_slope=1, left_slope=0.5):
     
-    return np.maximum(0, h)
+    return np.maximum(0, right_slope*h) - np.maximum(0, left_slope*(-h))
 
-def relu_derivative(h):
+def relu_derivative(h, right_slope=1, left_slope=0.5):
     
-    return (h>0).astype(np.int32)
+    return (h>0)*(right_slope - left_slope) + left_slope
 
 relu = function(relu_, relu_derivative)
 

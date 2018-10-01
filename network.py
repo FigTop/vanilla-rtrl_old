@@ -11,7 +11,7 @@ from utils import *
 
 class RNN:
     
-    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, output, loss):
+    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, alpha, output, loss):
         '''
         Initializes a vanilla RNN object that follows the forward equation
         
@@ -49,6 +49,7 @@ class RNN:
         self.flat_idx = np.cumsum([0]+[w.size for w in self.params])
         
         #Activation and loss functions
+        self.alpha = alpha
         self.activation = activation
         self.output     = output
         self.loss       = loss
@@ -94,7 +95,7 @@ class RNN:
         self.h_prev = np.copy(self.h)
         self.a_prev = np.copy(self.a)
         
-        self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
+        self.h = (1 - self.alpha)*self.h + self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
         self.a = self.activation.f(self.h)
         
     def z_out(self):
@@ -112,7 +113,10 @@ class RNN:
             
     def get_a_jacobian(self):
         
-        self.a_J = np.diag(self.activation.f_prime(self.h)).dot(self.W_rec)
+        q1 = self.activation.f_prime(self.h)
+        q2 = self.activation.f_prime(self.h_prev)
+        
+        self.a_J = np.diag(q1).dot(self.W_rec + np.diag((1-self.alpha)/(q2)))
     
     def get_partial_a_partial_w(self):
 
@@ -143,16 +147,16 @@ class RNN:
         if method=='kf':
             
             #Define necessary components
-            a_hat   = np.concatenate([self.a_prev, self.x, np.array([1])])
-            D       = np.diag(self.activation.f_prime(self.h))
-            H_prime = self.a_J.dot(self.A)
+            self.a_hat   = np.concatenate([self.a_prev, self.x, np.array([1])])
+            self.D       = np.diag(self.activation.f_prime(self.h))
+            self.H_prime = self.a_J.dot(self.A)
             
-            c1, c2 = np.random.uniform(-1, 1, 2)
-            p1 = np.sqrt(np.sqrt(np.sum(H_prime**2)/np.sum(self.u**2)))
-            p2 = np.sqrt(np.sqrt(np.sum(D**2)/np.sum(a_hat**2)))
+            self.c1, self.c2 = np.random.uniform(-1, 1, 2)
+            self.p1          = np.sqrt(np.sqrt(np.sum(self.H_prime**2)/np.sum(self.u**2)))
+            self.p2          = np.sqrt(np.sqrt(np.sum(self.D**2)/np.sum(self.a_hat**2)))
             
-            self.u = c1*p1*self.u + c2*p2*a_hat
-            self.A = c1*(1/p1)*H_prime + c2*(1/p2)*D
+            self.u = self.c1*self.p1*self.u + self.c2*self.p2*self.a_hat
+            self.A = self.c1*(1/self.p1)*self.H_prime + self.c2*(1/self.p2)*self.D
             
             
     def update_params(self, y, optimizer, method='rtrl'):
@@ -196,7 +200,7 @@ class RNN:
         
     def run(self, x_inputs, y_labels, optimizer, method='rtrl', **kwargs):
         
-        allowed_kwargs = {'l2_reg', 't_stop_learning'}
+        allowed_kwargs = {'l2_reg', 't_stop_learning', 'monitors'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -212,9 +216,11 @@ class RNN:
             
         if not hasattr(self, 'l2_reg'):
             self.l2_reg = 0
-        
-        losses = []
-        y_hats = []
+            
+        self.mons = {}
+        if hasattr(self, 'monitors'):
+            for mon in self.monitors:
+                self.mons[mon] = []
         
         for i_t in range(len(x_inputs)):
             
@@ -224,16 +230,18 @@ class RNN:
             self.next_state(x)
             self.z_out()
             
-            y_hat = self.output.f(self.z)
-            losses.append(self.loss.f(self.z, y))
-            y_hats.append(y_hat)
+            self.y_hat  = self.output.f(self.z)
+            self.loss_  = self.loss.f(self.z, y)
             
             if i_t < t_stop_learning:
                 self.get_a_jacobian()
                 self.update_dadw(method=method)
                 self.update_params(y, optimizer=optimizer, method=method)
+                
+            for key in self.mons.keys():
+                self.mons[key].append(getattr(self, key))
             
-        return losses, y_hats
+        #return losses, y_hats
             
     
     
