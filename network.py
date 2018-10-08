@@ -8,10 +8,11 @@ Created on Fri Sep  7 17:20:39 2018
 
 import numpy as np
 from utils import *
+from optimizers import *
 
 class RNN:
     
-    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, alpha, output, loss):
+    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, alpha, output, loss, **kwargs):
         '''
         Initializes a vanilla RNN object that follows the forward equation
         
@@ -22,6 +23,12 @@ class RNN:
         and specified activation and loss functions, which must be function
         objects--see utils.py.
         '''
+        
+        allowed_kwargs = {'A', 'B', 'C'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to self.run: ' + str(k))
         
         #Initial parameter values
         self.W_in  = W_in
@@ -69,14 +76,21 @@ class RNN:
         #Initial state values
         self.h = np.random.normal(0, 1/np.sqrt(self.n_hidden), self.n_hidden)
         self.a = self.activation.f(self.h)
+        self.z = np.random.normal(0, 1/np.sqrt(self.n_out), self.n_out)
 
         #Standard RTRL
         self.dadw  = np.random.normal(0, 1, (self.n_hidden, self.n_hidden_params))     
         #UORO
         self.theta_tilde = np.random.normal(0, 1, self.n_hidden_params)
         self.a_tilde     = np.random.normal(0, 1, self.n_hidden)
-        #KF
-        self.A = np.random.normal(0, 1, (self.n_hidden, self.n_hidden))
+        
+        #KF/Synethic Grads
+        if not hasattr(self, 'A'):
+            self.A = np.random.normal(0, 1/np.sqrt(self.n_hidden + self.n_hidden), (self.n_hidden, self.n_hidden))
+        if not hasattr(self, 'B'):
+            self.B = np.random.normal(0, 1/np.sqrt(self.n_hidden + self.n_out), (self.n_hidden, self.n_out))
+        if not hasattr(self, 'C'):    
+            self.C = np.zeros(self.n_hidden)
         self.u = np.random.normal(0, 1, (self.n_hidden + self.n_in + 1))
         
     def next_state(self, x):
@@ -100,6 +114,7 @@ class RNN:
         
     def z_out(self):
         
+        self.z_prev = np.copy(self.z)
         self.z = self.W_out.dot(self.a) + self.b_out
         
     def reset_network(self, h=None):
@@ -125,7 +140,7 @@ class RNN:
     
     def update_dadw(self, method='rtrl'):
         
-        assert method in ['rtrl', 'uoro', 'kf']
+        assert method in ['rtrl', 'uoro', 'kf', 'dni']
         
         if method=='rtrl':
             
@@ -158,10 +173,33 @@ class RNN:
             self.u = self.c1*self.p1*self.u + self.c2*self.p2*self.a_hat
             self.A = self.c1*(1/self.p1)*self.H_prime + self.c2*(1/self.p2)*self.D
             
+        if method=='dni':
+            
+            self.sg_1 = self.synthetic_grad(self.a_prev, self.y_prev)
+            self.sg_2 = (1 - self.alpha_SG_target)*self.sg_2 + self.synthetic_grad(self.a, self.y).dot(self.a_J)
+            self.e_sg = self.sg_1 - self.sg_2
+            
+            for _ in range(self.n_SG):
+                self.SG_grads = [np.multiply.outer(self.e_sg, self.a_prev) + self.l2_SG*self.A,
+                                 np.multiply.outer(self.e_sg, self.y_prev) + self.l2_SG*self.B,
+                                 self.e_sg]
+                self.SG_params = self.SG_optimizer.get_update(self.SG_params, self.SG_grads)
+                
+                self.A, self.B, self.C = self.SG_params
+                
+                self.sg_1 = self.synthetic_grad(self.a_prev, self.y_prev)
+                self.e_sg = self.sg_1 - self.sg_2
+            #self.A = self.A - self.SG_learning_rate*(np.multiply.outer(self.e_sg, self.a) + self.l2_SG*self.A)
+            #self.B = self.B - self.SG_learning_rate*(np.multiply.outer(self.e_sg, self.y) + self.l2_SG*self.B)
+            #self.C = self.C - self.SG_learning_rate*self.e_sg
+            
+    def synthetic_grad(self, a, y):
+        
+        return self.A.dot(a) + self.B.dot(y) + self.C
             
     def update_params(self, y, optimizer, method='rtrl'):
         
-        assert method in ['rtrl', 'uoro', 'kf']
+        assert method in ['rtrl', 'uoro', 'kf', 'dni']
         
         #Compute error term via loss derivative for label y
         e = self.loss.f_prime(self.z, y)
@@ -184,6 +222,11 @@ class RNN:
             
         if method=='kf':
             gradient = np.concatenate([np.kron(self.u, q.dot(self.A))]+outer_grads)
+            
+        if method=='dni':
+            sg = self.synthetic_grad(self.a, self.y)*self.activation.f_prime(self.h)
+            a_ext = np.concatenate([self.a, self.x, np.array([1])])
+            gradient = np.concatenate([np.kron(a_ext, sg)]+outer_grads)
 
         #Reshape gradient into correct sizes
         grads = [gradient[self.flat_idx[i]:self.flat_idx[i+1]].reshape(s, order='F') for i, s in enumerate(self.shapes)]
@@ -198,9 +241,10 @@ class RNN:
         self.params = optimizer.get_update(self.params, grads)
         self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
         
-    def run(self, x_inputs, y_labels, optimizer, method='rtrl', **kwargs):
+    def run(self, x_inputs, y_labels, optimizer, method='rtrl', SG_learning_rate=0.001, **kwargs):
         
-        allowed_kwargs = {'l2_reg', 't_stop_learning', 'monitors'}
+        allowed_kwargs = {'l2_reg', 'l2_SG', 't_stop_learning', 'monitors', 'SG_optimizer',
+                          'alpha_SG_target', 'n_SG'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -216,30 +260,48 @@ class RNN:
             
         if not hasattr(self, 'l2_reg'):
             self.l2_reg = 0
-            
+        
+        if not hasattr(self, 'SG_optimizer'):
+            self.SG_optimizer = SGD(lr=SG_learning_rate)
+        
+        if method=='dni':
+            self.SG_params = [self.A, self.B, self.C]
+            self.sg_1 = np.zeros(self.n_hidden)
+            self.sg_2 = np.zeros(self.n_hidden)
+            self.SG_learning_rate = SG_learning_rate
+            if not hasattr(self, 'alpha_SG_target'):
+                self.alpha_SG_target = 0.1
+            if not hasattr(self, 'n_SG'):
+                self.n_SG = 1
+        
         self.mons = {}
         if hasattr(self, 'monitors'):
             for mon in self.monitors:
                 self.mons[mon] = []
         
+        self.y_prev = y_labels[0]
+        
         for i_t in range(len(x_inputs)):
             
-            x = x_inputs[i_t]
-            y = y_labels[i_t]
+            self.x = x_inputs[i_t]
+            self.y = y_labels[i_t]
             
-            self.next_state(x)
+            self.next_state(self.x)
             self.z_out()
             
             self.y_hat  = self.output.f(self.z)
-            self.loss_  = self.loss.f(self.z, y)
+            self.loss_  = self.loss.f(self.z, self.y)
             
             if i_t < t_stop_learning:
                 self.get_a_jacobian()
                 self.update_dadw(method=method)
-                self.update_params(y, optimizer=optimizer, method=method)
+                self.update_params(self.y, optimizer=optimizer, method=method)
                 
             for key in self.mons.keys():
                 self.mons[key].append(getattr(self, key))
+                
+            self.y_prev = np.copy(self.y)
+                
             
         #return losses, y_hats
             

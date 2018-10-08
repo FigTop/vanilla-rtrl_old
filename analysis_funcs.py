@@ -52,19 +52,21 @@ def get_vector_alignment(v1, v2):
         
     return alignment
     
-def plot_filtered_signals(signals, filter_size=100, y_lim=[0,1.5]):
+def plot_filtered_signals(signals, filter_size=100, y_lim=[0,1.5], plot_loss_benchmarks=True):
     
-    fig = plt.figure(figsize=[14, 11])
+    fig = plt.figure(figsize=[8, 6])
     
     for signal in signals:
         smoothed_signal = np.convolve(signal, np.ones(filter_size)/filter_size, mode='valid')
         plt.plot(smoothed_signal)
-        
-    plt.plot([0, len(smoothed_signal)], [0.66, 0.66], '--', color='r')
-    plt.plot([0, len(smoothed_signal)], [0.52, 0.52], '--', color='m')
-    plt.plot([0, len(smoothed_signal)], [0.45, 0.45], '--', color='g')
+    
+    if plot_loss_benchmarks:
+        plt.plot([0, len(smoothed_signal)], [0.66, 0.66], '--', color='r')
+        plt.plot([0, len(smoothed_signal)], [0.52, 0.52], '--', color='m')
+        plt.plot([0, len(smoothed_signal)], [0.45, 0.45], '--', color='g')
     
     plt.ylim(y_lim)
+    plt.xlabel('Time')
     
     return fig
 

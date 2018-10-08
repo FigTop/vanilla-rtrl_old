@@ -111,6 +111,10 @@ class SGD:
         params = [x.flatten() for x in params]
         grads = [x.flatten() for x in grads]
         
+        if hasattr(self, 'clipnorm') and self.clipnorm > 0:
+            norm = np.sqrt(sum([np.sum(np.square(g)) for g in grads]))
+            grads = [self.clip_norm(g, norm) for g in grads]
+        
         """ #TODO: implement clipping
         if hasattr(self, 'clipnorm') and self.clipnorm > 0:
             norm = np.sqrt(sum([np.sum(np.square(g)) for g in grads]))
@@ -127,3 +131,10 @@ class SGD:
             ret[i] = ret[i].reshape(original_shapes[i])
         
         return ret
+    
+    def clip_norm(self, g, norm):
+        
+        if norm>self.clipnorm:
+            return (g/norm)*self.clipnorm
+        else:
+            return g
