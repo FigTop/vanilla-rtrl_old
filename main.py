@@ -46,7 +46,6 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 optimizer = SGD(lr=0.001, clipnorm=1)
 SG_optimizer = SGD(lr=0.0001, clipnorm=0.5)
 
-
 #Choose monitors
 monitors = ['A', 'W_rec', 'grads', 'loss_', 'a', 'h', 'a_J']
 
