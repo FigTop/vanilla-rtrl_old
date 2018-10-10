@@ -255,7 +255,7 @@ class RNN:
         self.params = optimizer.get_update(self.params, grads)
         self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
         
-    def run(self, x_inputs, y_labels, learning_algorithm, optimizer, method='rtrl', **kwargs):
+    def run(self, x_inputs, y_labels, learn_alg, optimizer, method='rtrl', **kwargs):
         
         allowed_kwargs = {'l2_reg', 'l2_SG', 't_stop_learning', 'monitors', 'SG_optimizer',
                           'alpha_SG_target', 'n_SG'}
@@ -281,7 +281,6 @@ class RNN:
             self.SG_params = [self.A, self.B, self.C]
             self.sg_1 = np.zeros(self.n_hidden)
             self.sg_2 = np.zeros(self.n_hidden)
-            self.SG_learning_rate = SG_learning_rate
             if not hasattr(self, 'alpha_SG_target'):
                 self.alpha_SG_target = 0.1
             if not hasattr(self, 'n_SG'):
@@ -304,11 +303,17 @@ class RNN:
             
             self.y_hat  = self.output.f(self.z)
             self.loss_  = self.loss.f(self.z, self.y)
-            
-            if i_t < t_stop_learning:
+            self.e = self.loss.f_prime(self.z, self.y)
+            #$self.e = e
+
+            if i_t < self.t_stop_learning:
                 self.get_a_jacobian()
-                self.update_learning_vars(method=method)
-                self.update_params(self.y, optimizer=optimizer, method=method)
+                #self.update_learning_vars(method=method)
+                learn_alg.update_learning_vars()
+                self.grads = learn_alg()
+                self.params = optimizer.get_update(self.params, self.grads)
+                self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
+                #self.update_params(self.y, optimizer=optimizer, method=method)
                 
             for key in self.mons.keys():
                 self.mons[key].append(getattr(self, key))

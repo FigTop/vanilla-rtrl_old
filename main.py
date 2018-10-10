@@ -14,8 +14,11 @@ import matplotlib.pyplot as plt
 import time
 from optimizers import *
 from analysis_funcs import *
+from learning_algorithms import *
 
-X, Y = gen_data(5000, 3, 6, one_hot=True, deterministic=True)
+np.random.seed(1)
+
+X, Y = gen_data(50000, 3, 6, one_hot=True, deterministic=False)
 
 n_in     = 2
 n_hidden = 32
@@ -43,28 +46,25 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           A=A, B=B, C=C)
 
 
-optimizer = SGD(lr=0.001, clipnorm=1)
+optimizer = SGD(lr=0.0001, clipnorm=1)
 SG_optimizer = SGD(lr=0.0001, clipnorm=0.5)
+#learn_alg = BPTT(rnn, 3, 8)
+learn_alg = KF_RTRL(rnn)
 
 #Choose monitors
 monitors = ['A', 'W_rec', 'grads', 'loss_', 'a', 'h', 'a_J']
+monitors = ['loss_']
 
 t1 = time.time()
-rnn.run(X, Y, optimizer, method='dni', monitors=monitors, SG_optimizer=SG_optimizer, l2_reg=0.001, l2_SG=0.001,
+rnn.run(X, Y, learn_alg, optimizer, method='rtrl', monitors=monitors, SG_optimizer=SG_optimizer, l2_reg=0.001, l2_SG=0.001,
         alpha_SG_target=1, n_SG=5)
 t2 = time.time()
 print('Time Elapsed:'+str(t2 - t1))
 
-A = np.nan_to_num(np.array(rnn.mons['A']))
-W = np.nan_to_num(np.array(rnn.mons['W_rec']))
-
-A_radii = get_spectral_radii(A)
-W_radii = get_spectral_radii(W)
-
 signals = [rnn.mons['loss_']]
-signals += [W_radii, A_radii]
+#signals += [W_radii, A_radii]
 fig = plot_filtered_signals(signals, y_lim=[-0.1, 1.5], plot_loss_benchmarks=True, filter_size=100)
-plt.legend(['loss', 'W Spec. Rad.', 'A Spec. Rad.'])
+#plt.legend(['loss', 'W Spec. Rad.', 'A Spec. Rad.'])
 
 
 
