@@ -127,7 +127,7 @@ class RNN:
     def run(self, x_inputs, y_labels, learn_alg, optimizer, **kwargs):
         
         allowed_kwargs = {'l2_reg', 't_stop_learning', 'monitors', 'update_interval',
-                          'verbose', 'report_interval'}
+                          'verbose', 'report_interval', 'comparison_alg'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -175,12 +175,20 @@ class RNN:
                 self.learn_alg.update_learning_vars()
                 self.grads = self.learn_alg()
                 
+                if hasattr(self, 'comparison_alg'):
+                    self.comparison_alg.update_learning_vars()
+                    self.grads_ = self.comparison_alg()
+                    
+                    self.alignment = [g.flatten().dot(g_.flatten())/np.sqrt(np.sum(g**2)*np.sum(g_**2)) for g, g_ in zip(self.grads, self.grads_)]
+                
                 for i_l2 in [0, 1, 3]:
                     self.grads[i_l2] += self.l2_reg*self.grads[i_l2]
                 
                 if (i_t + 1)%self.update_interval==0:
                     self.params = self.optimizer.get_update(self.params, self.grads)
                     self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
+                    
+                    
             
             self.x_prev = np.copy(self.x)
             self.y_prev = np.copy(self.y)

@@ -18,14 +18,14 @@ from learning_algorithms import *
 
 np.random.seed(2)
 
-#X, Y = coin_task(20000, 3, 6, one_hot=True, deterministic=False)
-n_sym = 5
-T = 5
-X, Y = copy_task(n_sym, 1000, T)
+X, Y = coin_task(20000, 3, 6, one_hot=True, deterministic=True)
+#n_sym = 5
+#T = 5
+#X, Y = copy_task(n_sym, 1000, T)
 
-n_in     = n_sym
+n_in     = 2
 n_hidden = 32
-n_out    = n_sym
+n_out    = 2
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_hidden, n_hidden))
@@ -45,34 +45,37 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 
 optimizer = SGD(lr=0.001, clipnorm=1)
 SG_optimizer = SGD(lr=0.0001, clipnorm=0.5)
-learn_alg = RTRL(rnn)#, 3, 10)#, SG_optimizer)
-monitors = ['loss_', 'y_hat', 'y']
+comp_alg = BPTT(rnn, 1, 10)#, 3, 10)#, SG_optimizer)
+learn_alg = DNI(rnn, SG_optimizer)
+monitors = ['loss_', 'alignment']
 
 rnn.run(X, Y, learn_alg, optimizer,
         monitors=monitors,
         update_interval=1,
-        l2_reg=0.0001)
+        l2_reg=0.0001,
+        comparison_alg=comp_alg)
 
-signals = [rnn.mons['loss_']]
-fig = plot_filtered_signals(signals, y_lim=[-0.1, 1.5], plot_loss_benchmarks=True, filter_size=100)
+signals = [rnn.mons['loss_']]+[[a[i] for a in rnn.mons['alignment']] for i in range(5)]
+fig = plot_filtered_signals(signals, y_lim=[-0.1, 1.5], plot_loss_benchmarks=False, filter_size=100)
+plt.legend(['Loss', 'W_rec', 'W_in', 'b_rec', 'W_out', 'b_out'])
 
-i_hats = []
-i_label = []
-last_n = 1000
-for i in range(last_n):
-    
-    i_hats.append(np.argmax(rnn.mons['y_hat'][-last_n+i]))
-    if np.amax(rnn.mons['y'][-last_n+i])==1:
-        i_label.append(np.argmax(rnn.mons['y'][-last_n+i]))
-    else:
-        i_label.append(-1)
-
-acc = []
-for i in range(last_n):
-    if i_label!=-1:
-        acc.append(i_hats[i]==i_label[i])
-        
-print(sum(acc)/len(acc))
+#i_hats = []
+#i_label = []
+#last_n = 1000
+#for i in range(last_n):
+#    
+#    i_hats.append(np.argmax(rnn.mons['y_hat'][-last_n+i]))
+#    if np.amax(rnn.mons['y'][-last_n+i])==1:
+#        i_label.append(np.argmax(rnn.mons['y'][-last_n+i]))
+#    else:
+#        i_label.append(-1)
+#
+#acc = []
+#for i in range(last_n):
+#    if i_label!=-1:
+#        acc.append(i_hats[i]==i_label[i])
+#        
+#print(sum(acc)/len(acc))
         
         
         
