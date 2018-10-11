@@ -103,7 +103,7 @@ class RTRL:
         outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
         
         q = self.net.e.dot(self.net.W_out)
-        rec_grad = q.dot(self.dadw).reshape((self.I, self.J), order='C')
+        rec_grad = q.dot(self.dadw).reshape((self.I, self.J), order='F')
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
         
@@ -187,7 +187,7 @@ class KF_RTRL:
         outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
         
         q = self.net.e.dot(self.net.W_out)
-        rec_grad = np.kron(self.u, q.dot(self.A)).reshape((self.I,self.J), order='C')
+        rec_grad = np.kron(self.u, q.dot(self.A)).reshape((self.I,self.J), order='F')
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
         
@@ -200,28 +200,50 @@ class DNI:
         self.net = net
         self.optimizer = optimizer
         
-        self.A = np.random.normal(0, 1/np.sqrt(self.n_hidden + self.n_hidden), (self.n_hidden, self.n_hidden))
-        self.B = np.random.normal(0, 1/np.sqrt(self.n_hidden + self.n_out), (self.n_hidden, self.n_out))
-        self.C = np.zeros(self.n_hidden)
+        n_h = self.net.n_hidden
+        n_out = self.net.n_out
+        
+        self.A = np.random.normal(0, 1/np.sqrt(2*n_h), (n_h, n_h))
+        self.B = np.random.normal(0, 1/np.sqrt(n_h+n_out), (n_h, n_out))
+        self.C = np.zeros(n_h)
+        
+        self.SG_params = [self.A, self.B, self.C]
         
     def update_learning_vars(self):
         
-        self.sg_1 = self.synthetic_grad(self.a_prev, self.y_prev)
-        self.sg_2 = (1 - self.alpha_SG_target)*self.sg_2 + self.synthetic_grad(self.a, self.y).dot(self.a_J)
-        self.e_sg = self.sg_1 - self.sg_2
+        #Get network jacobian
+        self.net.get_a_jacobian()
         
-        self.SG_grads = [np.multiply.outer(self.e_sg, self.a_prev) + self.l2_SG*self.A,
-                     np.multiply.outer(self.e_sg, self.y_prev) + self.l2_SG*self.B,
-                     self.e_sg]
-        self.SG_params = self.SG_optimizer.get_update(self.SG_params, self.SG_grads)
+        #Computer SG error term
+        self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
+        self.sg_target = self.synthetic_grad(self.net.a, self.net.y).dot(self.net.a_J)
+        self.e_sg = self.sg - self.sg_target
+        self.sg_loss = np.mean((self.sg - self.sg_target)**2)
         
+        #Get SG grads
+        self.SG_grads = [np.multiply.outer(self.e_sg, self.net.a_prev),
+                         np.multiply.outer(self.e_sg, self.net.y_prev),
+                         self.e_sg]
+        
+        #Update SG parameters
+        self.SG_params = self.optimizer.get_update(self.SG_params, self.SG_grads)
         self.A, self.B, self.C = self.SG_params
         
-        self.sg_1 = self.synthetic_grad(self.a_prev, self.y_prev)
-        self.e_sg = self.sg_1 - self.sg_2
+    def synthetic_grad(self, a, y):
+        
+        return self.A.dot(a) + self.B.dot(y) + self.C    
     
-    
-    
+    def __call__(self):
+        
+        outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
+        
+        sg = self.synthetic_grad(self.net.a, self.net.y)*self.net.activation.f_prime(self.net.h)
+        pre_activity = np.concatenate([self.net.a, self.net.x, np.array([1])])
+        rec_grad = np.multiply.outer(sg, pre_activity)
+        
+        grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
+        
+        return grads
     
     
     

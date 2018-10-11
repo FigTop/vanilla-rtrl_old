@@ -9,29 +9,27 @@ Created on Mon Sep 10 16:30:58 2018
 import numpy as np
 from network import RNN
 from utils import *
-from gen_data import gen_data
+from gen_data import *
 import matplotlib.pyplot as plt
 import time
 from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
 
-np.random.seed(1)
+np.random.seed(2)
 
-X, Y = gen_data(50000, 3, 6, one_hot=True, deterministic=False)
+#X, Y = coin_task(20000, 3, 6, one_hot=True, deterministic=False)
+n_sym = 5
+T = 5
+X, Y = copy_task(n_sym, 1000, T)
 
-n_in     = 2
+n_in     = n_sym
 n_hidden = 32
-n_out    = 2
+n_out    = n_sym
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_hidden, n_hidden))
-#W_rec = np.eye(n_hidden)*0.54
-W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-
-A = np.random.normal(0,  1/np.sqrt(n_hidden+n_hidden), (n_hidden, n_hidden))
-B = np.random.normal(0, 1/np.sqrt(n_out+n_hidden), (n_hidden, n_out))
-C = np.zeros(n_hidden)
+W_out = np.random.normal(0, np.sqrt(1/(n_out)), (n_out, n_hidden))
 
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
@@ -42,36 +40,44 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=relu,
           alpha=alpha,
           output=softmax,
-          loss=softmax_cross_entropy,
-          A=A, B=B, C=C)
+          loss=softmax_cross_entropy)
 
 
-optimizer = SGD(lr=0.0001, clipnorm=1)
+optimizer = SGD(lr=0.001, clipnorm=1)
 SG_optimizer = SGD(lr=0.0001, clipnorm=0.5)
-#learn_alg = BPTT(rnn, 3, 8)
-learn_alg = KF_RTRL(rnn)
+learn_alg = RTRL(rnn)#, 3, 10)#, SG_optimizer)
+monitors = ['loss_', 'y_hat', 'y']
 
-#Choose monitors
-monitors = ['A', 'W_rec', 'grads', 'loss_', 'a', 'h', 'a_J']
-monitors = ['loss_']
-
-t1 = time.time()
-rnn.run(X, Y, learn_alg, optimizer, method='rtrl', monitors=monitors, SG_optimizer=SG_optimizer, l2_reg=0.001, l2_SG=0.001,
-        alpha_SG_target=1, n_SG=5)
-t2 = time.time()
-print('Time Elapsed:'+str(t2 - t1))
+rnn.run(X, Y, learn_alg, optimizer,
+        monitors=monitors,
+        update_interval=1,
+        l2_reg=0.0001)
 
 signals = [rnn.mons['loss_']]
-#signals += [W_radii, A_radii]
 fig = plot_filtered_signals(signals, y_lim=[-0.1, 1.5], plot_loss_benchmarks=True, filter_size=100)
-#plt.legend(['loss', 'W Spec. Rad.', 'A Spec. Rad.'])
 
+i_hats = []
+i_label = []
+last_n = 1000
+for i in range(last_n):
+    
+    i_hats.append(np.argmax(rnn.mons['y_hat'][-last_n+i]))
+    if np.amax(rnn.mons['y'][-last_n+i])==1:
+        i_label.append(np.argmax(rnn.mons['y'][-last_n+i]))
+    else:
+        i_label.append(-1)
 
-
-
-
-
-
+acc = []
+for i in range(last_n):
+    if i_label!=-1:
+        acc.append(i_hats[i]==i_label[i])
+        
+print(sum(acc)/len(acc))
+        
+        
+        
+        
+        
 
 
 

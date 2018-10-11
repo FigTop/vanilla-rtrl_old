@@ -8,7 +8,7 @@ Created on Mon Sep 10 16:30:03 2018
 
 import numpy as np
 
-def gen_data(N, n1, n2, one_hot=True, deterministic=False):
+def coin_task(N, n1, n2, one_hot=True, deterministic=False):
     
     if one_hot:
         
@@ -50,3 +50,40 @@ def gen_data(N, n1, n2, one_hot=True, deterministic=False):
         
     return X, Y
 
+def copy_task(n_symbols, n_sequences, T):
+    
+    I = np.eye(n_symbols)
+    
+    X = np.zeros((1, n_symbols))
+    Y = np.zeros((1, n_symbols))
+    
+    for i in range(n_sequences):
+        
+        seq = I[np.random.randint(0, n_symbols, size=T)]
+        cue = np.tile(np.ones(n_symbols), (T, 1))
+        X = np.concatenate([X, seq, cue])
+        Y = np.concatenate([Y, np.ones((T, n_symbols))*0.1, seq])
+        
+    return X, Y
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
