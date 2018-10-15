@@ -9,7 +9,9 @@ Created on Fri Sep  7 17:20:39 2018
 import numpy as np
 from utils import *
 from optimizers import *
+from analysis_funcs import classification_accuracy, normalized_dot_product
 import time
+from copy import copy
 
 class RNN:
     
@@ -110,43 +112,53 @@ class RNN:
             h_prev = kwargs['h_prev']
         except KeyError:
             h_prev = np.copy(self.h_prev)
+            
+        try:
+            W_rec = kwargs['W_rec']
+        except KeyError:
+            W_rec = np.copy(self.W_rec)
         
         q1 = self.activation.f_prime(h)
         
         if self.alpha!=1:
             q2 = self.activation.f_prime(h_prev)
-            a_J = np.diag(q1).dot(self.W_rec + np.diag((1-self.alpha)/(q2)))
+            a_J = np.diag(q1).dot(W_rec + np.diag((1-self.alpha)/(q2)))
         else:
-            a_J = np.diag(q1).dot(self.W_rec)
+            a_J = np.diag(q1).dot(W_rec)
         
         if update:
             self.a_J = np.copy(a_J)
         else:
             return a_J
         
-    def run(self, x_inputs, y_labels, learn_alg, optimizer, **kwargs):
+    def run(self, data, learn_alg=None, optimizer=None, **kwargs):
         
-        allowed_kwargs = {'l2_reg', 't_stop_learning', 'monitors', 'update_interval',
-                          'verbose', 'report_interval', 'comparison_alg'}
+        allowed_kwargs = {'l2_reg', 'monitors', 'update_interval',
+                          'verbose', 'report_interval', 'comparison_alg', 'mode',
+                          'check_accuracy'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
                                 'passed to RNN.run: ' + str(k))
-        
+        self.data      = data
         self.learn_alg = learn_alg
         self.optimizer = optimizer
-        self.T         = len(x_inputs)
         
         #Default run parameters
-        self.t_stop_learning  = len(x_inputs)
+        self.mode             = 'train'
+        self.check_accuracy   = False
         self.l2_reg           = 0
         self.monitors         = []
         self.update_interval  = 1
         self.verbose          = True
-        self.report_interval  = self.T//10
+        self.report_interval  = len(self.data['train']['X'])//10
         
         self.__dict__.update(kwargs)
         self.reset_network()
+        
+        x_inputs = data[self.mode]['X']
+        y_labels = data[self.mode]['Y']
+        self.T   = len(x_inputs)
         
         #Initialize monitors
         self.mons = {}
@@ -170,7 +182,7 @@ class RNN:
             self.loss_  = self.loss.f(self.z, self.y)
             self.e = self.loss.f_prime(self.z, self.y)
 
-            if i_t < self.t_stop_learning:
+            if self.mode=='train':
                 
                 self.learn_alg.update_learning_vars()
                 self.grads = self.learn_alg()
@@ -178,32 +190,27 @@ class RNN:
                 if hasattr(self, 'comparison_alg'):
                     self.comparison_alg.update_learning_vars()
                     self.grads_ = self.comparison_alg()
-                    
-                    self.alignment = [g.flatten().dot(g_.flatten())/np.sqrt(np.sum(g**2)*np.sum(g_**2)) for g, g_ in zip(self.grads, self.grads_)]
+                    G = zip(self.grads, self.grads_)
+                    self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
                 
-                for i_l2 in [0, 1, 3]:
-                    self.grads[i_l2] += self.l2_reg*self.grads[i_l2]
+                #L2 Reg
+                for i_l2, W in zip([0, 1, 3], [self.W_rec, self.W_in, self.W_out]):
+                    self.grads[i_l2] += self.l2_reg*W
                 
                 if (i_t + 1)%self.update_interval==0:
                     self.params = self.optimizer.get_update(self.params, self.grads)
                     self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
                     
-                    
             
             self.x_prev = np.copy(self.x)
             self.y_prev = np.copy(self.y)
             
-            for key in self.mons.keys():
-                for obj in [self, self.learn_alg, self.optimizer]:
-                    try:
-                        self.mons[key].append(getattr(obj, key))
-                    except AttributeError:
-                        pass
+            self.update_monitors()
                     
             if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
                 
                 self.report_progress(i_t)
-            
+                
     def report_progress(self, i_t):
         
         t2 = time.time()
@@ -218,14 +225,39 @@ class RNN:
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
             
+        if self.check_accuracy:
+            self.rnn_copy = copy(self)
+            self.rnn_copy.run(self.data, mode='test', monitors=['y_hat'], verbose=False)
+            acc = classification_accuracy(self.data, self.rnn_copy.mons['y_hat'])
+            accuracy = 'Test accuracy: {} \n'.format(acc)
+            summary += accuracy
+            
         print(summary.format(progress, time_elapsed))
     
-    
-    
-    
-    
-    
-    
+    def update_monitors(self):
+
+        for key in self.mons.keys():
+            try:
+                self.mons[key].append(getattr(self, key))
+            except AttributeError:
+                pass
+        
+    def truncate_history(self, T):
+        '''
+        Delete all history of an RNN past a certain point
+        (useful if learning blows up and we want to see what hapepend before)
+        '''
+        
+        objs = [self, self.learn_alg]
+        if hasattr(self, 'comparison_alg'):
+            objs += self.comparison_alg
+            
+        for obj in objs:
+            if hasattr(obj, 'mons'):
+                for key in obj.mons.keys():
+                    obj.mons[key] = obj.mons[key][:T]
+            
+            
     
     
     

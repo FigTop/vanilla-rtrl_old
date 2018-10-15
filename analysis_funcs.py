@@ -8,10 +8,9 @@ Created on Mon Oct  1 12:02:11 2018
 
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn import linear_model
 
 def plot_smoothed_loss(mons, filter_size=100):
-    
-    fig = plt.figure()
     
     losses = mons['loss_']
     smoothed_loss = np.convolve(losses, np.ones(filter_size)/filter_size, mode='valid')
@@ -22,8 +21,38 @@ def plot_smoothed_loss(mons, filter_size=100):
     plt.plot([0, len(smoothed_loss)], [0.45, 0.45], '--', color='g')
     
     plt.ylim([0,1])
+
+def classification_accuracy(data, y_hat):
     
-    return fig
+    y_hat = np.array(y_hat)
+    
+    i_label = np.argmax(data['test']['Y'], axis=1)
+    i_pred = np.argmax(y_hat, axis=1)
+    
+    acc = np.sum(i_label==i_pred)/len(i_label)
+    
+    return acc
+
+def regress_vars(X_list, Y):
+    
+    X = np.concatenate(X_list, axis=1)
+    model = linear_model.LinearRegression()
+    
+    model.fit(X, Y)
+    r2 = model.score(X,Y)
+    print('R2 = {}'.format(r2))
+    
+    A = get_vector_alignment(model.coef_.dot(X.T).T + model.intercept_,
+                             Y)
+    plt.plot(A, '.', alpha=0.1)
+    plt.axhline(y=0, color='k', linestyle='--')
+    plt.axhline(y=np.nanmean(A), color='b')
+    
+    return r2
+
+def normalized_dot_product(a, b):
+    
+    return np.dot(a.flatten(),b.flatten())/np.sqrt(np.sum(a**2)*np.sum(b**2))
 
 def get_spectral_radius(M):
     

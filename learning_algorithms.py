@@ -9,30 +9,52 @@ Created on Tue Oct  9 15:03:11 2018
 import numpy as np
 from pdb import set_trace
 
-class BPTT:
+class Learning_Algorithm:
     
-    def __init__(self, net, t1, t2):
+    def __init__(self, net, monitors):
         
-        #RNN instance that BPTT is being applied to
+        #RNN instance the algorithm is being applied to
         self.net = net
+        
+        #Initialize dictionary of monitors
+        self.mons = {}
+        for mon in monitors:
+            self.mons[mon] = []
+            
+    def update_monitors(self):
+        
+        for key in self.mons.keys():
+            try:
+                self.mons[key].append(getattr(self, key))
+            except AttributeError:
+                pass
+
+
+class BPTT(Learning_Algorithm):
+    
+    def __init__(self, net, t1, t2, monitors=[], use_historical_W=False):
+    
+        super().__init__(net, monitors)
         
         #The two integer parameters
         self.t1  = t1    #Number of steps to average loss over
         self.t2  = t2    #Number of steps to propagate backwards
         self.T   = t1+t2 #Total amount of net hist needed to memorize
+        self.use_historical_W = use_historical_W
         
         #Lists storing relevant net history
         self.h_hist = [np.zeros(self.net.n_hidden) for _ in range(self.T)]
         self.a_hist = [np.zeros(self.net.n_hidden) for _ in range(self.T)]
         self.e_hist = [np.zeros(self.net.n_out) for _ in range(t1)]
         self.x_hist = [np.zeros(self.net.n_in) for _ in range(self.T)]
+        self.W_rec_hist = [self.net.W_rec for _ in range(self.T)]
         
     def update_learning_vars(self):
         '''
         Must be run every time step to update storage of relevant history
         '''
         
-        for attr in ['h', 'a', 'e', 'x']:
+        for attr in ['h', 'a', 'e', 'x', 'W_rec']:
             self.__dict__[attr+'_hist'].append(getattr(self.net, attr))
             del(self.__dict__[attr+'_hist'][0])
     
@@ -42,46 +64,66 @@ class BPTT:
         '''
         
         W_out_grad = [np.multiply.outer(self.e_hist[-i],self.a_hist[-i]) for i in range(1, self.t1+1)]
-        W_out_grad = sum(W_out_grad)/self.t1
+        self.W_out_grad = sum(W_out_grad)/self.t1
         
         b_out_grad = [self.e_hist[-i] for i in range(1, self.t1+1)]
-        b_out_grad = sum(b_out_grad)/self.t1
+        self.b_out_grad = sum(b_out_grad)/self.t1
         
-        outer_grads = [W_out_grad, b_out_grad]
+        self.outer_grads = [self.W_out_grad, self.b_out_grad]
         
         get_a_J = self.net.get_a_jacobian
-        a_Js = [get_a_J(update=False, h=self.h_hist[-i], h_prev=self.h_hist[-(i+1)]) for i in range(1, self.T)]
         
-        n_hidden, n_in = self.net.n_hidden, self.net.n_in
-        rec_grad = np.zeros((n_hidden, n_hidden+n_in+1))
+        if self.use_historical_W:
+        
+            self.a_Js = [get_a_J(update=False,
+                         h=self.h_hist[-i],
+                         h_prev=self.h_hist[-(i+1)],
+                         W_rec=self.W_rec_hist[-i]) for i in range(1, self.T)]
+        else:
+            
+            self.a_Js = [get_a_J(update=False,
+                         h=self.h_hist[-i],
+                         h_prev=self.h_hist[-(i+1)],
+                         W_rec=self.net.W_rec) for i in range(1, self.T)] 
+        
+        n_h, n_in = self.net.n_hidden, self.net.n_in
+        self.rec_grad = np.zeros((n_h, n_h+n_in+1))
+        
+        CA_list = []
         
         for i in range(1, self.t1+1):
             
-            q = self.e_hist[-i].dot(self.net.W_out)
+            self.q = self.e_hist[-i].dot(self.net.W_out)
             
             for j in range(self.t2):
                 
-                J = np.eye(n_hidden)
+                self.J = np.eye(n_h)
                 
                 for k in range(j):
                     
-                    J = J.dot(a_Js[-(i+k)])
+                    self.J = self.J.dot(self.a_Js[-(i+k)])
                 
-                J = J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
+                self.J = self.J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
                 
-                pre_activity = np.concatenate([self.h_hist[-(i+j+1)], self.x_hist[-(i+j+1)], np.array([1])])
-                rec_grad += np.multiply.outer(q.dot(J), pre_activity)
+                self.pre_activity = np.concatenate([self.h_hist[-(i+j+1)], self.x_hist[-(i+j+1)], np.array([1])])
+                CA = self.q.dot(self.J)
+                CA_list.append(CA) 
+                self.rec_grad += np.multiply.outer(CA, self.pre_activity)
         
-        grads = [rec_grad[:,:n_hidden], rec_grad[:,n_hidden:-1], rec_grad[:,-1]] + outer_grads
+        self.credit_assignment = sum(CA_list)/len(CA_list)
+        
+        grads = [self.rec_grad[:,:n_h], self.rec_grad[:,n_h:-1], self.rec_grad[:,-1]]
+        grads += self.outer_grads
+        
+        self.update_monitors()
         
         return grads
         
-class RTRL:
+class RTRL(Learning_Algorithm):
 
-    def __init__(self, net):
+    def __init__(self, net, monitors=[]):
         
-        #Network we're training
-        self.net   = net
+        super().__init__(net, monitors)
         
         #Total post- and pre-synaptic units in hidden layer, counting inputs and bias
         self.I     = self.net.n_hidden
@@ -109,12 +151,11 @@ class RTRL:
         
         return grads
     
-class UORO:
+class UORO(Learning_Algorithm):
     
-    def __init__(self, net):
+    def __init__(self, net, monitors=[]):
         
-        #Network we're training
-        self.net = net
+        super().__init__(net, monitors)
         
         #Total post- and pre-synaptic units in hidden layer, counting inputs and bias
         self.I     = self.net.n_hidden
@@ -150,12 +191,11 @@ class UORO:
         
         return grads
     
-class KF_RTRL:
+class KF_RTRL(Learning_Algorithm):
     
-    def __init__(self, net):
+    def __init__(self, net, monitors=[]):
         
-        #Network we're training
-        self.net = net
+        super().__init__(net, monitors)
         
         #Total post- and pre-synaptic units in hidden layer, counting inputs and bias
         self.I     = self.net.n_hidden
@@ -193,12 +233,15 @@ class KF_RTRL:
         
         return grads
     
-class DNI:
+class DNI(Learning_Algorithm):
     
-    def __init__(self, net, optimizer):
+    def __init__(self, net, optimizer, monitors=[], lambda_mix=0, l2_reg=0):
         
-        self.net = net
+        super().__init__(net, monitors)
+        
         self.optimizer = optimizer
+        self.lambda_mix = lambda_mix
+        self.l2_reg = l2_reg
         
         n_h = self.net.n_hidden
         n_out = self.net.n_out
@@ -216,7 +259,7 @@ class DNI:
         
         #Computer SG error term
         self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
-        self.sg_target = self.synthetic_grad(self.net.a, self.net.y).dot(self.net.a_J)
+        self.sg_target = self.get_sg_target()
         self.e_sg = self.sg - self.sg_target
         self.sg_loss = np.mean((self.sg - self.sg_target)**2)
         
@@ -225,9 +268,25 @@ class DNI:
                          np.multiply.outer(self.e_sg, self.net.y_prev),
                          self.e_sg]
         
+        if self.l2_reg > 0:
+            self.SG_grads[0] += self.l2_reg*self.A
+            self.SG_grads[1] += self.l2_reg*self.B
+        
         #Update SG parameters
         self.SG_params = self.optimizer.get_update(self.SG_params, self.SG_grads)
         self.A, self.B, self.C = self.SG_params
+        
+    def get_sg_target(self):
+        
+        try:
+            true_grad = self.net.comp_alg.credit_assignment
+        except AttributeError:
+            true_grad = 0
+        
+        self.q = self.net.e.dot(self.net.W_out)
+        bootstrap = self.q + self.synthetic_grad(self.net.a, self.net.y).dot(self.net.a_J)
+            
+        return self.lambda_mix*true_grad + (1 - self.lambda_mix)*bootstrap
         
     def synthetic_grad(self, a, y):
         
@@ -242,6 +301,8 @@ class DNI:
         rec_grad = np.multiply.outer(sg, pre_activity)
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
+        
+        self.update_monitors()
         
         return grads
     

@@ -102,6 +102,18 @@ def softmax_cross_entropy_derivative(z, y):
 
 softmax_cross_entropy = function(softmax_cross_entropy_, softmax_cross_entropy_derivative)
 
+### --- Define softplus --- ###
+
+def softplus_(z):
+    
+    return np.log(1 + np.exp(z))
+
+def softplus_derivative(z):
+    
+    return sigmoid_(z)
+
+softplus = function(softplus_, softplus_derivative)
+
 
 
 
