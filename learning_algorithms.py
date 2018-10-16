@@ -149,6 +149,8 @@ class RTRL(Learning_Algorithm):
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
         
+        self.update_monitors()
+        
         return grads
     
 class UORO(Learning_Algorithm):
@@ -231,17 +233,22 @@ class KF_RTRL(Learning_Algorithm):
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
         
+        self.update_monitors()
+        
         return grads
     
 class DNI(Learning_Algorithm):
     
-    def __init__(self, net, optimizer, monitors=[], lambda_mix=0, l2_reg=0):
+    def __init__(self, net, optimizer, monitors=[],
+                 lambda_mix=0, l2_reg=0, fix_SG_interval=1):
         
         super().__init__(net, monitors)
         
         self.optimizer = optimizer
         self.lambda_mix = lambda_mix
         self.l2_reg = l2_reg
+        self.fix_SG_interval = fix_SG_interval
+        self.i_fix = 0
         
         n_h = self.net.n_hidden
         n_out = self.net.n_out
@@ -249,6 +256,8 @@ class DNI(Learning_Algorithm):
         self.A = np.random.normal(0, 1/np.sqrt(2*n_h), (n_h, n_h))
         self.B = np.random.normal(0, 1/np.sqrt(n_h+n_out), (n_h, n_out))
         self.C = np.zeros(n_h)
+        
+        self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
         
         self.SG_params = [self.A, self.B, self.C]
         
@@ -276,6 +285,13 @@ class DNI(Learning_Algorithm):
         self.SG_params = self.optimizer.get_update(self.SG_params, self.SG_grads)
         self.A, self.B, self.C = self.SG_params
         
+        if self.i_fix == self.fix_SG_interval - 1:
+            self.i_fix = 0
+            self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
+        else:
+            self.i_fix += 1
+            
+        
     def get_sg_target(self):
         
         try:
@@ -284,13 +300,17 @@ class DNI(Learning_Algorithm):
             true_grad = 0
         
         self.q = self.net.e.dot(self.net.W_out)
-        bootstrap = self.q + self.synthetic_grad(self.net.a, self.net.y).dot(self.net.a_J)
+        bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
             
         return self.lambda_mix*true_grad + (1 - self.lambda_mix)*bootstrap
         
     def synthetic_grad(self, a, y):
         
-        return self.A.dot(a) + self.B.dot(y) + self.C    
+        return self.A.dot(a) + self.B.dot(y) + self.C
+    
+    def synthetic_grad_(self, a, y):
+        
+        return self.A_.dot(a) + self.B_.dot(y) + self.C_
     
     def __call__(self):
         

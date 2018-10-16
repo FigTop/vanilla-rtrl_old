@@ -12,6 +12,7 @@ from optimizers import *
 from analysis_funcs import classification_accuracy, normalized_dot_product
 import time
 from copy import copy
+from pdb import set_trace
 
 class RNN:
     

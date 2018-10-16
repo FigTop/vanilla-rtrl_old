@@ -16,9 +16,9 @@ from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
 
-np.random.seed()
+np.random.seed(1)
 
-task = Coin_Task(2, 4, one_hot=True, deterministic=False)
+task = Coin_Task(3, 6, one_hot=True, deterministic=False)
 data = task.gen_data(15000, 1000)
 #task = Copy_Task(10, 3)
 
@@ -28,7 +28,6 @@ n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_hidden, n_hidden))
-W_rec = 0.54*np.eye(n_hidden)
 W_out = np.random.normal(0, np.sqrt(1/(n_out)), (n_out, n_hidden))
 
 b_rec = np.zeros(n_hidden)
@@ -43,11 +42,11 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           loss=softmax_cross_entropy)
 
 
-optimizer = SGD(lr=0.001, clipnorm=1)
-SG_optimizer = SGD(lr=0.01, clipnorm=0.5)
-learn_alg = DNI(rnn, SG_optimizer, monitors=['sg_loss', 'sg'], lambda_mix=0, l2_reg=0.001)
-#learn_alg = KF_RTRL(rnn)
-#comp_alg = BPTT(rnn, 1, 6, monitors=['credit_assignment'], use_historical_W=False)
+optimizer = SGD(lr=0.001)
+SG_optimizer = SGD(lr=0.001)
+learn_alg = DNI(rnn, SG_optimizer, monitors=['sg_loss', 'sg', 'A'],
+                lambda_mix=0, l2_reg=0, fix_SG_interval=4)
+comp_alg = KF_RTRL(rnn, monitors=['A'])
 monitors = ['loss_', 'alignment', 'y_hat', 'a', 'y', 'W_rec']
 
 rnn.run(data,
@@ -56,20 +55,23 @@ rnn.run(data,
         monitors=monitors,
         update_interval=1,
         l2_reg=0.001,
-        check_accuracy=True),
-        #comparison_alg=comp_alg)
+        check_accuracy=True,
+        comparison_alg=comp_alg)
 
-W = np.nan_to_num(np.array(rnn.mons['W_rec']))
-W_radii = get_spectral_radii(W)
+#W = np.nan_to_num(np.array(rnn.mons['W_rec']))
+#A = np.nan_to_num(np.array(learn_alg.mons['A']))
+#W_radii = get_spectral_radii(W)
+#A_radii = get_spectral_radii(A)
 
-task.plot_filtered_signals([W_radii], plot_loss_benchmarks=False)
+#plt.figure()
+#task.plot_filtered_signals([W_radii, A_radii], plot_loss_benchmarks=False)
+
+fig = plt.figure()
+signals = [rnn.mons['loss_'], learn_alg.mons['sg_loss']]
+task.plot_filtered_signals(signals, y_lim=[0, 1.5])
+plt.legend(['Loss', 'SG Loss'])
 
 if True:
-    fig = plt.figure()
-    signals = [rnn.mons['loss_'], learn_alg.mons['sg_loss']]
-    task.plot_filtered_signals(signals, y_lim=[0, 1.5])
-    plt.legend(['Loss', 'SG Loss'])
-if False:
     fig = plt.figure()
     signals = [[a[i] for a in rnn.mons['alignment']] for i in range(3)]
     task.plot_filtered_signals(signals, y_lim=[-1.2, 1.2], plot_loss_benchmarks=False)
@@ -77,9 +79,16 @@ if False:
     plt.ylabel('Normalized Dot Product')
 
 
+A_DNI = np.array(learn_alg.mons['A'])
+dAdt_DNI = A_DNI[1:] - A_DNI[:-1]
+A_KF = np.array(comp_alg.mons['A'])
+dAdt_KF = A_KF[1:] - A_KF[:-1]
+
+alignment = get_vector_alignment(dAdt_DNI, dAdt_KF)
 
 
-
+norm_DNI = (dAdt_DNI**2).mean(1).mean(1)
+norm_KF = (dAdt_KF**2).mean(1).mean(1)
 
 
 
