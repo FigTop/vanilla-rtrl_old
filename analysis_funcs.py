@@ -67,7 +67,7 @@ def get_spectral_radii(Ms):
         
         r.append(get_spectral_radius(Ms[i,:,:]))
         
-    return r
+    return np.array(r)
 
 def get_vector_alignment(v1, v2):
 
@@ -79,7 +79,7 @@ def get_vector_alignment(v1, v2):
         
         alignment.append(np.dot(a,b)/np.sqrt(np.sum(a**2)*np.sum(b**2)))
         
-    return alignment
+    return np.array(alignment)
     
 def plot_filtered_signals(signals, filter_size=100, y_lim=[0,1.5], plot_loss_benchmarks=True):
     

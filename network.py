@@ -26,6 +26,26 @@ class RNN:
         with initial parameter values given by W_in, W_rec, W_out, b_rec, b_in
         and specified activation and loss functions, which must be function
         objects--see utils.py.
+        
+        ___Arguments___
+        
+        W_*                 Initial values of (in)put, (rec)urrent and (out)put
+                            weights in the network.
+                            
+        b_*                 Initial values of (rec)urrent and (out)put biases.
+        
+        activation          Instance of function class (see utils.py) used for
+                            calculating activations a from pre-activations h.
+                            
+        alpha               Ratio of time constant of integration to time constant
+                            of leak.
+                            
+        output              Instance of function class used for calculating final
+                            output from z.
+                            
+        loss                Instance of function class used for calculating loss
+                            from z (must implicitly include output function, e.g.
+                            softmax_cross_entropy if output is softmax).
         '''
         
         #Initial parameter values
@@ -98,34 +118,47 @@ class RNN:
         self.a = self.activation.f(self.h)
         
     def z_out(self):
+        '''
+        Updates the output of the RNN using the current activations
+        '''
         
         self.z_prev = np.copy(self.z)
         self.z = self.W_out.dot(self.a) + self.b_out
             
     def get_a_jacobian(self, update=True, **kwargs):
+        '''
+        By default, it updates the Jacobian of the network,
+        self.a_J, to the value based on the current parameter
+        values and pre-activations. If update=False, then
+        it does *not* update self.a_J, but rather returns
+        the Jacobian calculated from current pre-activation
+        values. If a keyword argument for 'h', 'h_prev',
+        or 'W_rec' is provided, these arguments are used
+        instead of the network's current values.
+        '''
         
+        #Use kwargs instead of defaults if provided
         try:
             h = kwargs['h']
         except KeyError:
             h = np.copy(self.h)
-        
         try:
             h_prev = kwargs['h_prev']
         except KeyError:
             h_prev = np.copy(self.h_prev)
-            
         try:
             W_rec = kwargs['W_rec']
         except KeyError:
             W_rec = np.copy(self.W_rec)
         
-        q1 = self.activation.f_prime(h)
+        #Element-wise nonlinearity derivative
+        D = self.activation.f_prime(h)
         
-        if self.alpha!=1:
-            q2 = self.activation.f_prime(h_prev)
-            a_J = np.diag(q1).dot(W_rec + np.diag((1-self.alpha)/(q2)))
+        if self.alpha!=1: #If there is leak, re-calculcate effective recurrent weights
+            D_prev = self.activation.f_prime(h_prev)
+            a_J = np.diag(D).dot(W_rec + np.diag((1-self.alpha)/(D_prev)))
         else:
-            a_J = np.diag(q1).dot(W_rec)
+            a_J = np.diag(D).dot(W_rec)
         
         if update:
             self.a_J = np.copy(a_J)
@@ -133,6 +166,54 @@ class RNN:
             return a_J
         
     def run(self, data, learn_alg=None, optimizer=None, **kwargs):
+        '''
+        Runs the network forward with inputs provided by data, a dict
+        with entries data['train'] and data['test'], each of which
+        is a dictionary with keys 'X' and 'Y' providing input data
+        and labels, respectively, as numpy arrays with shape
+        (time steps, units).
+        
+        ___Arguments___
+        
+        data                    Dict providing input and label data
+        
+        learn_alg               Instance of the class Learning_Algorithm
+                                (see learning_algorithms.py) used to train
+                                the model if mode='train'.
+                                
+        optimizer               Instance of the class SGD or Adam (see
+                                optimizers.py), used to take gradients from
+                                learn_alg to 
+                                
+        comparison_alg          Instance of the class Learning_Algorithm
+                                which does *not* train the model, but computes
+                                gradients which are compared with learn_alg.
+                                Default is none.
+                                
+        l2_reg                  Strength of L2 regularization used on non-bias
+                                trainable parameters in the model. Default is 0.
+                                
+        monitors                List of strings dictating which variables should
+                                be tracked while running. The dictionary self.mons
+                                will be initialized with keys given by strings
+                                in monitors.
+                                
+        update_interval         Number of time steps per update of the network's
+                                parameters. Default is 1.
+                                
+        verbose                 Boolean dictating whether to report progress during
+                                training. Default is True.
+                                
+        report_interval         Number of time steps per progress report. Default is
+                                1/10 of the total time steps for 10 total updates.
+                                
+        check_accuracy          Boolean dictating whether to freeze parameters and
+                                run in 'test' mode on every report. Default is False.
+                                
+        mode                    String that must be either 'train' or 'test' to
+                                dictate which dataset to use and whether to update
+                                parameters while running. Default is 'train'.
+        '''
         
         allowed_kwargs = {'l2_reg', 'monitors', 'update_interval',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
@@ -141,6 +222,7 @@ class RNN:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
                                 'passed to RNN.run: ' + str(k))
+        #Store required args as part of network
         self.data      = data
         self.learn_alg = learn_alg
         self.optimizer = optimizer
@@ -152,26 +234,35 @@ class RNN:
         self.monitors         = []
         self.update_interval  = 1
         self.verbose          = True
-        self.report_interval  = len(self.data['train']['X'])//10
+        self.report_interval  = self.data['train']['X'].shape[0]//10
         
+        #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
+        
+        #Set a random initial state of the network
         self.reset_network()
         
+        #Make local copies of (meta)-data
         x_inputs = data[self.mode]['X']
         y_labels = data[self.mode]['Y']
-        self.T   = len(x_inputs)
+        self.T   = x_inputs.shape[0]
         
         #Initialize monitors
         self.mons = {}
         for mon in self.monitors:
             self.mons[mon] = []
         
+        #To avoid errors, intialize "previous"
+        #inputs/labels as the first inputs/labels
         self.x_prev = x_inputs[0]
         self.y_prev = y_labels[0]
         
+        #Track computation time
         self.t1 = time.time()
         
         for i_t in range(self.T):
+            
+            ### --- Run network forwards and get error --- ###
             
             self.x = x_inputs[i_t]
             self.y = y_labels[i_t]
@@ -181,36 +272,49 @@ class RNN:
             
             self.y_hat  = self.output.f(self.z)
             self.loss_  = self.loss.f(self.z, self.y)
-            self.e = self.loss.f_prime(self.z, self.y)
+            self.e      = self.loss.f_prime(self.z, self.y)
+
+            ### --- Update parameters if in 'train' mode --- ###
 
             if self.mode=='train':
                 
+                #Update internal learning algorithm parameters
                 self.learn_alg.update_learning_vars()
+                #Use learning algorithm to generate gradients
                 self.grads = self.learn_alg()
                 
+                #If a comparison algorithm is provided, update
+                #its internal parameters, generate gradients,
+                #and measure their alignment with the main
+                #algorithm's gradients.
                 if hasattr(self, 'comparison_alg'):
                     self.comparison_alg.update_learning_vars()
                     self.grads_ = self.comparison_alg()
                     G = zip(self.grads, self.grads_)
                     self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
                 
-                #L2 Reg
+                #Add L2 regularization derivative to gradient
                 for i_l2, W in zip([0, 1, 3], [self.W_rec, self.W_in, self.W_out]):
                     self.grads[i_l2] += self.l2_reg*W
                 
+                #If on the update cycle (always true for update_inteval=1),
+                #pass gradients to the optimizer and update parameters.
                 if (i_t + 1)%self.update_interval==0:
                     self.params = self.optimizer.get_update(self.params, self.grads)
                     self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
                     
-            
+            #Current inputs/labels become previous inputs/labels
             self.x_prev = np.copy(self.x)
             self.y_prev = np.copy(self.y)
             
+            #Monitor relevant variables
             self.update_monitors()
-                    
+            
+            #Make report if conditions are met
             if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
-                
                 self.report_progress(i_t)
+                
+        self.monitors_to_arrays()
                 
     def report_progress(self, i_t):
         
@@ -258,6 +362,29 @@ class RNN:
                 for key in obj.mons.keys():
                     obj.mons[key] = obj.mons[key][:T]
             
+    def monitors_to_arrays(self):
+        
+        #After run is finished, turn monitors from lists into arrays.
+        objs = [self]
+        if self.learn_alg is not None:
+            objs += [self.learn_alg]
+        if hasattr(self, 'comparison_alg'):
+            objs += [self.comparison_alg]
+            
+        for obj in objs:
+            for key in obj.mons.keys():
+                try:
+                    obj.mons[key] = np.array(obj.mons[key])
+                except ValueError:
+                    pass
+#        for key in self.mons.keys():
+#            self.mons[key] = np.array(self.mons[key])
+#        if getattr(self, 'learn_alg') is not None:
+#            for key in self.learn_alg.mons.keys():
+#                self.learn_alg.mons[key] = np.array(self.learn_alg.mons[key])
+#        if hasattr(self, 'comparison_alg'):
+#            for key in self.comparison_alg.mons.keys():
+#                self.comparison_alg.mons[key] = np.array(self.comparison_alg.mons[key])
             
     
     

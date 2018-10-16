@@ -253,8 +253,8 @@ class DNI(Learning_Algorithm):
         n_h = self.net.n_hidden
         n_out = self.net.n_out
         
-        self.A = np.random.normal(0, 1/np.sqrt(2*n_h), (n_h, n_h))
-        self.B = np.random.normal(0, 1/np.sqrt(n_h+n_out), (n_h, n_out))
+        self.A = np.random.normal(0, 1/np.sqrt(n_h), (n_h, n_h))
+        self.B = np.random.normal(0, 1/np.sqrt(n_out), (n_h, n_out))
         self.C = np.zeros(n_h)
         
         self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
@@ -316,9 +316,9 @@ class DNI(Learning_Algorithm):
         
         outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
         
-        sg = self.synthetic_grad(self.net.a, self.net.y)*self.net.activation.f_prime(self.net.h)
-        pre_activity = np.concatenate([self.net.a, self.net.x, np.array([1])])
-        rec_grad = np.multiply.outer(sg, pre_activity)
+        self.sg = self.synthetic_grad(self.net.a, self.net.y)*self.net.activation.f_prime(self.net.h)
+        self.pre_activity = np.concatenate([self.net.a, self.net.x, np.array([1])])
+        rec_grad = np.multiply.outer(self.sg, self.pre_activity)
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
         
