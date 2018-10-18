@@ -8,6 +8,7 @@ Created on Tue Oct  9 15:03:11 2018
 
 import numpy as np
 from pdb import set_trace
+from utils import *
 
 class Learning_Algorithm:
     
@@ -239,12 +240,13 @@ class KF_RTRL(Learning_Algorithm):
     
 class DNI(Learning_Algorithm):
     
-    def __init__(self, net, optimizer, monitors=[],
+    def __init__(self, net, optimizer, monitors=[], activation=identity,
                  lambda_mix=0, l2_reg=0, fix_SG_interval=1):
         
         super().__init__(net, monitors)
         
         self.optimizer = optimizer
+        self.activation = activation
         self.lambda_mix = lambda_mix
         self.l2_reg = l2_reg
         self.fix_SG_interval = fix_SG_interval
@@ -271,11 +273,12 @@ class DNI(Learning_Algorithm):
         self.sg_target = self.get_sg_target()
         self.e_sg = self.sg - self.sg_target
         self.sg_loss = np.mean((self.sg - self.sg_target)**2)
+        self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
         
         #Get SG grads
-        self.SG_grads = [np.multiply.outer(self.e_sg, self.net.a_prev),
-                         np.multiply.outer(self.e_sg, self.net.y_prev),
-                         self.e_sg]
+        self.SG_grads = [np.multiply.outer(self.scaled_e_sg, self.net.a_prev),
+                         np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
+                         self.scaled_e_sg]
         
         if self.l2_reg > 0:
             self.SG_grads[0] += self.l2_reg*self.A
@@ -305,12 +308,14 @@ class DNI(Learning_Algorithm):
         return self.lambda_mix*true_grad + (1 - self.lambda_mix)*bootstrap
         
     def synthetic_grad(self, a, y):
+        self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
+        #return tanh.f(self.A.dot(a) + self.B.dot(y) + self.C)
+        return self.activation.f(self.sg_h)
         
-        return self.A.dot(a) + self.B.dot(y) + self.C
-    
     def synthetic_grad_(self, a, y):
-        
-        return self.A_.dot(a) + self.B_.dot(y) + self.C_
+        self.sg_h_ = self.A_.dot(a) + self.B_.dot(y) + self.C_
+        #return tanh.f(self.A_.dot(a) + self.B_.dot(y) + self.C_)
+        return self.activation.f(self.sg_h_)
     
     def __call__(self):
         

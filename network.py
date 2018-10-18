@@ -234,7 +234,7 @@ class RNN:
         self.monitors         = []
         self.update_interval  = 1
         self.verbose          = True
-        self.report_interval  = self.data['train']['X'].shape[0]//10
+        self.report_interval  = max(self.data['train']['X'].shape[0]//10, 1)
         
         #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
@@ -296,7 +296,7 @@ class RNN:
                 #Add L2 regularization derivative to gradient
                 for i_l2, W in zip([0, 1, 3], [self.W_rec, self.W_in, self.W_out]):
                     self.grads[i_l2] += self.l2_reg*W
-                
+                    
                 #If on the update cycle (always true for update_inteval=1),
                 #pass gradients to the optimizer and update parameters.
                 if (i_t + 1)%self.update_interval==0:

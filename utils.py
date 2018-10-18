@@ -46,7 +46,7 @@ sigmoid_cross_entropy = function(sigmoid_cross_entropy_, sigmoid_cross_entropy_d
 
 ### --- Define ReLu --- ###
 
-def relu_(h, right_slope=1, left_slope=0.5):
+def relu_(h, right_slope=1, left_slope=0.05):
     
     return np.maximum(0, right_slope*h) - np.maximum(0, left_slope*(-h))
 
@@ -67,6 +67,7 @@ def tanh_derivative(h):
     return 1 - np.tanh(h)**2
 
 tanh = function(tanh_, tanh_derivative)
+
 
 ### --- Define softmax --- ###
 
@@ -114,7 +115,17 @@ def softplus_derivative(z):
 
 softplus = function(softplus_, softplus_derivative)
 
+### --- Define Identity --- ###
 
+def identity_(z):
+    
+    return z
+
+def identity_derivative(z):
+    
+    return np.ones_like(z)
+
+identity = function(identity_, identity_derivative)
 
 
 

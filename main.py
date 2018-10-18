@@ -16,9 +16,10 @@ from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
 
-np.random.seed(1)
+i_seed = np.random.randint(100)
+np.random.seed(33)
 
-task = Coin_Task(3, 6, one_hot=True, deterministic=False)
+task = Coin_Task(3, 5, one_hot=True, deterministic=False)
 data = task.gen_data(15000, 1000)
 #task = Copy_Task(10, 3)
 
@@ -27,7 +28,7 @@ n_hidden = 32
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-W_rec = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_hidden, n_hidden))
+W_rec = np.random.normal(0, np.sqrt(1/(2*n_hidden)), (n_hidden, n_hidden))
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 
 b_rec = np.zeros(n_hidden)
@@ -41,45 +42,57 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-
-optimizer = SGD(lr=0.001)
+optimizer = SGD(lr=0.001, clipnorm=1.0)
 SG_optimizer = SGD(lr=0.01)
-learn_alg = DNI(rnn, SG_optimizer, monitors=['sg_loss', 'sg', 'A', 'B', 'C', 'SG_grads'],
-                lambda_mix=0, l2_reg=0, fix_SG_interval=1)
-comp_alg = KF_RTRL(rnn, monitors=['A'])
-monitors = ['loss_', 'alignment', 'y_hat', 'a', 'y', 'W_rec', 'grads']
+learn_alg = DNI(rnn, SG_optimizer, activation=identity,
+                monitors=['sg_loss', 'sg', 'A', 'B', 'C', 'SG_grads'],
+                lambda_mix=0, l2_reg=0, fix_SG_interval=5)
+monitors = ['loss_', 'a', 'W_rec']
 
 rnn.run(data,
         learn_alg=learn_alg,
         optimizer=optimizer,
         monitors=monitors,
         update_interval=1,
-        l2_reg=0.001,
-        check_accuracy=True,
-        comparison_alg=comp_alg)
+        l2_reg=0.01,
+        check_accuracy=False,
+        verbose=True)
 
-plt.figure()
-leg = []
-for obj in [rnn, learn_alg]:
-    mons = getattr(obj, 'mons')
-    for key in mons.keys():
-        signal = []
-        if 'grads' not in key:
-            for i in range(len(mons[key])):
-                x = mons[key][i]
-                signal.append(np.mean(x**2))
-        else:
-            for i in range(len(mons[key])):
-                g = mons[key][i]
-                signal.append(np.concatenate([np.square(g_.flatten()) for g_ in g]).mean())
-                
-        plt.plot(signal)
-        leg.append(key)
+fig = plt.figure()
+signals = [rnn.mons['loss_'], learn_alg.mons['sg_loss']]
+#for signal in signals:
+#    plt.plot(signal)
+task.plot_filtered_signals(signals, y_lim=[0, 1.5])
+plt.legend(['Loss', 'SG Loss'])
+
+if False:
+    fig2 = plt.figure()
+    leg = []
+    for obj in [rnn, learn_alg]:
+        mons = getattr(obj, 'mons')
+        for key in mons.keys():
+            signal = []
+            if 'grads' not in key:
+                for i in range(len(mons[key])):
+                    x = mons[key][i]
+                    signal.append(np.mean(x**2))
+            else:
+                for i in range(len(mons[key])):
+                    g = mons[key][i]
+                    signal.append(np.concatenate([np.square(g_.flatten()) for g_ in g]).mean())
+                    
+            plt.plot(signal)
+            leg.append(key)
         
-        
-plt.xlim([3100, 3124])
-plt.ylim([0, 30])
-plt.legend(leg)
+    W = np.nan_to_num(np.array(rnn.mons['W_rec']))
+    W_radii = get_spectral_radii(W)
+    
+    plt.plot(W_radii)
+    leg.append('W_radii')
+            
+    plt.xlim([0, 115])
+    plt.ylim([0, 20])
+    plt.legend(leg)
 
 #W = np.nan_to_num(np.array(rnn.mons['W_rec']))
 #A = np.nan_to_num(np.array(learn_alg.mons['A']))
