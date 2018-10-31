@@ -241,7 +241,13 @@ class KF_RTRL(Learning_Algorithm):
 class DNI(Learning_Algorithm):
     
     def __init__(self, net, optimizer, monitors=[], activation=identity,
-                 lambda_mix=0, l2_reg=0, fix_SG_interval=1):
+                 lambda_mix=0, l2_reg=0, fix_SG_interval=1, **kwargs):
+        
+        allowed_kwargs = {'SG_clipnorm', 'SG_target_clipnorm'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to RNN.run: ' + str(k))
         
         super().__init__(net, monitors)
         
@@ -263,6 +269,8 @@ class DNI(Learning_Algorithm):
         
         self.SG_params = [self.A, self.B, self.C]
         
+        self.__dict__.update(kwargs)
+        
     def update_learning_vars(self):
         
         #Get network jacobian
@@ -270,7 +278,19 @@ class DNI(Learning_Algorithm):
         
         #Computer SG error term
         self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
+        
+        if hasattr(self, 'SG_clipnorm'):
+            self.sg_norm = np.sqrt((self.sg ** 2).sum())
+            if self.sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / self.sg_norm
+                
         self.sg_target = self.get_sg_target()
+        
+        if hasattr(self, 'SG_target_clipnorm'):
+            self.sg_target_norm = np.sqrt((self.sg_target ** 2).sum())
+            if self.sg_target_norm > self.SG_target_clipnorm:
+                self.sg_target = self.sg_target / self.sg_target_norm
+            
         self.e_sg = self.sg - self.sg_target
         self.sg_loss = np.mean((self.sg - self.sg_target)**2)
         self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
@@ -283,6 +303,7 @@ class DNI(Learning_Algorithm):
         if self.l2_reg > 0:
             self.SG_grads[0] += self.l2_reg*self.A
             self.SG_grads[1] += self.l2_reg*self.B
+            self.SG_grads[2] += self.l2_reg*self.C
         
         #Update SG parameters
         self.SG_params = self.optimizer.get_update(self.SG_params, self.SG_grads)
@@ -309,19 +330,23 @@ class DNI(Learning_Algorithm):
         
     def synthetic_grad(self, a, y):
         self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
-        #return tanh.f(self.A.dot(a) + self.B.dot(y) + self.C)
         return self.activation.f(self.sg_h)
         
     def synthetic_grad_(self, a, y):
         self.sg_h_ = self.A_.dot(a) + self.B_.dot(y) + self.C_
-        #return tanh.f(self.A_.dot(a) + self.B_.dot(y) + self.C_)
         return self.activation.f(self.sg_h_)
     
     def __call__(self):
         
         outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
-        
+    
         self.sg = self.synthetic_grad(self.net.a, self.net.y)*self.net.activation.f_prime(self.net.h)
+        
+        if hasattr(self, 'SG_clipnorm'):
+            norm = np.sqrt((self.sg ** 2).sum())
+            if norm > self.SG_clipnorm:
+                self.sg = self.sg / norm
+                
         self.pre_activity = np.concatenate([self.net.a, self.net.x, np.array([1])])
         rec_grad = np.multiply.outer(self.sg, self.pre_activity)
         

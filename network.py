@@ -1,3 +1,4 @@
+s
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -9,7 +10,7 @@ Created on Fri Sep  7 17:20:39 2018
 import numpy as np
 from utils import *
 from optimizers import *
-from analysis_funcs import classification_accuracy, normalized_dot_product
+from analysis_funcs import *
 import time
 from copy import copy
 from pdb import set_trace
@@ -217,7 +218,7 @@ class RNN:
         
         allowed_kwargs = {'l2_reg', 'monitors', 'update_interval',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
-                          'check_accuracy'}
+                          'check_accuracy', 't_stop_SG_train', 't_stop_training'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -291,7 +292,15 @@ class RNN:
                     self.comparison_alg.update_learning_vars()
                     self.grads_ = self.comparison_alg()
                     G = zip(self.grads, self.grads_)
-                    self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
+                    try:
+                        self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
+                    except RuntimeWarning:
+                        self.alignment = [0]*5
+                    self.W_rec_alignment = self.alignment[0]
+                    self.W_in_alignment  = self.alignment[1]
+                    self.b_rec_alignment = self.alignment[2]
+                    self.W_out_alignment = self.alignment[3]
+                    self.b_out_alignment = self.alignment[4]
                 
                 #Add L2 regularization derivative to gradient
                 for i_l2, W in zip([0, 1, 3], [self.W_rec, self.W_in, self.W_out]):
@@ -302,10 +311,21 @@ class RNN:
                 if (i_t + 1)%self.update_interval==0:
                     self.params = self.optimizer.get_update(self.params, self.grads)
                     self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
+                
+                        
+            if hasattr(self, 't_stop_SG_train'):
+                if self.t_stop_SG_train==i_t:
+                    self.learn_alg.optimizer.lr = 0
                     
             #Current inputs/labels become previous inputs/labels
             self.x_prev = np.copy(self.x)
             self.y_prev = np.copy(self.y)
+            
+            #Compute spectral radii if desired
+            if 'W_radius' in self.mons.keys():
+                self.W_radius = get_spectral_radius(self.W_rec)
+            if 'A_radius' in self.mons.keys():
+                self.A_radius = get_spectral_radius(learn_alg.A)
             
             #Monitor relevant variables
             self.update_monitors()
@@ -314,6 +334,11 @@ class RNN:
             if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
                 self.report_progress(i_t)
                 
+            if hasattr(self, 't_stop_training') and self.mode=='train':
+                if self.t_stop_training==i_t:
+                    break
+        
+        #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
                 
     def report_progress(self, i_t):
@@ -377,15 +402,6 @@ class RNN:
                     obj.mons[key] = np.array(obj.mons[key])
                 except ValueError:
                     pass
-#        for key in self.mons.keys():
-#            self.mons[key] = np.array(self.mons[key])
-#        if getattr(self, 'learn_alg') is not None:
-#            for key in self.learn_alg.mons.keys():
-#                self.learn_alg.mons[key] = np.array(self.learn_alg.mons[key])
-#        if hasattr(self, 'comparison_alg'):
-#            for key in self.comparison_alg.mons.keys():
-#                self.comparison_alg.mons[key] = np.array(self.comparison_alg.mons[key])
-            
     
     
     

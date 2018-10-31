@@ -8,7 +8,13 @@ Created on Mon Oct  1 12:02:11 2018
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn import linear_model
+try:
+    from sklearn import linear_model
+except ModuleNotFoundError:
+    pass
+import os
+import pickle
+from pdb import set_trace
 
 def plot_smoothed_loss(mons, filter_size=100):
     
@@ -83,21 +89,133 @@ def get_vector_alignment(v1, v2):
     
 def plot_filtered_signals(signals, filter_size=100, y_lim=[0,1.5], plot_loss_benchmarks=True):
     
-    fig = plt.figure(figsize=[8, 6])
+    fig = plt.figure(figsize=[8, 4])
     
     for signal in signals:
         smoothed_signal = np.convolve(signal, np.ones(filter_size)/filter_size, mode='valid')
         plt.plot(smoothed_signal)
     
     if plot_loss_benchmarks:
-        plt.plot([0, len(smoothed_signal)], [0.66, 0.66], '--', color='r')
-        plt.plot([0, len(smoothed_signal)], [0.52, 0.52], '--', color='m')
-        plt.plot([0, len(smoothed_signal)], [0.45, 0.45], '--', color='g')
+        plt.axhline(y=0.66, color='r', linestyle='--')
+        plt.axhline(y=0.52, color='m', linestyle='--')
+        plt.axhline(y=0.45, color='g', linestyle='--')
     
     plt.ylim(y_lim)
     plt.xlabel('Time')
     
     return fig
+
+def plot_results_from_job(job_name, rnn_signals, colors,
+                          learn_alg_signals=[],
+                          filter_size=100, plot_median=True,
+                          alpha=0.05, plot_loss_benchmarks=True,
+                          y_lim=[0, 1.5], n_seeds=1000):
+    
+    data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
+    
+    rnn_colors = colors[:len(rnn_signals)]
+    learn_alg_colors = colors[len(rnn_signals):]
+    
+    signals = {}
+    for key in rnn_signals+learn_alg_signals:
+        signals[key] = []
+    
+    for file_name in os.listdir(data_dir):
+        
+        print(file_name)
+        
+        if int(file_name.split('_')[-1])>n_seeds:
+            continue
+        
+        with open(os.path.join(data_dir, file_name), 'rb') as f:
+            result = pickle.load(f)
+            
+        for key, col in zip(rnn_signals, rnn_colors):
+            
+            smoothed_signal = np.convolve(result['rnn'].mons[key],
+                                          np.ones(filter_size)/filter_size,
+                                          mode='valid')
+            plt.plot(smoothed_signal, col, alpha=alpha)
+            signals[key].append(smoothed_signal)
+            
+        for key, col in zip(learn_alg_signals, learn_alg_colors):
+            
+            smoothed_signal = np.convolve(result['rnn'].learn_alg.mons[key],
+                                          np.ones(filter_size)/filter_size,
+                                          mode='valid')
+            plt.plot(smoothed_signal, col, alpha=alpha)
+            signals[key].append(smoothed_signal)
+            
+    for key, col in zip(rnn_signals+learn_alg_signals, colors):
+        
+        signals[key] = np.array(signals[key])
+        
+        plt.plot(np.nanmean(signals[key], axis=0), col)
+    
+    if plot_loss_benchmarks:
+        plt.axhline(y=0.66, color='r', linestyle='--')
+        plt.axhline(y=0.52, color='m', linestyle='--')
+        plt.axhline(y=0.45, color='g', linestyle='--')    
+        
+    plt.ylim(y_lim)
+    plt.xlabel('Time')
+    
+#class PCA:
+#    
+#    def __init__(self data):
+#        
+#        self.U, self.S, self.V = np.linalg.svd(data)
+#        
+#    def get_scores()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
