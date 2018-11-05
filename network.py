@@ -1,5 +1,4 @@
-s
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Fri Sep  7 17:20:39 2018
@@ -115,8 +114,8 @@ class RNN:
         self.h_prev = np.copy(self.h)
         self.a_prev = np.copy(self.a)
         
-        self.h = (1 - self.alpha)*self.h + self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
-        self.a = self.activation.f(self.h)
+        self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
+        self.a = (1 - self.alpha)*self.a + self.activation.f(self.h)
         
     def z_out(self):
         '''
@@ -133,9 +132,9 @@ class RNN:
         values and pre-activations. If update=False, then
         it does *not* update self.a_J, but rather returns
         the Jacobian calculated from current pre-activation
-        values. If a keyword argument for 'h', 'h_prev',
-        or 'W_rec' is provided, these arguments are used
-        instead of the network's current values.
+        values. If a keyword argument for 'h' or 'W_rec' is
+        provided, these arguments are used instead of the
+        network's current values.
         '''
         
         #Use kwargs instead of defaults if provided
@@ -144,22 +143,13 @@ class RNN:
         except KeyError:
             h = np.copy(self.h)
         try:
-            h_prev = kwargs['h_prev']
-        except KeyError:
-            h_prev = np.copy(self.h_prev)
-        try:
             W_rec = kwargs['W_rec']
         except KeyError:
             W_rec = np.copy(self.W_rec)
         
         #Element-wise nonlinearity derivative
         D = self.activation.f_prime(h)
-        
-        if self.alpha!=1: #If there is leak, re-calculcate effective recurrent weights
-            D_prev = self.activation.f_prime(h_prev)
-            a_J = np.diag(D).dot(W_rec + np.diag((1-self.alpha)/(D_prev)))
-        else:
-            a_J = np.diag(D).dot(W_rec)
+        a_J = np.diag(D).dot(W_rec) + (1 - self.alpha)*np.eye(self.n_hidden)
         
         if update:
             self.a_J = np.copy(a_J)

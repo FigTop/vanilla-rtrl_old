@@ -150,7 +150,7 @@ def plot_results_from_job(job_name, rnn_signals, colors,
         
         signals[key] = np.array(signals[key])
         
-        plt.plot(np.nanmean(signals[key], axis=0), col)
+        plt.plot(np.median(signals[key], axis=0), col)
     
     if plot_loss_benchmarks:
         plt.axhline(y=0.66, color='r', linestyle='--')
