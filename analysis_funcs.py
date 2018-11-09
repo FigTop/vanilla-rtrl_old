@@ -160,14 +160,6 @@ def plot_results_from_job(job_name, rnn_signals, colors,
     plt.ylim(y_lim)
     plt.xlabel('Time')
     
-#class PCA:
-#    
-#    def __init__(self data):
-#        
-#        self.U, self.S, self.V = np.linalg.svd(data)
-#        
-#    def get_scores()
-
 
 
 

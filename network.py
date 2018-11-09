@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Fri Sep  7 17:20:39 2018
@@ -74,6 +74,7 @@ class RNN:
         
         #Activation and loss functions
         self.alpha      = alpha
+        #self.p_somatic  = 0.8
         self.activation = activation
         self.output     = output
         self.loss       = loss
@@ -115,6 +116,10 @@ class RNN:
         self.a_prev = np.copy(self.a)
         
         self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
+        
+        #if np.random.rand() > self.p_somatic and hasattr(self.learn_alg, 'sg'):
+        #    self.h = np.copy(self.learn_alg.sg)
+            
         self.a = (1 - self.alpha)*self.a + self.activation.f(self.h)
         
     def z_out(self):

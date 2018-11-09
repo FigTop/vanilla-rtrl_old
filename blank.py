@@ -6,30 +6,118 @@ Created on Tue Oct 30 14:23:44 2018
 @author: omarschall
 """
 
-import os
 
-figs_path = '/Users/omarschall/weekly-reports/report_10-31-2018/figs'
+#a = rnn.mons['a']
+#T = 100
+#n_tau = 5
+#Y = []
+#for t in range(a.shape[0]//T):
+#    a_t = a[t*T:(t+1)*T]
+#    autocov = np.zeros((a.shape[1], n_tau))
+#    for i in range(a_t.shape[1]):
+#        for tau in range(1, 1+n_tau):
+#        
+#            autocov[i, tau-1] = np.corrcoef(a_t[:,i], np.roll(a_t[:,i], tau, axis=0))[0,1]
+#        
+#        #plt.plot(autocov[i, :], 'b', alpha=0.2)
+#    Y.append(autocov.mean())
+#
+##plt.plot(autocov.mean(0), 'b')
+#plt.plot(Y)
+#plt.ylim([-1, 1])
+#plt.ylabel('Autoorrelation')
+#plt.xlabel('Time')
+#plt.xticks(range(0, n_tau, 4))
 
+### -------- Make big fig ---- ####
 
-fig = plt.figure(figsize=(5,5))
-plt.plot(rnn.mons['y_hat'][10000:,0], data['train']['Y'][10000:,0], '.', alpha=0.005)
-plt.xlim([0, 1])
-plt.ylim([0, 1])
-plt.axis('equal')
-plt.xticks([0, 1])
-plt.yticks([0, 1])
-x_ = np.linspace(0, 1, 10)
-plt.plot(x_, x_, color='k', linestyle='--')
-plt.xlabel('Predicted')
-plt.ylabel('Label')
-#fig.savefig(os.path.join(figs_path, 'Fig1.png'), dpi=200, format='png')
+job_name = 'approximations'
+data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
+alpha = 0.05
+filter_size = 100
 
+configs = []
+signals = []
+figs = []
 
-signals = [rnn.mons['loss_'], rnn.learn_alg.mons['sg_loss']]
-fig = plot_filtered_signals(signals, filter_size=100, y_lim=[0, 1.5])
-plt.xlabel('Time')
-plt.legend(['Loss', 'SG Loss'])
-fig.savefig(os.path.join(figs_path, 'Fig2.png'), dpi=200, format='png')
+fig, axarr = plt.subplots(2, 2, figsize=(20, 10))
+
+for file_name in os.listdir(data_dir):
+    
+    with open(os.path.join(data_dir, file_name), 'rb') as f:
+        result = pickle.load(f)
+        
+    if result['config'] not in configs:
+        configs.append(result['config'])
+        signals.append({'loss_': [], 'sg_loss': [], 'loss_a': []})
+        i_conf = len(configs) - 1
+    else:
+        i_conf = configs.index(result['config'])
+    
+    i_x = i_conf%2
+    i_y = i_conf//2
+    
+    smoothed_signal = np.convolve(result['rnn'].mons['loss_'],
+                                  np.ones(filter_size)/filter_size,
+                                  mode='valid')
+    axarr[i_x, i_y].plot(smoothed_signal, 'b', alpha=alpha)
+    signals[i_conf]['loss_'].append(smoothed_signal)
+        
+    for key, col in zip(['sg_loss', 'loss_a'], ['y', 'g']):
+        
+        smoothed_signal = np.convolve(result['rnn'].learn_alg.mons[key],
+                                      np.ones(filter_size)/filter_size,
+                                      mode='valid')
+        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
+        signals[i_conf][key].append(smoothed_signal)
+
+for i_conf, conf in enumerate(configs):
+
+    i_x = i_conf%2
+    i_y = i_conf//2
+    
+    for key, col in zip(['loss_', 'sg_loss', 'loss_a'], ['b', 'y', 'g']):
+        
+        signals[i_conf][key] = np.array(signals[i_conf][key])
+        
+        axarr[i_x, i_y].plot(np.nanmedian(signals[i_conf][key], axis=0), col)
+    
+    if True:
+        axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
+        axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
+        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')    
+        
+    axarr[i_x, i_y].set_ylim([0, 1.5])
+    axarr[i_x, i_y].set_xticks([])
+    axarr[i_x, i_y].set_title('{}, {}, {}, {}'.format(conf[0], conf[1], conf[2], conf[3]), fontsize=8)
+    
+
+#### ------------- #####
+
+#import os
+#
+#figs_path = '/Users/omarschall/weekly-reports/report_10-31-2018/figs'
+#
+#
+#fig = plt.figure(figsize=(5,5))
+#plt.plot(rnn.mons['y_hat'][10000:,0], data['train']['Y'][10000:,0], '.', alpha=0.005)
+#plt.xlim([0, 1])
+#plt.ylim([0, 1])
+#plt.axis('equal')
+#plt.xticks([0, 1])
+#plt.yticks([0, 1])
+#x_ = np.linspace(0, 1, 10)
+#plt.plot(x_, x_, color='k', linestyle='--')
+#plt.xlabel('Predicted')
+#plt.ylabel('Label')
+##fig.savefig(os.path.join(figs_path, 'Fig1.png'), dpi=200, format='png')
+#
+#
+#signals = [rnn.mons['loss_'], rnn.learn_alg.mons['sg_loss']]
+#fig = plot_filtered_signals(signals, filter_size=100, y_lim=[0, 1.5])
+#plt.xlabel('Time')
+#plt.legend(['Loss', 'SG Loss'])
+#fig.savefig(os.path.join(figs_path, 'Fig2.png'), dpi=200, format='png')
 
 #from analysis_funcs import get_spectral_radius
 #
