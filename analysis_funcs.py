@@ -159,10 +159,6 @@ def plot_results_from_job(job_name, rnn_signals, colors,
         
     plt.ylim(y_lim)
     plt.xlabel('Time')
-    
-
-
-
 
 
 

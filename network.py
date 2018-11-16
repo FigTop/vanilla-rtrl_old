@@ -353,8 +353,8 @@ class RNN:
         if self.check_accuracy:
             self.rnn_copy = copy(self)
             self.rnn_copy.run(self.data, mode='test', monitors=['y_hat'], verbose=False)
-            acc = classification_accuracy(self.data, self.rnn_copy.mons['y_hat'])
-            accuracy = 'Test accuracy: {} \n'.format(acc)
+            self.acc = classification_accuracy(self.data, self.rnn_copy.mons['y_hat'])
+            accuracy = 'Test accuracy: {} \n'.format(self.acc)
             summary += accuracy
             
         print(summary.format(progress, time_elapsed))

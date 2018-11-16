@@ -31,7 +31,7 @@ Created on Tue Oct 30 14:23:44 2018
 
 ### -------- Make big fig ---- ####
 
-job_name = 'approximations'
+job_name = 'cosyne_results'
 data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
 alpha = 0.05
 filter_size = 100
@@ -40,28 +40,37 @@ configs = []
 signals = []
 figs = []
 
-fig, axarr = plt.subplots(2, 2, figsize=(20, 10))
+n_errors = 0
+
+n_row = 3
+n_col = 4
+
+fig, axarr = plt.subplots(n_row, n_col, figsize=(20, 10))
 
 for file_name in os.listdir(data_dir):
     
     with open(os.path.join(data_dir, file_name), 'rb') as f:
-        result = pickle.load(f)
+        try:
+            result = pickle.load(f)
+        except EOFError:
+            n_errors += 1
         
     if result['config'] not in configs:
         configs.append(result['config'])
-        signals.append({'loss_': [], 'sg_loss': [], 'loss_a': []})
+        signals.append({'loss_': [], 'sg_loss': [], 'loss_a': [], 'acc': []})
         i_conf = len(configs) - 1
     else:
         i_conf = configs.index(result['config'])
     
-    i_x = i_conf%2
-    i_y = i_conf//2
+    i_x = i_conf%n_row
+    i_y = i_conf//n_row
     
-    smoothed_signal = np.convolve(result['rnn'].mons['loss_'],
-                                  np.ones(filter_size)/filter_size,
-                                  mode='valid')
-    axarr[i_x, i_y].plot(smoothed_signal, 'b', alpha=alpha)
-    signals[i_conf]['loss_'].append(smoothed_signal)
+    for key, col in zip(['loss_', 'acc'], ['b', 'k']):
+        smoothed_signal = np.convolve(result['rnn'].mons[key],
+                                      np.ones(filter_size)/filter_size,
+                                      mode='valid')
+        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
+        signals[i_conf][key].append(smoothed_signal)
         
     for key, col in zip(['sg_loss', 'loss_a'], ['y', 'g']):
         
@@ -73,25 +82,27 @@ for file_name in os.listdir(data_dir):
 
 for i_conf, conf in enumerate(configs):
 
-    i_x = i_conf%2
-    i_y = i_conf//2
+    i_x = i_conf%n_row
+    i_y = i_conf//n_row
     
-    for key, col in zip(['loss_', 'sg_loss', 'loss_a'], ['b', 'y', 'g']):
+    for key, col in zip(['loss_', 'acc', 'sg_loss', 'loss_a'], ['b', 'k', 'y', 'g']):
         
         signals[i_conf][key] = np.array(signals[i_conf][key])
         
-        axarr[i_x, i_y].plot(np.nanmedian(signals[i_conf][key], axis=0), col)
+        axarr[i_x, i_y].plot(np.nanmean(signals[i_conf][key], axis=0), col)
     
     if True:
         axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
         axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
         axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')    
+        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')   
         
-    axarr[i_x, i_y].set_ylim([0, 1.5])
+    axarr[i_x, i_y].set_ylim([0, 1])
+    axarr[i_x, i_y].set_xlim([0, 10000])
     axarr[i_x, i_y].set_xticks([])
-    axarr[i_x, i_y].set_title('{}, {}, {}, {}'.format(conf[0], conf[1], conf[2], conf[3]), fontsize=8)
+    axarr[i_x, i_y].set_title('{}, {}, {}'.format(conf[0], conf[1], conf[2]), fontsize=8)
     
-
+print(n_errors)
 #### ------------- #####
 
 #import os

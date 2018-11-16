@@ -20,6 +20,7 @@ from analysis_funcs import *
 from learning_algorithms import *
 import os
 import pickle
+from copy import copy
 
 try:
     i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
@@ -30,19 +31,18 @@ i_seed = i_job
 #i_seed = 339
 np.random.seed(i_seed)
 
-task = Coin_Task(4, 6, one_hot=True, deterministic=False)
+configs = [[3, 4, 5], ['symmetric', 'random'], ['exact', 'approximate']]
+
+confs = [np.random.choice(conf) for conf in configs]
+confs = [3, 'random', 'approximate']
+
+n_back = confs[0]
+fb = confs[1]
+bp_w = confs[2]
+
+task = Coin_Task(n_back, n_back+2, one_hot=True, deterministic=False)
+#task = Copy_Task(5, 2)
 data = task.gen_data(40000, 1000)
-#task = Copy_Task(10, 3)
-
-configs = [[0.01, 0.05], ['tanh', 'identity'], ['symmetric', 'random',], ['exact', 'approximate']]
-
-confs = [configs[0][i_job%2]]+[np.random.choice(configs[1])]+['symmetric', 'approximate']
-confs = [0.01, 'tanh', 'random', 'approximate']
-
-if confs[1]=='tanh':
-    SGLA = tanh
-if confs[1]=='identity':
-    SGLA = identity
 
 n_in     = task.n_in
 n_hidden = 32
@@ -64,22 +64,14 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.001)#, clipnorm=1.0)
+optimizer = SGD(lr=0.001)
 SG_optimizer = SGD(lr=0.01)
-#learn_alg = DNI(rnn, SG_optimizer, activation=identity,
-#                monitors=['sg_loss', 'loss_a'],
-#                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
-#                W_a_lr=0.05, SG_label_activation=tanh,
-#                feedback='symmetric', backprop_weights='approximate')
 learn_alg = DNI(rnn, SG_optimizer, activation=identity,
                 monitors=['sg_loss', 'loss_a'],
                 l2_reg=0, fix_SG_interval=5,
-                W_a_lr=confs[0], SG_label_activation=SGLA,
-                feedback=confs[2], backprop_weights=confs[3])
-comp_alg = RTRL(rnn)
-monitors = ['loss_']
-#            'W_radius',
-#            'A_radius']
+                W_a_lr=0.01, SG_label_activation=tanh,
+                feedback=fb, backprop_weights=bp_w)
+monitors = ['loss_', 'acc', 'y_hat']
 
 rnn.run(data,
         learn_alg=learn_alg,
@@ -90,21 +82,11 @@ rnn.run(data,
         check_accuracy=True,
         verbose=True)
 
-
 if os.environ['HOME']=='/Users/omarschall':
 
     
     signals = [rnn.mons['loss_'], rnn.learn_alg.mons['sg_loss'], rnn.learn_alg.mons['loss_a']]
-               #rnn.learn_alg.mons['loss_u']]#, rnn.mons['W_radius'], rnn.mons['A_radius']]
-    #signals2 = [(learn_alg.mons['q']**2).mean(1)]
-#                (rnn.mons['W_rec']**2).mean(1).mean(1),
-#                (learn_alg.mons['A']**2).mean(1).mean(1),
-#                (learn_alg.mons['B']**2).mean(1).mean(1),
-#                (learn_alg.mons['C']**2).mean(1)]
     fig1 = plot_filtered_signals(signals, filter_size=1000, y_lim=[0, 1.5])
-#    plt.legend(['Loss', 'SG Loss'])#, 'W_rec alignment'])
-    #fig2 = plot_filtered_signals(signals2, filter_size=1000, plot_loss_benchmarks=False)
-    #plt.legend(['||a||', '||W_rec||', '||A||', '||B||', '||C||'])
 
 if os.environ['HOME']=='/home/oem214':
 
