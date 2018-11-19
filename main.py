@@ -8,6 +8,7 @@ Created on Mon Sep 10 16:30:58 2018
 
 import numpy as np
 from network import RNN
+from simulation import Simulation
 from utils import *
 from gen_data import *
 try:
@@ -27,10 +28,10 @@ except KeyError:
     i_job = np.random.randint(1000)
 
 i_seed = i_job
-#i_seed = 582
+i_seed = 759
 np.random.seed(i_seed)
 
-task = Coin_Task(4, 6, one_hot=True, deterministic=False)
+task = Coin_Task(6, 10, one_hot=True, deterministic=True)
 data = task.gen_data(30000, 1000)
 #task = Copy_Task(10, 3)
 
@@ -54,32 +55,24 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.001, clipnorm=1.0)
+optimizer = SGD(lr=0.001)#, clipnorm=1.0)
 SG_optimizer = SGD(lr=0.01)
 learn_alg = DNI(rnn, SG_optimizer, activation=identity,
-                monitors=['sg_loss', 'loss_a'],
                 lambda_mix=0, l2_reg=0, fix_SG_interval=5,
                 W_a_lr=0.05)
-comp_alg = RTRL(rnn)
-monitors = ['loss_', 'a', 'y_hat']
-#            'W_radius',
-#            'A_radius']
+comp_alg = KF_RTRL(rnn)
+monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 
-rnn.run(data,
-        learn_alg=learn_alg,
-        optimizer=optimizer,
+sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.0001, comparison_alg=comp_alg)
+sim.run(data,
         monitors=monitors,
-        update_interval=1,
-        l2_reg=0.0001,
-        check_accuracy=False,
-        verbose=True)
-
+        verbose=True,
+        check_accuracy=True)
 
 if os.environ['HOME']=='/Users/omarschall':
 
     
-    signals = [rnn.mons['loss_'], rnn.learn_alg.mons['sg_loss'],
-               rnn.learn_alg.mons['loss_a']]#, rnn.mons['W_radius'], rnn.mons['A_radius']]
+    signals = [sim.mons['loss_'], sim.mons['sg_loss']]
     #signals2 = [(learn_alg.mons['q']**2).mean(1)]
 #                (rnn.mons['W_rec']**2).mean(1).mean(1),
 #                (learn_alg.mons['A']**2).mean(1).mean(1),
@@ -92,7 +85,7 @@ if os.environ['HOME']=='/Users/omarschall':
 
 if os.environ['HOME']=='/home/oem214':
 
-    result = {'rnn': rnn, 'i_seed': i_seed}
+    result = {'sim': sim, 'i_seed': i_seed}
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)

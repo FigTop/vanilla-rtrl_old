@@ -10,8 +10,9 @@ import numpy as np
 import time
 from copy import copy
 from pdb import set_trace
+from analysis_funcs import *
 
-class Simulation():
+class Simulation:
     
     def __init__(self, net, learn_alg=None, optimizer=None, **kwargs):
         
@@ -24,7 +25,7 @@ class Simulation():
         
         ___Arguments___
         
-        data                    Dict providing input and label data
+        net                     Instance of class RNN or similar object
         
         learn_alg               Instance of the class Learning_Algorithm
                                 (see learning_algorithms.py) used to train
@@ -65,13 +66,13 @@ class Simulation():
         '''
 
 
-        allowed_kwargs = {'l2_reg', 'monitors', 'update_interval',
+        allowed_kwargs = {'l2_reg', 'update_interval',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
-                                'passed to RNN.run: ' + str(k))
+                                'passed to Simulation.__init__: ' + str(k))
                 
         #Store required args as part of simulation
         self.net       = net
@@ -80,47 +81,51 @@ class Simulation():
         
         #Default simulation parameters
         self.l2_reg           = 0
-        self.monitors         = []
         self.update_interval  = 1
-        self.verbose          = True
-        
         
         #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
 
-    def run(self, data, mode='train', monitors=[]):
+    def run(self, data, mode='train', monitors=[], **kwargs):
         
-        self.mode = mode
+        allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to Simulation.run: ' + str(k))
+        
+        net = self.net
+        
+        self.mode           = mode
+        self.verbose        = True
+        self.check_accuracy = False
         
         #Make local copies of (meta)-data
-        x_inputs = data[self.mode]['X']
-        y_labels = data[self.mode]['Y']
-        self.T   = x_inputs.shape[0]
-        self.report_interval  = max(self.T//10, 1)
-        self.check_accuracy   = False
+        x_inputs             = data[self.mode]['X']
+        y_labels             = data[self.mode]['Y']
+        self.T               = x_inputs.shape[0]
+        self.report_interval = max(self.T//10, 1)
         
+        #Overwrite defaults with any provided keyword args
+        self.__dict__.update(kwargs)
+
         #Initialize monitors
         self.mons = {}
-        for mon in self.monitors:
+        for mon in monitors:
             self.mons[mon] = []
         
         #Set a random initial state of the network
-        self.net.reset_network()
+        net.reset_network()
         
-        #Make local copies of (meta)-data
+        #Make local copies of (meta-)data
         x_inputs = data[self.mode]['X']
         y_labels = data[self.mode]['Y']
         self.T   = x_inputs.shape[0]
         
-        #Initialize monitors
-        self.mons = {}
-        for mon in self.monitors:
-            self.mons[mon] = []
-        
-        #To avoid errors, intialize "previous"
+        #To avoid errors, initialize "previous"
         #inputs/labels as the first inputs/labels
-        self.net.x_prev = x_inputs[0]
-        self.net.y_prev = y_labels[0]
+        net.x_prev = x_inputs[0]
+        net.y_prev = y_labels[0]
         
         #Track computation time
         self.t1 = time.time()
@@ -129,15 +134,15 @@ class Simulation():
             
             ### --- Run network forwards and get error --- ###
             
-            self.net.x = x_inputs[i_t]
-            self.net.y = y_labels[i_t]
+            net.x = x_inputs[i_t]
+            net.y = y_labels[i_t]
             
-            self.net.next_state(self.net.x)
-            self.net.z_out()
+            net.next_state(net.x)
+            net.z_out()
             
-            self.net.y_hat  = self.net.output.f(self.net.z)
-            self.net.loss_  = self.net.loss.f(self.net.z, self.net.y)
-            self.net.e      = self.net.loss.f_prime(self.net.z, self.net.y)
+            net.y_hat  = net.output.f(net.z)
+            net.loss_  = net.loss.f(net.z, net.y)
+            net.e      = net.loss.f_prime(net.z, net.y)
 
             ### --- Update parameters if in 'train' mode --- ###
 
@@ -167,36 +172,37 @@ class Simulation():
                     self.b_out_alignment = self.alignment[4]
                 
                 #Add L2 regularization derivative to gradient
-                for i_l2, W in zip([0, 1, 3], [self.W_rec, self.W_in, self.W_out]):
+                for i_l2, W in zip([0, 1, 3], [net.W_rec, net.W_in, net.W_out]):
                     self.grads[i_l2] += self.l2_reg*W
                     
                 #If on the update cycle (always true for update_inteval=1),
                 #pass gradients to the optimizer and update parameters.
                 if (i_t + 1)%self.update_interval==0:
-                    self.params = self.optimizer.get_update(self.params, self.grads)
-                    self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out = self.params
-                
+                    net.params = self.optimizer.get_update(net.params, self.grads)
+                    net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
                         
             if hasattr(self, 't_stop_SG_train'):
                 if self.t_stop_SG_train==i_t:
                     self.learn_alg.optimizer.lr = 0
                     
             #Current inputs/labels become previous inputs/labels
-            self.x_prev = np.copy(self.x)
-            self.y_prev = np.copy(self.y)
+            net.x_prev = np.copy(net.x)
+            net.y_prev = np.copy(net.y)
             
             #Compute spectral radii if desired
-            if 'W_radius' in self.mons.keys():
-                self.W_radius = get_spectral_radius(self.W_rec)
-            if 'A_radius' in self.mons.keys():
-                self.A_radius = get_spectral_radius(learn_alg.A)
+            for key in self.mons.keys():
+                if 'radius' in key:
+                    a = key.split('_')[0]
+                    for obj in [self, net, self.learn_alg]:
+                        if hasattr(obj, a):
+                            setattr(self, key, get_spectral_radius(getattr(obj, a)))
             
             #Monitor relevant variables
             self.update_monitors()
             
             #Make report if conditions are met
             if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
-                self.report_progress(i_t)
+                self.report_progress(i_t, data)
                 
             if hasattr(self, 't_stop_training') and self.mode=='train':
                 if self.t_stop_training==i_t:
@@ -205,7 +211,7 @@ class Simulation():
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
                 
-    def report_progress(self, i_t):
+    def report_progress(self, i_t, data):
         
         t2 = time.time()
         
@@ -220,9 +226,9 @@ class Simulation():
             summary += loss
             
         if self.check_accuracy:
-            self.rnn_copy = copy(self)
-            self.rnn_copy.run(self.data, mode='test', monitors=['y_hat'], verbose=False)
-            acc = classification_accuracy(self.data, self.rnn_copy.mons['y_hat'])
+            test_sim = copy(self)
+            test_sim.run(data, mode='test', monitors=['y_hat'], verbose=False)
+            acc = classification_accuracy(data, test_sim.mons['y_hat'])
             accuracy = 'Test accuracy: {} \n'.format(acc)
             summary += accuracy
             
@@ -231,10 +237,11 @@ class Simulation():
     def update_monitors(self):
 
         for key in self.mons.keys():
-            try:
-                self.mons[key].append(getattr(self, key))
-            except AttributeError:
-                pass
+            for obj in [self, self.net, self.learn_alg, self.optimizer]:
+                try:
+                    self.mons[key].append(getattr(obj, key))
+                except AttributeError:
+                    pass
         
     def truncate_history(self, T):
         '''
@@ -254,16 +261,21 @@ class Simulation():
     def monitors_to_arrays(self):
         
         #After run is finished, turn monitors from lists into arrays.
-        objs = [self]
-        if self.learn_alg is not None:
-            objs += [self.learn_alg]
-        if hasattr(self, 'comparison_alg'):
-            objs += [self.comparison_alg]
-            
-        for obj in objs:
-            for key in obj.mons.keys():
-                try:
-                    obj.mons[key] = np.array(obj.mons[key])
-                except ValueError:
-                    pass
+        for key in self.mons.keys():
+            try:
+                self.mons[key] = np.array(self.mons[key])
+            except ValueError:
+                pass
+#        objs = [self]
+#        if self.learn_alg is not None:
+#            objs += [self.learn_alg]
+#        if hasattr(self, 'comparison_alg'):
+#            objs += [self.comparison_alg]
+#            
+#        for obj in objs:
+#            for key in obj.mons.keys():
+#                try:
+#                    obj.mons[key] = np.array(obj.mons[key])
+#                except ValueError:
+#                    pass
     

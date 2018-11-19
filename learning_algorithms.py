@@ -331,8 +331,8 @@ class DNI(Learning_Algorithm):
         #self.q = self.net.e.dot(self.net.W_out)
         self.q = self.net.e.dot(self.W_fb)
         #bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
-        bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
-        #bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(np.eye(self.net.n_hidden))
+        #bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
+        bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(np.eye(self.net.n_hidden))
         
             
         return self.lambda_mix*true_grad + (1 - self.lambda_mix)*bootstrap
