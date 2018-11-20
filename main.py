@@ -31,7 +31,7 @@ i_seed = i_job
 i_seed = 759
 np.random.seed(i_seed)
 
-task = Coin_Task(6, 10, one_hot=True, deterministic=True)
+task = Coin_Task(6, 10, one_hot=True, deterministic=False)
 data = task.gen_data(30000, 1000)
 #task = Copy_Task(10, 3)
 
@@ -57,11 +57,13 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 
 optimizer = SGD(lr=0.001)#, clipnorm=1.0)
 SG_optimizer = SGD(lr=0.01)
-learn_alg = DNI(rnn, SG_optimizer, activation=identity,
-                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
-                W_a_lr=0.05)
-comp_alg = KF_RTRL(rnn)
-monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
+#learn_alg = DNI(rnn, SG_optimizer, activation=identity,
+#                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
+#                W_a_lr=0.05)
+learn_alg = UORO(rnn)
+comp_alg = RTRL(rnn)
+#monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
+monitors = ['loss_'] + [w+'_alignment' for w in ['W_rec', 'W_in', 'b_rec']]
 
 sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.0001, comparison_alg=comp_alg)
 sim.run(data,
@@ -71,17 +73,11 @@ sim.run(data,
 
 if os.environ['HOME']=='/Users/omarschall':
 
-    
-    signals = [sim.mons['loss_'], sim.mons['sg_loss']]
-    #signals2 = [(learn_alg.mons['q']**2).mean(1)]
-#                (rnn.mons['W_rec']**2).mean(1).mean(1),
-#                (learn_alg.mons['A']**2).mean(1).mean(1),
-#                (learn_alg.mons['B']**2).mean(1).mean(1),
-#                (learn_alg.mons['C']**2).mean(1)]
-    fig1 = plot_filtered_signals(signals, filter_size=100, y_lim=[0, 1.5])
-#    plt.legend(['Loss', 'SG Loss'])#, 'W_rec alignment'])
-    #fig2 = plot_filtered_signals(signals2, filter_size=1000, plot_loss_benchmarks=False)
-    #plt.legend(['||a||', '||W_rec||', '||A||', '||B||', '||C||'])
+    signals1 = [sim.mons['loss_']]
+    signals2 = [sim.mons[key] for key in monitors[1:]]
+    fig1 = plot_filtered_signals(signals1, filter_size=100, y_lim=[0, 1.5])
+    fig2 = plot_filtered_signals(signals2, filter_size=100, y_lim=[-1, 1], plot_loss_benchmarks=False)
+    plt.axhline(y=0, color='k', linestyle='--')
 
 if os.environ['HOME']=='/home/oem214':
 

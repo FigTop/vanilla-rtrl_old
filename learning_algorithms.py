@@ -156,9 +156,11 @@ class RTRL(Learning_Algorithm):
     
 class UORO(Learning_Algorithm):
     
-    def __init__(self, net, monitors=[]):
+    def __init__(self, net, epsilon=0.00001, monitors=[]):
         
         super().__init__(net, monitors)
+        
+        self.epsilon = epsilon
         
         #Total post- and pre-synaptic units in hidden layer, counting inputs and bias
         self.I     = self.net.n_hidden
@@ -180,7 +182,14 @@ class UORO(Learning_Algorithm):
         p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2)/np.sum((self.net.a_J.dot(self.a_tilde))**2)))
         p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2)/np.sum((nu)**2)))
         
-        self.a_tilde = p1*self.net.a_J.dot(self.a_tilde) + p2*nu
+        #Forward differentiation
+        self.a_eps = self.net.a + self.epsilon*self.a_tilde
+        self.f1 = self.net.next_state(self.net.x, self.a_eps, update=False)  
+        self.f2 = self.net.next_state(self.net.x, self.net.a, update=False)
+        self.a_tilde_ = (self.f1 - self.f2)/self.epsilon
+        
+        #self.a_tilde = p1*self.net.a_J.dot(self.a_tilde) + p2*nu
+        self.a_tilde = p1*self.a_tilde_ + p2*nu
         self.theta_tilde = (1/p1)*self.theta_tilde + (1/p2)*nu.dot(self.partial_a_partial_w)
     
     def __call__(self):
