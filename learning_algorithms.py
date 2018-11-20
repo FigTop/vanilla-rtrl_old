@@ -179,18 +179,19 @@ class UORO(Learning_Algorithm):
         
         nu = np.random.uniform(-1, 1, self.net.n_hidden)
         
-        p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2)/np.sum((self.net.a_J.dot(self.a_tilde))**2)))
-        p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2)/np.sum((nu)**2)))
-        
         #Forward differentiation
         self.a_eps = self.net.a + self.epsilon*self.a_tilde
         self.f1 = self.net.next_state(self.net.x, self.a_eps, update=False)  
         self.f2 = self.net.next_state(self.net.x, self.net.a, update=False)
         self.a_tilde_ = (self.f1 - self.f2)/self.epsilon
         
+        #Compute normalizers
+        self.p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2))/(np.sqrt(np.sum(self.a_tilde_**2)) + self.epsilon)) + self.epsilon
+        self.p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2))/(np.sqrt(np.sum(nu**2)) + self.epsilon)) + self.epsilon
+        
         #self.a_tilde = p1*self.net.a_J.dot(self.a_tilde) + p2*nu
-        self.a_tilde = p1*self.a_tilde_ + p2*nu
-        self.theta_tilde = (1/p1)*self.theta_tilde + (1/p2)*nu.dot(self.partial_a_partial_w)
+        self.a_tilde = self.p1*self.a_tilde_ + self.p2*nu
+        self.theta_tilde = (1/self.p1)*self.theta_tilde + (1/self.p2)*nu.dot(self.partial_a_partial_w)
     
     def __call__(self):
         
