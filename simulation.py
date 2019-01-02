@@ -68,7 +68,8 @@ class Simulation:
 
         allowed_kwargs = {'l2_reg', 'update_interval',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
-                          'check_accuracy', 't_stop_SG_train', 't_stop_training'}
+                          'check_accuracy', 't_stop_SG_train', 't_stop_training',
+                          'tau_avg'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -143,7 +144,7 @@ class Simulation:
             net.y_hat  = net.output.f(net.z)
             net.loss_  = net.loss.f(net.z, net.y)
             net.e      = net.loss.f_prime(net.z, net.y)
-
+            
             ### --- Update parameters if in 'train' mode --- ###
 
             if self.mode=='train':
@@ -181,6 +182,11 @@ class Simulation:
                     net.params = self.optimizer.get_update(net.params, self.grads)
                     net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
                         
+            try:
+                net.update_A()
+            except AttributeError:
+                pass
+            
             if hasattr(self, 't_stop_SG_train'):
                 if self.t_stop_SG_train==i_t:
                     self.learn_alg.optimizer.lr = 0
@@ -262,6 +268,9 @@ class Simulation:
         
         #After run is finished, turn monitors from lists into arrays.
         for key in self.mons.keys():
+            if key=='a_s':
+                self.mons[key] = np.concatenate(self.mons[key])
+                continue
             try:
                 self.mons[key] = np.array(self.mons[key])
             except ValueError:

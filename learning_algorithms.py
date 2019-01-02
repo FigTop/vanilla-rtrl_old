@@ -122,7 +122,13 @@ class BPTT(Learning_Algorithm):
         
 class RTRL(Learning_Algorithm):
 
-    def __init__(self, net, monitors=[]):
+    def __init__(self, net, monitors=[], **kwargs):
+        
+        allowed_kwargs = {'W_FB'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to RNN.run: ' + str(k))
         
         super().__init__(net, monitors)
         
@@ -132,6 +138,7 @@ class RTRL(Learning_Algorithm):
         
         #Initialize influence matrix
         self.dadw  = np.zeros((self.net.n_hidden, self.net.n_hidden_params))
+        self.__dict__.update(kwargs)
         
     def update_learning_vars(self):
         
@@ -140,12 +147,16 @@ class RTRL(Learning_Algorithm):
         
         self.net.get_a_jacobian()
         self.dadw = self.net.a_J.dot(self.dadw) + self.partial_a_partial_w
+        #self.dadw = (1 - self.net.alpha)*self.dadw + self.net.alpha*self.partial_a_partial_w
         
     def __call__(self):
         
         outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
         
-        q = self.net.e.dot(self.net.W_out)
+        if not hasattr(self, 'W_FB'):
+            q = self.net.e.dot(self.net.W_out)
+        else:
+            q = self.net.e.dot(self.W_FB)
         rec_grad = q.dot(self.dadw).reshape((self.I, self.J), order='F')
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
@@ -156,7 +167,7 @@ class RTRL(Learning_Algorithm):
     
 class UORO(Learning_Algorithm):
     
-    def __init__(self, net, epsilon=0.00001, monitors=[]):
+    def __init__(self, net, epsilon=0.00001, monitors=[], P1=None, P2=None):
         
         super().__init__(net, monitors)
         
@@ -165,6 +176,9 @@ class UORO(Learning_Algorithm):
         #Total post- and pre-synaptic units in hidden layer, counting inputs and bias
         self.I     = self.net.n_hidden
         self.J     = self.net.n_hidden + self.net.n_in + 1
+
+        self.P1 = P1
+        self.P2 = P2
         
         #Initialize a_tilde and theta_tilde vectors
         self.theta_tilde = np.random.normal(0, 1, net.n_hidden_params)
@@ -186,8 +200,13 @@ class UORO(Learning_Algorithm):
         self.a_tilde_ = (self.f1 - self.f2)/self.epsilon
         
         #Compute normalizers
-        self.p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2))/(np.sqrt(np.sum(self.a_tilde_**2)) + self.epsilon)) + self.epsilon
-        self.p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2))/(np.sqrt(np.sum(nu**2)) + self.epsilon)) + self.epsilon
+        self.p1 = np.copy(self.P1)
+        self.p2 = np.copy(self.P2)
+        
+        if self.P1 is None:
+            self.p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2))/(np.sqrt(np.sum(self.a_tilde_**2)) + self.epsilon)) + self.epsilon
+        if self.P2 is None:
+            self.p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2))/(np.sqrt(np.sum(nu**2)) + self.epsilon)) + self.epsilon
         
         #self.a_tilde = p1*self.net.a_J.dot(self.a_tilde) + p2*nu
         self.a_tilde = self.p1*self.a_tilde_ + self.p2*nu
@@ -231,6 +250,8 @@ class KF_RTRL(Learning_Algorithm):
         self.c1, self.c2 = np.random.uniform(-1, 1, 2)
         self.p1          = np.sqrt(np.sqrt(np.sum(self.H_prime**2)/np.sum(self.u**2)))
         self.p2          = np.sqrt(np.sqrt(np.sum(self.D**2)/np.sum(self.a_hat**2)))
+        #self.p1 = 0.8
+        #self.p2 = 1.1
         
         self.u = self.c1*self.p1*self.u + self.c2*self.p2*self.a_hat
         self.A = self.c1*(1/self.p1)*self.H_prime + self.c2*(1/self.p2)*self.D
@@ -409,3 +430,53 @@ class DNI(Learning_Algorithm):
         self.update_monitors()
         
         return grads
+    
+class RFLO(Learning_Algorithm):
+    
+    def __init__(self, net, alpha, monitors=[], **kwargs):
+        
+        allowed_kwargs = {'W_FB', 'P'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to RFLO.__init__: ' + str(k))
+        
+        super().__init__(net, monitors)
+        
+        self.alpha = alpha
+        
+        n_h = self.net.n_hidden
+        n_in = self.net.n_in
+        self.P = np.zeros((n_h, n_h + n_in + 1))
+        
+        self.__dict__.update(kwargs)
+        
+    def update_learning_vars(self):
+        
+        self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.P = (1 - self.alpha)*self.P + self.alpha*np.multiply.outer(self.D, self.a_hat)
+        
+    def __call__(self):
+    
+        outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e] 
+        
+        n_h = self.net.n_hidden
+    
+        if hasattr(self, 'W_FB'):
+            self.q = self.net.e.dot(self.W_FB)
+        else:
+            self.q = self.net.e.dot(self.W_out)
+        rec_grad = (self.q*self.P.T).T
+        
+        grads = [rec_grad[:,:n_h], rec_grad[:,n_h:-1], rec_grad[:,-1]] + outer_grads
+        self.update_monitors()
+        
+        return grads
+    
+    
+    
+    
+    
+    
+    
