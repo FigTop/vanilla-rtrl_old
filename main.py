@@ -8,6 +8,8 @@ Created on Mon Sep 10 16:30:58 2018
 
 import numpy as np
 from network import RNN
+from fast_weights_network import Fast_Weights_RNN
+from simulation import Simulation
 from utils import *
 from gen_data import *
 try:
@@ -28,69 +30,73 @@ except KeyError:
     i_job = np.random.randint(1000)
 
 i_seed = i_job
-#i_seed = 339
+#i_seed = 75
 np.random.seed(i_seed)
-
-configs = [[3, 4, 5], ['symmetric', 'random'], ['exact', 'approximate']]
-
-confs = [np.random.choice(conf) for conf in configs]
-confs = [3, 'random', 'approximate']
-
-n_back = confs[0]
-fb = confs[1]
-bp_w = confs[2]
-
-task = Coin_Task(n_back, n_back+2, one_hot=True, deterministic=False)
-#task = Copy_Task(5, 2)
-data = task.gen_data(40000, 1000)
+#task = Coin_Task(4, 6, one_hot=True, deterministic=True)
+task = Sine_Wave(0.003, [0.3, 0.1, 0.03, 0.01])
+data = task.gen_data(100000, 1000)
+#task = Copy_Task(10, 3)
 
 n_in     = task.n_in
-n_hidden = 32
+n_hidden = 64
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 #W_rec = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_hidden, n_hidden))
 W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
+
+A = np.zeros_like(W_rec)
+n_S = 10
 
 alpha = 1
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+          output=identity,
+          loss=mean_squared_error)
 
-optimizer = SGD(lr=0.001)
+#rnn = Fast_Weights_RNN(W_in, W_rec, W_out, b_rec, b_out,
+#                       activation=tanh,
+#                       alpha=alpha,
+#                       output=softmax,
+#                       loss=softmax_cross_entropy,
+#                       A=A, lmbda=0.95, eta=0.5, n_S=10)
+
+optimizer = SGD(lr=0.0000001)#, clipnorm=1.0)
 SG_optimizer = SGD(lr=0.01)
 learn_alg = DNI(rnn, SG_optimizer, activation=identity,
-                monitors=['sg_loss', 'loss_a'],
-                l2_reg=0, fix_SG_interval=5,
-                W_a_lr=0.01, SG_label_activation=tanh,
-                feedback=fb, backprop_weights=bp_w)
-monitors = ['loss_', 'acc', 'y_hat']
+                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
+                W_a_lr=0.05)
+#learn_alg = UORO(rnn, epsilon=0.0000001, P1=None, P2=None)
+learn_alg = RTRL(rnn)
+#learn_alg = RFLO(rnn, monitors=['P'], alpha=alpha, W_FB=W_FB)
+#learn_alg = BPTT(rnn, 1, 40)
+#comp_alg = RTRL(rnn, monitors=['dadw'])
+#monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
+monitors = ['loss_', 'y_hat']
 
-rnn.run(data,
-        learn_alg=learn_alg,
-        optimizer=optimizer,
+sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.0001)#, comparison_alg=comp_alg)
+sim.run(data,
         monitors=monitors,
-        update_interval=1,
-        l2_reg=0.0001,
-        check_accuracy=True,
-        verbose=True)
+        verbose=True,
+        check_accuracy=False)
 
 if os.environ['HOME']=='/Users/omarschall':
 
-    
-    signals = [rnn.mons['loss_'], rnn.learn_alg.mons['sg_loss'], rnn.learn_alg.mons['loss_a']]
-    fig1 = plot_filtered_signals(signals, filter_size=1000, y_lim=[0, 1.5])
+    signals1 = [sim.mons['loss_']]
+    fig1 = plot_filtered_signals(signals1, filter_size=100, y_lim=[0, 1])
+    plt.legend(['Loss'])
+    #plt.title('RFLO on (4,6)-back task')
 
 if os.environ['HOME']=='/home/oem214':
 
-    result = {'rnn': rnn, 'i_seed': i_seed, 'config': confs}
+    result = {'sim': sim, 'i_seed': i_seed}
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)

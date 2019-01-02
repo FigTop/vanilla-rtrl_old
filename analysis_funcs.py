@@ -87,7 +87,7 @@ def get_vector_alignment(v1, v2):
         
     return np.array(alignment)
     
-def plot_filtered_signals(signals, filter_size=100, y_lim=[0,1.5], plot_loss_benchmarks=True):
+def plot_filtered_signals(signals, filter_size=100, y_lim=None, plot_loss_benchmarks=True):
     
     fig = plt.figure(figsize=[8, 4])
     
@@ -100,7 +100,8 @@ def plot_filtered_signals(signals, filter_size=100, y_lim=[0,1.5], plot_loss_ben
         plt.axhline(y=0.52, color='m', linestyle='--')
         plt.axhline(y=0.45, color='g', linestyle='--')
     
-    plt.ylim(y_lim)
+    if y_lim is not None:
+        plt.ylim(y_lim)
     plt.xlabel('Time')
     
     return fig

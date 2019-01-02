@@ -9,6 +9,7 @@ Created on Mon Sep 10 16:30:03 2018
 import numpy as np
 import matplotlib.pyplot as plt
 from copy import copy
+from pdb import set_trace
 
 class Task:
     
@@ -162,9 +163,56 @@ class Mimic_RNN(Task):
             
         return X, np.array(Y)
             
+class Sine_Wave(Task):
+    
+    def __init__(self, p_transition, frequencies, **kwargs):
         
+        allowed_kwargs = {'p_frequencies'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to RFLO.__init__: ' + str(k))
         
+        super().__init__(2, 2)
         
+        self.p_transition = p_transition
+        self.frequencies = frequencies
+        self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
+        self.__dict__.update(kwargs)
+                 
+    def gen_dataset(self, N):
+        
+        X = np.zeros((N, 2))
+        Y = np.zeros((N, 2))
+        
+        active = False
+        t = 0
+        for i in range(1, N):
+            
+            if np.random.rand() < self.p_transition:  
+                
+                t = 0
+                
+                if active:
+                    X[i,:] = 0
+                    Y[i,:] = 0
+                
+                if not active:
+                    X[i,0] = np.random.choice(self.frequencies, p=self.p_frequencies)
+                    X[i,1] = 1
+                    Y[i,0] = np.cos(2*np.pi*X[i,0]*t)
+                    Y[i,1] = np.sin(2*np.pi*X[i,0]*t)
+                
+                active = not active
+                
+            else:
+                
+                t+=1
+                X[i,:] = X[i-1,:]
+                Y[i,0] = np.cos(2*np.pi*X[i,0]*t)*active
+                Y[i,1] = np.sin(2*np.pi*X[i,0]*t)*active
+                
+        return X, Y
         
         
         

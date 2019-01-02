@@ -127,12 +127,31 @@ def identity_derivative(z):
 
 identity = function(identity_, identity_derivative)
 
+### --- Define Layer Normalization --- ###
 
+def layer_normalization_(z):
+    
+    return (z - np.mean(z))/np.std(z)
 
+def layer_normalization_derivative(z):
+    
+    return "don't care"
 
+layer_normalization = function(layer_normalization_, layer_normalization_derivative)
 
+### --- Define Mean-Squared Error --- ###
 
+def mean_squared_error_(z, y):
+    
+    return 0.5*np.square(z - y).mean()
 
+def mean_squared_error_derivative(z, y):
+    
+    return z - y
+    
+mean_squared_error = function(mean_squared_error_, mean_squared_error_derivative)
+    
+    
 
 
 
