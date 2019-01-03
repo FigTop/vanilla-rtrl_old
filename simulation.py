@@ -275,16 +275,4 @@ class Simulation:
                 self.mons[key] = np.array(self.mons[key])
             except ValueError:
                 pass
-#        objs = [self]
-#        if self.learn_alg is not None:
-#            objs += [self.learn_alg]
-#        if hasattr(self, 'comparison_alg'):
-#            objs += [self.comparison_alg]
-#            
-#        for obj in objs:
-#            for key in obj.mons.keys():
-#                try:
-#                    obj.mons[key] = np.array(obj.mons[key])
-#                except ValueError:
-#                    pass
     

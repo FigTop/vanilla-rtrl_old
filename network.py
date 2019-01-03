@@ -8,6 +8,7 @@ Created on Fri Sep  7 17:20:39 2018
 
 import numpy as np
 from utils import *
+from functions import *
 from optimizers import *
 from analysis_funcs import *
 import time

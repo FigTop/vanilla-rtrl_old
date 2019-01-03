@@ -20,6 +20,7 @@ import time
 from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
+from functions import *
 import os
 import pickle
 from copy import copy
@@ -30,7 +31,7 @@ except KeyError:
     i_job = np.random.randint(1000)
 
 i_seed = i_job
-#i_seed = 75
+i_seed = 775
 np.random.seed(i_seed)
 task = Coin_Task(4, 6, one_hot=True, deterministic=True)
 #task = Sine_Wave(0.003, [0.3, 0.1, 0.03, 0.01])
@@ -73,13 +74,13 @@ SG_optimizer = SGD(lr=0.01)
 #learn_alg = DNI(rnn, SG_optimizer, activation=identity,
 #                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
 #                W_a_lr=0.05)
-#learn_alg = UORO(rnn, epsilon=0.0000001, P1=None, P2=None)
-learn_alg = RTRL(rnn)
+learn_alg = UORO(rnn, epsilon=1e-10)
+#learn_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, monitors=['P'], alpha=alpha, W_FB=W_FB)
 #learn_alg = BPTT(rnn, 1, 40)
 #comp_alg = RTRL(rnn, monitors=['dadw'])
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
-monitors = ['loss_', 'y_hat']
+monitors = ['loss_', 'y_hat', 'p0', 'p1']
 
 sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.0001)#, comparison_alg=comp_alg)
 sim.run(data,

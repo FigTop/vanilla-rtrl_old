@@ -9,6 +9,7 @@ Created on Tue Oct  9 15:03:11 2018
 import numpy as np
 from pdb import set_trace
 from utils import *
+from functions import *
 
 class Learning_Algorithm:
     
@@ -77,48 +78,49 @@ class UORO(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, **kwargs):
         
-        allowed_kwargs_ = {'epsilon', 'P1', 'P2'}
+        allowed_kwargs_ = {'epsilon', 'P0', 'P1'}
         super().__init__(net, allowed_kwargs_, **kwargs)
         
-        #Initialize a_tilde and theta_tilde vectors
-        self.theta_tilde = np.random.normal(0, 1, net.n_hidden_params)
+        #Initialize a_tilde and w_tilde vectors
+        self.w_tilde = np.random.normal(0, 1, net.n_hidden_params)
         self.a_tilde     = np.random.normal(0, 1, net.n_hidden)
         
     def update_learning_vars(self):
         
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.papw = np.kron(self.a_hat, np.diag(self.net.activation.f_prime(self.net.h)))
-        
         self.net.get_a_jacobian()
         
-        self.nu = np.random.uniform(-1, 1, self.net.n_hidden)
+        #Get random signs
+        self.nu = np.random.uniform(-1, 1, self.n_h)
         
         #Forward differentiation method
         if hasattr(self, 'epsilon'):
-            self.a_eps = self.net.a + self.epsilon*self.a_tilde
+            self.a_eps = self.net.a_prev + self.epsilon*self.a_tilde
             self.f1 = self.net.next_state(self.net.x, self.a_eps, update=False)  
-            self.f2 = self.net.next_state(self.net.x, self.net.a, update=False)
+            self.f2 = self.net.next_state(self.net.x, self.net.a_prev, update=False)
             self.a_tilde_ = (self.f1 - self.f2)/self.epsilon
-            self.p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2))/(np.sqrt(np.sum(self.a_tilde_**2)) + self.epsilon)) + self.epsilon
-            self.p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2))/(np.sqrt(np.sum(nu**2)) + self.epsilon)) + self.epsilon
-
-        #Compute normalizers
-        self.p1 = np.copy(self.P1)
-        self.p2 = np.copy(self.P2)
-        
-        if self.P1 is None:
-            self.p1 = np.sqrt(np.sqrt(np.sum(self.theta_tilde**2))/(np.sqrt(np.sum(self.a_tilde_**2)) + self.epsilon)) + self.epsilon
-        if self.P2 is None:
-            self.p2 = np.sqrt(np.sqrt(np.sum((nu.dot(self.partial_a_partial_w))**2))/(np.sqrt(np.sum(nu**2)) + self.epsilon)) + self.epsilon
-        
-        #self.a_tilde = p1*self.net.a_J.dot(self.a_tilde) + p2*nu
-        self.a_tilde = self.p1*self.a_tilde_ + self.p2*nu
-        self.theta_tilde = (1/self.p1)*self.theta_tilde + (1/self.p2)*nu.dot(self.partial_a_partial_w)
+            self.p0 = np.sqrt(norm(self.w_tilde)/(norm(self.a_tilde_) + self.epsilon)) + self.epsilon
+            self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/(self.n_h + self.epsilon)) + self.epsilon
+        #Backpropagation method
+        else:
+            self.a_tilde_ = self.net.a_J.dot(self.a_tilde)
+            self.p0 = np.sqrt(norm(self.w_tilde)/norm(self.a_tilde_))
+            self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/self.n_h)
+            
+        #Override with fixed P0 and P1 if given
+        if hasattr(self, 'P0'):
+            self.p0 = np.copy(self.P0)
+        if hasattr(self, 'P1'):
+            self.p1 = np.copy(self.P1)
+            
+        self.a_tilde = self.p0*self.a_tilde_ + self.p1*self.nu
+        self.w_tilde = (1/self.p0)*self.w_tilde + (1/self.p1)*self.nu.dot(self.papw)
     
     def get_rec_grads(self):
         
         self.Q = self.q.dot(self.a_tilde) #"Global learning signal"
-        return (self.Q*self.theta_tilde).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
+        return (self.Q*self.w_tilde).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
     
 class KF_RTRL(Real_Time_Learning_Algorithm):
     
