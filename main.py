@@ -32,13 +32,13 @@ except KeyError:
 i_seed = i_job
 #i_seed = 75
 np.random.seed(i_seed)
-#task = Coin_Task(4, 6, one_hot=True, deterministic=True)
-task = Sine_Wave(0.003, [0.3, 0.1, 0.03, 0.01])
-data = task.gen_data(100000, 1000)
+task = Coin_Task(4, 6, one_hot=True, deterministic=True)
+#task = Sine_Wave(0.003, [0.3, 0.1, 0.03, 0.01])
+data = task.gen_data(30000, 1000)
 #task = Copy_Task(10, 3)
 
 n_in     = task.n_in
-n_hidden = 64
+n_hidden = 32
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -58,8 +58,8 @@ alpha = 1
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=identity,
-          loss=mean_squared_error)
+          output=softmax,
+          loss=softmax_cross_entropy)
 
 #rnn = Fast_Weights_RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       activation=tanh,
@@ -68,11 +68,11 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       loss=softmax_cross_entropy,
 #                       A=A, lmbda=0.95, eta=0.5, n_S=10)
 
-optimizer = SGD(lr=0.0000001)#, clipnorm=1.0)
+optimizer = SGD(lr=0.001)#, clipnorm=1.0)
 SG_optimizer = SGD(lr=0.01)
-learn_alg = DNI(rnn, SG_optimizer, activation=identity,
-                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
-                W_a_lr=0.05)
+#learn_alg = DNI(rnn, SG_optimizer, activation=identity,
+#                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
+#                W_a_lr=0.05)
 #learn_alg = UORO(rnn, epsilon=0.0000001, P1=None, P2=None)
 learn_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, monitors=['P'], alpha=alpha, W_FB=W_FB)
