@@ -165,6 +165,30 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
         
         self.qA = self.q.dot(self.A) #Unit-specific learning signal
         return np.kron(self.u, self.qA).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
+
+class RFLO(Real_Time_Learning_Algorithm):
+    
+    def __init__(self, net, alpha, monitors=[], **kwargs):
+        
+        allowed_kwargs_ = {'P'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+        
+        self.alpha = alpha
+        if not hasattr(self, 'P'):
+            self.P = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+        
+    def update_learning_vars(self):
+        
+        #Get relevant values and derivatives from network        
+        self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        
+        #Update eligibility traces
+        self.P = (1 - self.alpha)*self.P + self.alpha*np.multiply.outer(self.D, self.a_hat)
+        
+    def get_rec_grads(self):
+        
+        return (self.q*self.P.T).T
     
 class DNI(Real_Time_Learning_Algorithm):
     
@@ -324,49 +348,6 @@ class DNI(Real_Time_Learning_Algorithm):
         
         grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
         
-        self.update_monitors()
-        
-        return grads
-    
-class RFLO(Learning_Algorithm):
-    
-    def __init__(self, net, alpha, monitors=[], **kwargs):
-        
-        allowed_kwargs = {'W_FB', 'P'}
-        for k in kwargs:
-            if k not in allowed_kwargs:
-                raise TypeError('Unexpected keyword argument '
-                                'passed to RFLO.__init__: ' + str(k))
-        
-        super().__init__(net, monitors)
-        
-        self.alpha = alpha
-        
-        n_h = self.net.n_hidden
-        n_in = self.net.n_in
-        self.P = np.zeros((n_h, n_h + n_in + 1))
-        
-        self.__dict__.update(kwargs)
-        
-    def update_learning_vars(self):
-        
-        self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        self.D = self.net.activation.f_prime(self.net.h)
-        self.P = (1 - self.alpha)*self.P + self.alpha*np.multiply.outer(self.D, self.a_hat)
-        
-    def __call__(self):
-    
-        outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e] 
-        
-        n_h = self.net.n_hidden
-    
-        if hasattr(self, 'W_FB'):
-            self.q = self.net.e.dot(self.W_FB)
-        else:
-            self.q = self.net.e.dot(self.W_out)
-        rec_grad = (self.q*self.P.T).T
-        
-        grads = [rec_grad[:,:n_h], rec_grad[:,n_h:-1], rec_grad[:,-1]] + outer_grads
         self.update_monitors()
         
         return grads
