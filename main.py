@@ -74,11 +74,12 @@ SG_optimizer = SGD(lr=0.01)
 #learn_alg = DNI(rnn, SG_optimizer, activation=identity,
 #                lambda_mix=0, l2_reg=0, fix_SG_interval=5,
 #                W_a_lr=0.05)
-learn_alg = UORO(rnn, epsilon=1e-10)
+learn_alg = KF_RTRL(rnn, P0=0.8, P1=1.3)
+#learn_alg = UORO(rnn, epsilon=1e-10)
 #learn_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, monitors=['P'], alpha=alpha, W_FB=W_FB)
 #learn_alg = BPTT(rnn, 1, 40)
-#comp_alg = RTRL(rnn, monitors=['dadw'])
+#comp_alg = RTRL(rnn)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 monitors = ['loss_', 'y_hat', 'p0', 'p1']
 

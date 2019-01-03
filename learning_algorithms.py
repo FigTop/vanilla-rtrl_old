@@ -65,9 +65,12 @@ class RTRL(Real_Time_Learning_Algorithm):
         
     def update_learning_vars(self):
         
+        #Get relevant values and derivatives from network
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.papw = np.kron(self.a_hat, np.diag(self.net.activation.f_prime(self.net.h)))
         self.net.get_a_jacobian()
+        
+        #Update influence matrix
         self.dadw = self.net.a_J.dot(self.dadw) + self.papw
         
     def get_rec_grads(self):
@@ -83,15 +86,14 @@ class UORO(Real_Time_Learning_Algorithm):
         
         #Initialize a_tilde and w_tilde vectors
         self.w_tilde = np.random.normal(0, 1, net.n_hidden_params)
-        self.a_tilde     = np.random.normal(0, 1, net.n_hidden)
+        self.a_tilde = np.random.normal(0, 1, net.n_hidden)
         
     def update_learning_vars(self):
         
+        #Get relevant values and derivatives from network
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.papw = np.kron(self.a_hat, np.diag(self.net.activation.f_prime(self.net.h)))
         self.net.get_a_jacobian()
-        
-        #Get random signs
         self.nu = np.random.uniform(-1, 1, self.n_h)
         
         #Forward differentiation method
@@ -114,6 +116,7 @@ class UORO(Real_Time_Learning_Algorithm):
         if hasattr(self, 'P1'):
             self.p1 = np.copy(self.P1)
             
+        #Update outer product approximation
         self.a_tilde = self.p0*self.a_tilde_ + self.p1*self.nu
         self.w_tilde = (1/self.p0)*self.w_tilde + (1/self.p1)*self.nu.dot(self.papw)
     
@@ -124,49 +127,44 @@ class UORO(Real_Time_Learning_Algorithm):
     
 class KF_RTRL(Real_Time_Learning_Algorithm):
     
-    def __init__(self, net, monitors=[]):
+    def __init__(self, net, **kwargs):
         
-        super().__init__(net, monitors)
-        
-        #Total post- and pre-synaptic units in hidden layer, counting inputs and bias
-        self.I     = self.net.n_hidden
-        self.J     = self.net.n_hidden + self.net.n_in + 1
+        allowed_kwargs_ = {'P0', 'P1', 'A', 'u'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
         
         #Initialize A and u matrices
-        self.A = np.random.normal(0, 1/np.sqrt(self.I), (self.I, self.I))
-        self.u = np.random.normal(0, 1, self.J)
+        if not hasattr(self, 'A'):
+            self.A = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        if not hasattr(self, 'u'):
+            self.u = np.random.normal(0, 1, self.n_h + self.n_in +1)
         
     def update_learning_vars(self):
         
-        #Get updated jacobian
-        self.net.get_a_jacobian()
-        
-        #Define necessary components
+        #Get relevant values and derivatives from network
         self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.D       = np.diag(self.net.activation.f_prime(self.net.h))
+        self.net.get_a_jacobian()
         self.H_prime = self.net.a_J.dot(self.A)
+        self.c0, self.c1 = np.random.uniform(-1, 1, 2)
         
-        self.c1, self.c2 = np.random.uniform(-1, 1, 2)
-        self.p1          = np.sqrt(np.sqrt(np.sum(self.H_prime**2)/np.sum(self.u**2)))
-        self.p2          = np.sqrt(np.sqrt(np.sum(self.D**2)/np.sum(self.a_hat**2)))
-        #self.p1 = 0.8
-        #self.p2 = 1.1
+        #Calculate p0, p1 or override with fixed P0, P1 if given
+        if not hasattr(self, 'P0'):
+            self.p0 = np.sqrt(norm(self.H_prime)/norm(self.u))
+        else:
+            self.p0 = np.copy(self.P0)
+        if not hasattr(self, 'P1'):
+            self.p1 = np.sqrt(norm(self.D)/norm(self.a_hat))
+        else:
+            self.p1 = np.copy(self.P1)
         
-        self.u = self.c1*self.p1*self.u + self.c2*self.p2*self.a_hat
-        self.A = self.c1*(1/self.p1)*self.H_prime + self.c2*(1/self.p2)*self.D
+        #Update Kronecker product approximation
+        self.u = self.c0*self.p0*self.u + self.c1*self.p1*self.a_hat
+        self.A = self.c0*(1/self.p0)*self.H_prime + self.c1*(1/self.p1)*self.D
         
-    def __call__(self):
+    def get_rec_grads(self):
         
-        outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
-        
-        q = self.net.e.dot(self.net.W_out)
-        rec_grad = np.kron(self.u, q.dot(self.A)).reshape((self.I,self.J), order='F')
-        
-        grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
-        
-        self.update_monitors()
-        
-        return grads
+        self.qA = self.q.dot(self.A) #Unit-specific learning signal
+        return np.kron(self.u, self.qA).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
     
 class DNI(Real_Time_Learning_Algorithm):
     
