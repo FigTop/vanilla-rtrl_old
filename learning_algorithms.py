@@ -192,47 +192,32 @@ class RFLO(Real_Time_Learning_Algorithm):
     
 class DNI(Real_Time_Learning_Algorithm):
     
-    def __init__(self, net, optimizer, monitors=[], activation=identity,
-                 lambda_mix=0, l2_reg=0, fix_SG_interval=1, **kwargs):
+    def __init__(self, net, optimizer, **kwargs):
         
-        allowed_kwargs = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
-                          'SG_label_activation', 'feedback', 'backprop_weights',
-                          'sg_loss_thr', 'U_lr'}
-        for k in kwargs:
-            if k not in allowed_kwargs:
-                raise TypeError('Unexpected keyword argument '
-                                'passed to RNN.run: ' + str(k))
-        
-        super().__init__(net, monitors)
-        
+        allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
+                           'activation', 'SG_label_activation', 'backprop_weights',
+                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval'}
+        #Default parameters
         self.optimizer = optimizer
-        self.activation = activation
-        self.lambda_mix = lambda_mix
-        self.l2_reg = l2_reg
-        self.fix_SG_interval = fix_SG_interval
+        self.l2_reg = 0
+        self.fix_SG_interval = 5
+        self.activation = identity
         self.SG_label_activation = identity
-        self.feedback = 'symmetric'
         self.backprop_weights = 'exact'
-        self.i_fix = 0
         self.sg_loss_thr = 0.05
+        #Override defaults with kwargs
+        super().__init__(net, allowed_kwargs_, **kwargs)
         
-        n_h = self.net.n_hidden
-        n_out = self.net.n_out
+        self.A = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        self.B = np.random.normal(0, 1/np.sqrt(self.n_out), (self.n_h, self.n_out))
+        self.C = np.zeros(self.n_h)
         
-        self.A = np.random.normal(0, 1/np.sqrt(n_h), (n_h, n_h))
-        self.B = np.random.normal(0, 1/np.sqrt(n_out), (n_h, n_out))
-        self.C = np.zeros(n_h)
+        self.i_fix = 0
         
         self.W_a = np.copy(self.net.W_rec)
-        #self.W_a = self.net.W_rec
-        self.W_fb = np.random.normal(0, 1/np.sqrt(n_h), (n_out, n_h))
         self.U = np.copy(self.A)
-        
         self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
-        
         self.SG_params = [self.A, self.B, self.C]
-        
-        self.__dict__.update(kwargs)
         
     def update_learning_vars(self):
         
@@ -243,14 +228,14 @@ class DNI(Real_Time_Learning_Algorithm):
         self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
         
         if hasattr(self, 'SG_clipnorm'):
-            self.sg_norm = np.sqrt((self.sg ** 2).sum())
+            self.sg_norm = norm(self.sg)
             if self.sg_norm > self.SG_clipnorm:
                 self.sg = self.sg / self.sg_norm
                 
         self.sg_target = self.get_sg_target()
         
         if hasattr(self, 'SG_target_clipnorm'):
-            self.sg_target_norm = np.sqrt((self.sg_target ** 2).sum())
+            self.sg_target_norm = norm(self.sg_target)
             if self.sg_target_norm > self.SG_target_clipnorm:
                 self.sg_target = self.sg_target / self.sg_target_norm
             
@@ -286,34 +271,21 @@ class DNI(Real_Time_Learning_Algorithm):
         
     def get_sg_target(self):
         
-        try:
-            true_grad = self.net.comp_alg.credit_assignment
-        except AttributeError:
-            true_grad = 0
-        
-        if self.feedback=='symmetric':
-            self.q = self.net.e.dot(self.net.W_out)
-        elif self.feedback=='random':
-            self.q = self.net.e.dot(self.W_fb)
+        self.propagate_feedback_to_hidden()
         
         if self.backprop_weights=='exact':
-            bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
+            sg_target = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
         elif self.backprop_weights=='approximate':
-            bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
+            sg_target = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
         elif self.backprop_weights=='composite':
-            bootstrap = self.q + self.U.dot(self.net.a)
-            
-        #bootstrap = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(np.eye(self.net.n_hidden))
+            sg_target = self.q + self.U.dot(self.net.a)
         
-        return self.lambda_mix*true_grad + (1 - self.lambda_mix)*bootstrap
+        return sg_target
     
     def update_W_a(self):
         
         self.loss_a = np.square(self.W_a.dot(self.net.a_prev) - self.net.a).mean()
         self.e_a = self.W_a.dot(self.net.a_prev) - self.net.a
-        
-        #self.loss_a = np.square(self.net.a_prev.dot(self.W_a) - self.net.a).mean()
-        #self.e_a = self.net.a_prev.dot(self.W_a) - self.net.a
 
         self.W_a -= self.W_a_lr*np.multiply.outer(self.e_a, self.net.a_prev)
         
@@ -331,26 +303,18 @@ class DNI(Real_Time_Learning_Algorithm):
         self.sg_h_ = self.A_.dot(a) + self.B_.dot(y) + self.C_
         return self.SG_label_activation.f((self.activation.f(self.sg_h_)))
     
-    def __call__(self):
-        
-        outer_grads = [np.multiply.outer(self.net.e, self.net.a), self.net.e]
+    def get_rec_grads(self):
     
         self.sg = self.synthetic_grad(self.net.a, self.net.y)
         self.sg_scaled = self.sg*self.net.activation.f_prime(self.net.h)
         
         if hasattr(self, 'SG_clipnorm'):
-            norm = np.sqrt((self.sg ** 2).sum())
-            if norm > self.SG_clipnorm:
-                self.sg = self.sg / norm
+            sg_norm = norm(self.sg)
+            if sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / sg_norm
                 
-        self.pre_activity = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        rec_grad = np.multiply.outer(self.sg_scaled, self.pre_activity)
-        
-        grads = [rec_grad[:,:self.net.n_hidden], rec_grad[:,self.net.n_hidden:-1], rec_grad[:,-1]] + outer_grads
-        
-        self.update_monitors()
-        
-        return grads
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        return np.multiply.outer(self.sg_scaled, self.a_hat)
 
 class BPTT(Learning_Algorithm):
     
