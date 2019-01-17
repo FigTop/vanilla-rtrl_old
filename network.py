@@ -118,10 +118,10 @@ class RNN:
             self.a_prev = np.copy(self.a)
             
             self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
-            self.a = (1 - self.alpha)*self.a + self.activation.f(self.h)
+            self.a = (1 - self.alpha)*self.a + self.alpha*self.activation.f(self.h)
         else:
             h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
-            return (1 - self.alpha)*a + self.activation.f(h)
+            return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
 
     def z_out(self):
         '''
@@ -155,7 +155,7 @@ class RNN:
         
         #Element-wise nonlinearity derivative
         D = self.activation.f_prime(h)
-        a_J = np.diag(D).dot(W_rec) + (1 - self.alpha)*np.eye(self.n_hidden)
+        a_J = self.alpha*np.diag(D).dot(W_rec) + (1 - self.alpha)*np.eye(self.n_hidden)
         
         if update:
             self.a_J = np.copy(a_J)

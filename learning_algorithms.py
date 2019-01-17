@@ -306,7 +306,7 @@ class DNI(Real_Time_Learning_Algorithm):
     def get_rec_grads(self):
     
         self.sg = self.synthetic_grad(self.net.a, self.net.y)
-        self.sg_scaled = self.sg*self.net.activation.f_prime(self.net.h)
+        self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
         
         if hasattr(self, 'SG_clipnorm'):
             sg_norm = norm(self.sg)
