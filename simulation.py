@@ -69,7 +69,7 @@ class Simulation:
         allowed_kwargs = {'l2_reg', 'update_interval',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training',
-                          'tau_avg'}
+                          'tau_avg', 'check_loss'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -89,7 +89,7 @@ class Simulation:
 
     def run(self, data, mode='train', monitors=[], **kwargs):
         
-        allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy'}
+        allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy', 'check_loss'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -100,6 +100,7 @@ class Simulation:
         self.mode           = mode
         self.verbose        = True
         self.check_accuracy = False
+        self.check_loss     = False
         
         #Make local copies of (meta)-data
         x_inputs             = data[self.mode]['X']
@@ -231,12 +232,17 @@ class Simulation:
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
             
-        if self.check_accuracy:
+        if self.check_accuracy or self.check_loss:
             test_sim = copy(self)
-            test_sim.run(data, mode='test', monitors=['y_hat'], verbose=False)
-            acc = classification_accuracy(data, test_sim.mons['y_hat'])
-            accuracy = 'Test accuracy: {} \n'.format(acc)
-            summary += accuracy
+            test_sim.run(data, mode='test', monitors=['y_hat', 'loss_'], verbose=False)
+            if self.check_accuracy:
+                acc = classification_accuracy(data, test_sim.mons['y_hat'])
+                accuracy = 'Test accuracy: {} \n'.format(acc)
+                summary += accuracy
+            if self.check_loss:
+                test_loss = np.mean(test_sim.mons['loss_'])
+                loss_summary = 'Test loss: {} \n'.format(test_loss)
+                summary += loss_summary
             
         print(summary.format(progress, time_elapsed))
     

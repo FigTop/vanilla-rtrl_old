@@ -167,7 +167,7 @@ class Sine_Wave(Task):
     
     def __init__(self, p_transition, frequencies, **kwargs):
         
-        allowed_kwargs = {'p_frequencies'}
+        allowed_kwargs = {'p_frequencies', 'amplitude'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -176,6 +176,7 @@ class Sine_Wave(Task):
         super().__init__(2, 2)
         
         self.p_transition = p_transition
+        self.amplitude = 0.1
         self.frequencies = frequencies
         self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
         self.__dict__.update(kwargs)
@@ -200,8 +201,8 @@ class Sine_Wave(Task):
                 if not active:
                     X[i,0] = np.random.choice(self.frequencies, p=self.p_frequencies)
                     X[i,1] = 1
-                    Y[i,0] = np.cos(2*np.pi*X[i,0]*t)
-                    Y[i,1] = np.sin(2*np.pi*X[i,0]*t)
+                    Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)
+                    Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)
                 
                 active = not active
                 
@@ -209,8 +210,8 @@ class Sine_Wave(Task):
                 
                 t+=1
                 X[i,:] = X[i-1,:]
-                Y[i,0] = np.cos(2*np.pi*X[i,0]*t)*active
-                Y[i,1] = np.sin(2*np.pi*X[i,0]*t)*active
+                Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*active
+                Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*active
                 
         return X, Y
         

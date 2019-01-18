@@ -389,9 +389,9 @@ class BPTT(Learning_Algorithm):
                     
                     self.J = self.J.dot(self.a_Js[-(i+k)])
                 
-                self.J = self.J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
+                self.J = self.net.alpha*self.J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
                 
-                self.pre_activity = np.concatenate([self.h_hist[-(i+j+1)], self.x_hist[-(i+j+1)], np.array([1])])
+                self.pre_activity = np.concatenate([self.a_hist[-(i+j+1)], self.x_hist[-(i+j)], np.array([1])])
                 CA = self.q.dot(self.J)
                 CA_list.append(CA) 
                 self.rec_grad += np.multiply.outer(CA, self.pre_activity)
@@ -400,8 +400,6 @@ class BPTT(Learning_Algorithm):
         
         grads = [self.rec_grad[:,:n_h], self.rec_grad[:,n_h:-1], self.rec_grad[:,-1]]
         grads += self.outer_grads
-        
-        self.update_monitors()
         
         return grads
     

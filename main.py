@@ -31,11 +31,11 @@ except KeyError:
     i_job = np.random.randint(1000)
 
 i_seed = i_job
-#i_seed = 775
+i_seed = 203
 np.random.seed(i_seed)
-task = Coin_Task(4, 6, one_hot=True, deterministic=False)
-#task = Sine_Wave(0.003, [0.3, 0.1, 0.03, 0.01])
-data = task.gen_data(30000, 1000)
+#task = Coin_Task(4, 6, one_hot=True, deterministic=False)
+task = Sine_Wave(0.003, [0.03, 0.01, 0.003, 0.001])
+data = task.gen_data(30000, 5000)
 #task = Copy_Task(10, 3)
 
 n_in     = task.n_in
@@ -54,13 +54,13 @@ b_out = np.zeros(n_out)
 A = np.zeros_like(W_rec)
 n_S = 10
 
-alpha = 1
+alpha = 0.9
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+          output=identity,
+          loss=mean_squared_error)
 
 #rnn = Fast_Weights_RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       activation=tanh,
@@ -69,15 +69,15 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       loss=softmax_cross_entropy,
 #                       A=A, lmbda=0.95, eta=0.5, n_S=10)
 
-optimizer = SGD(lr=0.001)#, clipnorm=1.0)
-SG_optimizer = SGD(lr=0.01)
-learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.01, backprop_weights='approximate',
-                SG_label_activation=tanh)
+optimizer = SGD(lr=0.0001)#, clipnorm=1.0)
+SG_optimizer = SGD(lr=0.001)
+#learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.001, backprop_weights='approximate',
+#                SG_label_activation=tanh, W_FB=W_FB)
 #learn_alg = KF_RTRL(rnn, P0=0.8, P1=1.3)
 #learn_alg = UORO(rnn, epsilon=1e-10)
 #learn_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, alpha=alpha, W_FB=W_FB)
-#learn_alg = BPTT(rnn, 1, 40)
+learn_alg = BPTT(rnn, 1, 50)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 monitors = ['loss_', 'y_hat', 'sg_loss', 'loss_a']
 
@@ -85,11 +85,11 @@ sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.0001)#, comparison_alg=comp
 sim.run(data,
         monitors=monitors,
         verbose=True,
-        check_accuracy=False)
+        check_loss=True)
 
 if os.environ['HOME']=='/Users/omarschall':
 
-    signals1 = [sim.mons['loss_'], sim.mons['sg_loss'], sim.mons['loss_a']]
+    signals1 = [sim.mons['loss_']]#, sim.mons['sg_loss'], sim.mons['loss_a']]
     fig1 = plot_filtered_signals(signals1, filter_size=100, y_lim=[0, 1])
     plt.legend(['Loss'])
     #plt.title('RFLO on (4,6)-back task')
