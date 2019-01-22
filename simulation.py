@@ -149,42 +149,11 @@ class Simulation:
             ### --- Update parameters if in 'train' mode --- ###
 
             if self.mode=='train':
-                
-                #Update internal learning algorithm parameters
-                self.learn_alg.update_learning_vars()
-                #Use learning algorithm to generate gradients
-                self.grads = self.learn_alg()
-                
-                #If a comparison algorithm is provided, update
-                #its internal parameters, generate gradients,
-                #and measure their alignment with the main
-                #algorithm's gradients.
-                if hasattr(self, 'comparison_alg'):
-                    self.comparison_alg.update_learning_vars()
-                    self.grads_ = self.comparison_alg()
-                    G = zip(self.grads, self.grads_)
-                    try:
-                        self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
-                    except RuntimeWarning:
-                        self.alignment = [0]*5
-                    self.W_rec_alignment = self.alignment[0]
-                    self.W_in_alignment  = self.alignment[1]
-                    self.b_rec_alignment = self.alignment[2]
-                    self.W_out_alignment = self.alignment[3]
-                    self.b_out_alignment = self.alignment[4]
-                
-                #Add L2 regularization derivative to gradient
-                for i_l2, W in zip([0, 1, 3], [net.W_rec, net.W_in, net.W_out]):
-                    self.grads[i_l2] += self.l2_reg*W
-                    
-                #If on the update cycle (always true for update_inteval=1),
-                #pass gradients to the optimizer and update parameters.
-                if (i_t + 1)%self.update_interval==0:
-                    net.params = self.optimizer.get_update(net.params, self.grads)
-                    net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
-                        
+                self.train_step(i_t)
+            
+            #Model-specific updates
             try:
-                net.update_A()
+                net.model_specific_updates()
             except AttributeError:
                 pass
             
@@ -197,12 +166,7 @@ class Simulation:
             net.y_prev = np.copy(net.y)
             
             #Compute spectral radii if desired
-            for key in self.mons.keys():
-                if 'radius' in key:
-                    a = key.split('_')[0]
-                    for obj in [self, net, self.learn_alg]:
-                        if hasattr(obj, a):
-                            setattr(self, key, get_spectral_radius(getattr(obj, a)))
+            self.get_spectral_radii()
             
             #Monitor relevant variables
             self.update_monitors()
@@ -217,7 +181,44 @@ class Simulation:
         
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
-                
+
+    def train_step(self, i_t):
+        
+        net = self.net
+        
+        #Update internal learning algorithm parameters
+        self.learn_alg.update_learning_vars()
+        #Use learning algorithm to generate gradients
+        self.grads = self.learn_alg()
+        
+        #If a comparison algorithm is provided, update
+        #its internal parameters, generate gradients,
+        #and measure their alignment with the main
+        #algorithm's gradients.
+        if hasattr(self, 'comparison_alg'):
+            self.comparison_alg.update_learning_vars()
+            self.grads_ = self.comparison_alg()
+            G = zip(self.grads, self.grads_)
+            try:
+                self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
+            except RuntimeWarning:
+                self.alignment = [0]*5
+            self.W_rec_alignment = self.alignment[0]
+            self.W_in_alignment  = self.alignment[1]
+            self.b_rec_alignment = self.alignment[2]
+            self.W_out_alignment = self.alignment[3]
+            self.b_out_alignment = self.alignment[4]
+        
+        #Add L2 regularization derivative to gradient
+        for i_l2, W in zip([0, 1, 3], [net.W_rec, net.W_in, net.W_out]):
+            self.grads[i_l2] += self.l2_reg*W
+            
+        #If on the update cycle (always true for update_inteval=1),
+        #pass gradients to the optimizer and update parameters.
+        if (i_t + 1)%self.update_interval==0:
+            net.params = self.optimizer.get_update(net.params, self.grads)
+            net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
+            
     def report_progress(self, i_t, data):
         
         t2 = time.time()
@@ -281,4 +282,13 @@ class Simulation:
                 self.mons[key] = np.array(self.mons[key])
             except ValueError:
                 pass
+            
+    def get_spectral_radii(self):
+        
+        for key in self.mons.keys():
+            if 'radius' in key:
+                a = key.split('_')[0]
+                for obj in [self, net, self.learn_alg]:
+                    if hasattr(obj, a):
+                        setattr(self, key, get_spectral_radius(getattr(obj, a)))
     
