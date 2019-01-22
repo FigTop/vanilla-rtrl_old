@@ -96,9 +96,6 @@ def softmax_cross_entropy_(z, y, epsilon=0.0001):
 
 def softmax_cross_entropy_derivative(z, y):
     
-    p = softmax_(z)
-    
-    #return (-y/p).dot(softmax_derivative(z))
     return softmax_(z) - y
 
 softmax_cross_entropy = function(softmax_cross_entropy_, softmax_cross_entropy_derivative)
