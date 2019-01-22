@@ -14,8 +14,7 @@ def clear_results(job_file, data_path='/Users/omarschall/cluster_results/vanilla
     job_name = job_file.split('/')[-1].split('.')[0]
     data_dir = os.path.join(data_path, job_name)
     
-    subprocess.run(['rm', '-rf', data_dir])
-    os.mkdir(data_dir)
+    subprocess.run(['rm', data_dir+'/*_*'])
 
 def retrieve_results(job_file, scratch_path='/scratch/oem214/vanilla-rtrl/',
                username='oem214', domain='prince.hpc.nyu.edu'):

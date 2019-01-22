@@ -30,20 +30,20 @@ try:
 except KeyError:
     i_job = np.random.randint(1000)
 
-LRs = [0.001, 0.0001, 0.00001, 0.000005]
-alphas = [1, 0.8, 0.5, 0.3, 0.1]
-HPs = sum([[[l, a] for l in LRs] for a in alphas],[])
-#lr, alpha = HPs[i_job]
+n_hiddens = [32, 64]
+alphas = [0.1, 0.03, 0.01, 0.003, 0.001]
+HPs = sum([[[n, a] for n in n_hiddens] for a in alphas],[])
+n_hidden, alpha = HPs[i_job]
 
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
 #task = Coin_Task(4, 6, one_hot=True, deterministic=False)
-task = Sine_Wave(0.003, [0.03, 0.01, 0.003, 0.001])
-data = task.gen_data(10000, 10000)
+task = Sine_Wave(0.003, [0.003, 0.001, 0.0003, 0.0001], amplitude=0.1)
+data = task.gen_data(2000000, 50000)
 
 n_in     = task.n_in
-n_hidden = 64
+n_hidden = n_hidden
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -73,15 +73,15 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       loss=softmax_cross_entropy,
 #                       A=A, lmbda=0.95, eta=0.5, n_S=10)
 
-optimizer = SGD(lr=lr)#, clipnorm=1.0)
+optimizer = SGD(lr=0.001)#, clipnorm=1.0)
 #SG_optimizer = SGD(lr=0.001)
 #learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.001, backprop_weights='approximate',
 #                SG_label_activation=tanh, W_FB=W_FB)
 #learn_alg = KF_RTRL(rnn, P0=0.8, P1=1.3)
 #learn_alg = UORO(rnn, epsilon=1e-10)
-#learn_alg = RTRL(rnn)
+learn_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, alpha=alpha, W_FB=W_FB)
-learn_alg = BPTT(rnn, 1, 50)
+#learn_alg = BPTT(rnn, 1, 20)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 monitors = ['loss_', 'y_hat']#, 'sg_loss', 'loss_a']
 
@@ -96,11 +96,18 @@ if os.environ['HOME']=='/Users/omarschall':
     signals1 = [sim.mons['loss_']]#, sim.mons['sg_loss'], sim.mons['loss_a']]
     fig1 = plot_filtered_signals(signals1, filter_size=100, y_lim=[0, 1])
     plt.legend(['Loss'])
+    
+    #Test run
+    sim = Simulation(rnn, learn_alg=None, optimizer=None)
+    sim.run(data, mode='test', monitors=['loss_', 'y_hat'])
+    plt.figure()
+    plt.plot(sim.mons['y_hat'][:,0])
+    plt.plot(data['test']['Y'][:,0])
     #plt.title('RFLO on (4,6)-back task')
 
 if os.environ['HOME']=='/home/oem214':
 
-    result = {'sim': sim, 'i_seed': i_seed}
+    result = {'sim': sim, 'i_seed': i_seed, 'task': task}
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)

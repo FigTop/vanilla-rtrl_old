@@ -6,6 +6,9 @@ Created on Tue Oct 30 14:23:44 2018
 @author: omarschall
 """
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pickle
 
 #a = rnn.mons['a']
 #T = 100
@@ -31,10 +34,10 @@ Created on Tue Oct 30 14:23:44 2018
 
 ### -------- Make big fig ---- ####
 
-job_name = 'cosyne_results'
+job_name = 'lr_sine_waves'
 data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
-alpha = 0.05
-filter_size = 100
+#alpha = 0.05
+#filter_size = 100
 
 configs = []
 signals = []
@@ -49,60 +52,86 @@ fig, axarr = plt.subplots(n_row, n_col, figsize=(20, 10))
 
 for file_name in os.listdir(data_dir):
     
+    if 'main' in file_name or '.' in file_name:
+        continue
+    
+    file_no = int(file_name.split('_')[-1])
+    
     with open(os.path.join(data_dir, file_name), 'rb') as f:
         try:
             result = pickle.load(f)
         except EOFError:
             n_errors += 1
+            
+    #if [result['sim'].net.alpha, result['sim'].optimizer.lr]==[0.1, 0.001]:
+    #     break
         
-    if result['config'] not in configs:
-        configs.append(result['config'])
-        signals.append({'loss_': [], 'sg_loss': [], 'loss_a': [], 'acc': []})
-        i_conf = len(configs) - 1
-    else:
-        i_conf = configs.index(result['config'])
+#    if result['config'] not in configs:
+#        configs.append(result['config'])
+#        signals.append({'loss_': [], 'sg_loss': [], 'loss_a': [], 'acc': []})
+#        i_conf = len(configs) - 1
+#    else:
+#        i_conf = configs.index(result['config'])
     
-    i_x = i_conf%n_row
-    i_y = i_conf//n_row
+    i_x = file_no%n_row
+    i_y = file_no//n_row
     
-    for key, col in zip(['loss_', 'acc'], ['b', 'k']):
-        smoothed_signal = np.convolve(result['rnn'].mons[key],
-                                      np.ones(filter_size)/filter_size,
-                                      mode='valid')
-        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
-        signals[i_conf][key].append(smoothed_signal)
-        
-    for key, col in zip(['sg_loss', 'loss_a'], ['y', 'g']):
-        
-        smoothed_signal = np.convolve(result['rnn'].learn_alg.mons[key],
-                                      np.ones(filter_size)/filter_size,
-                                      mode='valid')
-        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
-        signals[i_conf][key].append(smoothed_signal)
-
-for i_conf, conf in enumerate(configs):
-
-    i_x = i_conf%n_row
-    i_y = i_conf//n_row
+    np.random.seed(result['i_seed'])
+    data = result['task'].gen_data(1000, 10000)
     
-    for key, col in zip(['loss_', 'acc', 'sg_loss', 'loss_a'], ['b', 'k', 'y', 'g']):
-        
-        signals[i_conf][key] = np.array(signals[i_conf][key])
-        
-        axarr[i_x, i_y].plot(np.nanmean(signals[i_conf][key], axis=0), col)
+    sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
+    sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
+    axarr[i_x, i_y].plot(sim.mons['y_hat'][:,1])
+    axarr[i_x, i_y].plot(data['test']['Y'][:,1], alpha=0.4)
     
-    if True:
-        axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
-        axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
-        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')    
-        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')   
-        
-    axarr[i_x, i_y].set_ylim([0, 1])
-    axarr[i_x, i_y].set_xlim([0, 10000])
+    #axarr[i_x, i_y].plot(result['sim'].mons['loss_'])
+    #axarr[i_x, i_y].plot(result['sim'].mons['y_hat'][:,0])
+    #axarr[i_x, i_y].plot(data['train']['Y'][:,0])
+    title = 'Alpha = {}, LR = {}'.format(result['sim'].net.alpha, result['sim'].optimizer.lr)
+    axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
-    axarr[i_x, i_y].set_title('{}, {}, {}'.format(conf[0], conf[1], conf[2]), fontsize=8)
+    axarr[i_x, i_y].set_yticks([])
+    axarr[i_x, i_y].set_xlim([1000, 4000])
+    axarr[i_x, i_y].set_ylim([-0.2, 0.2])
     
-print(n_errors)
+#    for key, col in zip(['loss_', 'acc'], ['b', 'k']):
+#        smoothed_signal = np.convolve(result['rnn'].mons[key],
+#                                      np.ones(filter_size)/filter_size,
+#                                      mode='valid')
+#        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
+#        signals[i_conf][key].append(smoothed_signal)
+#        
+#    for key, col in zip(['sg_loss', 'loss_a'], ['y', 'g']):
+#        
+#        smoothed_signal = np.convolve(result['rnn'].learn_alg.mons[key],
+#                                      np.ones(filter_size)/filter_size,
+#                                      mode='valid')
+#        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
+#        signals[i_conf][key].append(smoothed_signal)
+#
+#for i_conf, conf in enumerate(configs):
+#
+#    i_x = i_conf%n_row
+#    i_y = i_conf//n_row
+#    
+#    for key, col in zip(['loss_', 'acc', 'sg_loss', 'loss_a'], ['b', 'k', 'y', 'g']):
+#        
+#        signals[i_conf][key] = np.array(signals[i_conf][key])
+#        
+#        axarr[i_x, i_y].plot(np.nanmean(signals[i_conf][key], axis=0), col)
+#    
+#    if True:
+#        axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
+#        axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
+#        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')    
+#        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')   
+#        
+#    axarr[i_x, i_y].set_ylim([0, 1])
+#    axarr[i_x, i_y].set_xlim([0, 10000])
+#    axarr[i_x, i_y].set_xticks([])
+#    axarr[i_x, i_y].set_title('{}, {}, {}'.format(conf[0], conf[1], conf[2]), fontsize=8)
+#    
+#print(n_errors)
 #### ------------- #####
 
 #import os
