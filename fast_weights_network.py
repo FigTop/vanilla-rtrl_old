@@ -56,6 +56,6 @@ class Fast_Weights_RNN(RNN):
             h = np.copy(self.h_s)
             return (1 - self.alpha)*a + self.activation.f(h)
         
-    def update_A(self, a_mean=0):
+    def model_specific_update(self, a_mean=0):
         
         self.A = self.lmbda*self.A + self.eta*np.multiply.outer(self.a - a_mean, self.a - a_mean)
