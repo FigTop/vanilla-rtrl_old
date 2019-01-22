@@ -188,6 +188,7 @@ class Sine_Wave(Task):
         
         active = False
         t = 0
+        X[0,0] = 1
         for i in range(1, N):
             
             if np.random.rand() < self.p_transition:  
@@ -195,7 +196,8 @@ class Sine_Wave(Task):
                 t = 0
                 
                 if active:
-                    X[i,:] = 0
+                    X[i,0] = 1
+                    X[i,1] = 0
                     Y[i,:] = 0
                 
                 if not active:
@@ -212,6 +214,8 @@ class Sine_Wave(Task):
                 X[i,:] = X[i-1,:]
                 Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*active
                 Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*active
+                
+        X[:,0] = -np.log(X[:,0])
                 
         return X, Y
         

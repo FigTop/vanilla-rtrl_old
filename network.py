@@ -75,7 +75,6 @@ class RNN:
         
         #Activation and loss functions
         self.alpha      = alpha
-        #self.p_somatic  = 0.8
         self.activation = activation
         self.output     = output
         self.loss       = loss
