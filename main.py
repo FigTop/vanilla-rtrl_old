@@ -33,17 +33,17 @@ except KeyError:
 n_hiddens = [32, 64]
 alphas = [0.1, 0.03, 0.01, 0.003, 0.001]
 HPs = sum([[[n, a] for n in n_hiddens] for a in alphas],[])
-n_hidden, alpha = HPs[i_job]
+#n_hidden, alpha = HPs[i_job]
 
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
 #task = Coin_Task(4, 6, one_hot=True, deterministic=False)
-task = Sine_Wave(0.003, [0.003, 0.001, 0.0003, 0.0001], amplitude=0.1)
-data = task.gen_data(2000000, 50000)
+task = Sine_Wave(0.001, [0.001, 0.003, 0.001, 0.0003], amplitude=0.1)
+data = task.gen_data(40000, 5000)
 
 n_in     = task.n_in
-n_hidden = n_hidden
+n_hidden = 32
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -58,7 +58,7 @@ b_out = np.zeros(n_out)
 A = np.zeros_like(W_rec)
 n_S = 10
 
-alpha = alpha
+alpha = 0.05
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
