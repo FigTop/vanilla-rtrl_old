@@ -167,7 +167,7 @@ class Sine_Wave(Task):
     
     def __init__(self, p_transition, frequencies, **kwargs):
         
-        allowed_kwargs = {'p_frequencies', 'amplitude'}
+        allowed_kwargs = {'p_frequencies', 'amplitude', 'method'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -176,6 +176,7 @@ class Sine_Wave(Task):
         super().__init__(2, 2)
         
         self.p_transition = p_transition
+        self.method = 'random'
         self.amplitude = 0.1
         self.frequencies = frequencies
         self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
@@ -186,12 +187,21 @@ class Sine_Wave(Task):
         X = np.zeros((N, 2))
         Y = np.zeros((N, 2))
         
+        self.switch_cond = False
+        
         active = False
         t = 0
         X[0,0] = 1
         for i in range(1, N):
             
-            if np.random.rand() < self.p_transition:  
+            if self.method=='regular':
+                if i%int(1/self.p_transition)==0:
+                    self.switch_cond = True
+            elif self.method=='random':
+                if np.random.rand()<self.p_transition:
+                    self.switch_cond = True
+            
+            if self.switch_cond:  
                 
                 t = 0
                 
@@ -214,6 +224,8 @@ class Sine_Wave(Task):
                 X[i,:] = X[i-1,:]
                 Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*active
                 Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*active
+                
+            self.switch_cond = False
                 
         X[:,0] = -np.log(X[:,0])
                 

@@ -100,7 +100,7 @@ class RNN:
         self.a = self.activation.f(self.h)
         self.z = self.W_out.dot(self.a) + self.b_out
         
-    def next_state(self, x, a=None, update=True):
+    def next_state(self, x, a=None, update=True, sigma=0):
         '''
         Accepts as argument the current time step's input x and updates
         the state of the RNN, while storing the previous state h
@@ -116,10 +116,12 @@ class RNN:
             self.h_prev = np.copy(self.h)
             self.a_prev = np.copy(self.a)
             
-            self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec
+            self.noise = np.random.normal(0, sigma, self.n_hidden)
+            self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec + self.noise
             self.a = (1 - self.alpha)*self.a + self.alpha*self.activation.f(self.h)
         else:
-            h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
+            noise = np.random.normal(0, sigma, self.n_hidden)
+            h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec + noise
             return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
 
     def z_out(self):
