@@ -14,7 +14,7 @@ from analysis_funcs import *
 
 class Simulation:
     
-    def __init__(self, net, learn_alg=None, optimizer=None, **kwargs):
+    def __init__(self, net, learn_alg=None, optimizer=None, allowed_kwargs_, **kwargs):
         
         '''
         Runs the network forward with inputs provided by data, a dict
@@ -69,7 +69,7 @@ class Simulation:
         allowed_kwargs = {'l2_reg', 'update_interval',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training',
-                          'tau_avg', 'check_loss'}
+                          'tau_avg', 'check_loss'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
