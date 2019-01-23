@@ -14,7 +14,7 @@ from analysis_funcs import *
 
 class Simulation:
     
-    def __init__(self, net, learn_alg=None, optimizer=None, allowed_kwargs_, **kwargs):
+    def __init__(self, net, learn_alg=None, optimizer=None, allowed_kwargs_=set(), **kwargs):
         
         '''
         Runs the network forward with inputs provided by data, a dict
