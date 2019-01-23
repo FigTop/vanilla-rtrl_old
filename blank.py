@@ -34,7 +34,7 @@ import pickle
 
 ### -------- Make big fig ---- ####
 
-job_name = 'lr_sine_waves'
+job_name = 'n_hidden_sw'
 data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
 #alpha = 0.05
 #filter_size = 100
@@ -45,8 +45,8 @@ figs = []
 
 n_errors = 0
 
-n_row = 3
-n_col = 4
+n_row = 2
+n_col = 5
 
 fig, axarr = plt.subplots(n_row, n_col, figsize=(20, 10))
 
@@ -63,8 +63,8 @@ for file_name in os.listdir(data_dir):
         except EOFError:
             n_errors += 1
             
-    #if [result['sim'].net.alpha, result['sim'].optimizer.lr]==[0.1, 0.001]:
-    #     break
+    if [result['sim'].net.alpha, result['sim'].net.n_hidden]==[0.03, 64]:
+         break
         
 #    if result['config'] not in configs:
 #        configs.append(result['config'])
@@ -81,13 +81,13 @@ for file_name in os.listdir(data_dir):
     
     sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
     sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
-    axarr[i_x, i_y].plot(sim.mons['y_hat'][:,1])
-    axarr[i_x, i_y].plot(data['test']['Y'][:,1], alpha=0.4)
+    axarr[i_x, i_y].plot(sim.mons['y_hat'][:,0])
+    axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
     
     #axarr[i_x, i_y].plot(result['sim'].mons['loss_'])
     #axarr[i_x, i_y].plot(result['sim'].mons['y_hat'][:,0])
     #axarr[i_x, i_y].plot(data['train']['Y'][:,0])
-    title = 'Alpha = {}, LR = {}'.format(result['sim'].net.alpha, result['sim'].optimizer.lr)
+    title = 'Alpha = {}, n = {}'.format(result['sim'].net.alpha, result['sim'].net.n_hidden)
     axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
     axarr[i_x, i_y].set_yticks([])

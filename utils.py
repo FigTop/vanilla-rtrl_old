@@ -10,4 +10,9 @@ import numpy as np
 
 def norm(z):
     
-   return np.sqrt(np.sum(np.square(z))) 
+   return np.sqrt(np.sum(np.square(z)))
+
+def split_weight_matrix(A, indices, axis=1):
+    
+    indices = [0] + indices + [-1]
+    return [A[:,indices[i]:indices[i+1]] for i in range(len(indices) - 1)]

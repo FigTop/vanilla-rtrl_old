@@ -30,17 +30,17 @@ try:
 except KeyError:
     i_job = np.random.randint(1000)
 
-n_hiddens = [32, 64]
-alphas = [0.1, 0.03, 0.01, 0.003, 0.001]
-HPs = sum([[[n, a] for n in n_hiddens] for a in alphas],[])
-#n_hidden, alpha = HPs[i_job]
+LRs = [0.005, 0.001, 0.0005, 0.00001]
+Ps  = [0.01, 0.003, 0.001, 0.0003, 0.0001, 0.00003]
+HPs = sum([[[p, l] for l in LRs] for p in Ps],[])
+p, lr = HPs[i_job]
 
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
 #task = Coin_Task(4, 6, one_hot=True, deterministic=False)
-task = Sine_Wave(0.001, [0.001, 0.003, 0.001, 0.0003], amplitude=0.1)
-data = task.gen_data(40000, 5000)
+task = Sine_Wave(p, [0.001, 0.003, 0.001, 0.0003], amplitude=0.1, method='regular')
+data = task.gen_data(4000000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -58,7 +58,7 @@ b_out = np.zeros(n_out)
 A = np.zeros_like(W_rec)
 n_S = 10
 
-alpha = 0.05
+alpha = 0.03
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
@@ -73,7 +73,7 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       loss=softmax_cross_entropy,
 #                       A=A, lmbda=0.95, eta=0.5, n_S=10)
 
-optimizer = SGD(lr=0.001)#, clipnorm=1.0)
+optimizer = SGD(lr=lr)#, clipnorm=1.0)
 #SG_optimizer = SGD(lr=0.001)
 #learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.001, backprop_weights='approximate',
 #                SG_label_activation=tanh, W_FB=W_FB)
@@ -85,7 +85,7 @@ learn_alg = RTRL(rnn)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 monitors = ['loss_', 'y_hat']#, 'sg_loss', 'loss_a']
 
-sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.00001)#, comparison_alg=comp_alg)
+sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.00001, sigma=0.0001)#, comparison_alg=comp_alg)
 sim.run(data,
         monitors=monitors,
         verbose=True,
@@ -103,6 +103,7 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.figure()
     plt.plot(sim.mons['y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
+    plt.ylim([-0.15, 0.15])
     #plt.title('RFLO on (4,6)-back task')
 
 if os.environ['HOME']=='/home/oem214':
