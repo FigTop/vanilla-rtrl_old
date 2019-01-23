@@ -66,7 +66,7 @@ class Simulation:
         '''
 
 
-        allowed_kwargs = {'l2_reg', 'update_interval',
+        allowed_kwargs = {'l2_reg', 'update_interval', 'sigma',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training',
                           'tau_avg', 'check_loss'}
@@ -81,6 +81,7 @@ class Simulation:
         self.optimizer = optimizer
         
         #Default simulation parameters
+        self.sigma            = 0
         self.l2_reg           = 0
         self.update_interval  = 1
         
@@ -139,7 +140,7 @@ class Simulation:
             net.x = x_inputs[i_t]
             net.y = y_labels[i_t]
             
-            net.next_state(net.x)
+            net.next_state(net.x, sigma=self.sigma)
             net.z_out()
             
             net.y_hat  = net.output.f(net.z)
