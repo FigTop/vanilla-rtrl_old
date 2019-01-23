@@ -48,8 +48,8 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         
         outer_grads = self.get_outer_grads()
         self.propagate_feedback_to_hidden()
-        rec_grads = self.get_rec_grads()
-        grads = [rec_grads[:,:self.n_h], rec_grads[:,self.n_h:-1], rec_grads[:,-1]] + outer_grads
+        rec_grads = split_weight_matrix(self.get_rec_grads(), [self.n_h, self.n_in, 1])
+        grads = rec_grads + outer_grads
         
         return grads
         
