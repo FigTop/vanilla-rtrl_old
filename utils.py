@@ -12,7 +12,7 @@ def norm(z):
     
    return np.sqrt(np.sum(np.square(z)))
 
-def split_weight_matrix(A, indices, axis=1):
+def split_weight_matrix(A, sizes, axis=1):
     
-    indices = [0] + indices + [-1]
+    indices = [0] + np.cumsum(sizes).tolist()
     return [A[:,indices[i]:indices[i+1]] for i in range(len(indices) - 1)]
