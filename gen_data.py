@@ -74,6 +74,8 @@ class Coin_Task(Task):
             X = []
             Y = []
             
+            N = N//self.tau
+            
             for i in range(N):
                 
                 x = np.random.binomial(1, 0.5)
