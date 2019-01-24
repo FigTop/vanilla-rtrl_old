@@ -137,15 +137,7 @@ class Simulation:
             
             ### --- Run network forwards and get error --- ###
             
-            net.x = x_inputs[i_t]
-            net.y = y_labels[i_t]
-            
-            net.next_state(net.x, sigma=self.sigma)
-            net.z_out()
-            
-            net.y_hat  = net.output.f(net.z)
-            net.loss_  = net.loss.f(net.z, net.y)
-            net.e      = net.loss.f_prime(net.z, net.y)
+            self.forward_pass(x_inputs[i_t], y_labels[i_t])
             
             ### --- Update parameters if in 'train' mode --- ###
 
@@ -182,6 +174,20 @@ class Simulation:
         
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
+
+    def forward_pass(self, x, y):
+        
+        net = self.net
+        
+        net.x = x
+        net.y = y
+        
+        net.next_state(net.x, sigma=self.sigma)
+        net.z_out()
+        
+        net.y_hat  = net.output.f(net.z)
+        net.loss_  = net.loss.f(net.z, net.y)
+        net.e      = net.loss.f_prime(net.z, net.y)
 
     def train_step(self, i_t):
         
