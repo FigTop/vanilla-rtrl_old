@@ -222,7 +222,7 @@ class Simulation:
     
     def L2_regularization(self):
         
-        for i_L2, W in zip(self.net.L2_indices, [self.net.params[i] for i in self.L2_indices]):
+        for i_L2, W in zip(self.net.L2_indices, [self.net.params[i] for i in self.net.L2_indices]):
             self.grads[i_L2] += self.L2_reg*W
     
     def report_progress(self, i_t, data):
