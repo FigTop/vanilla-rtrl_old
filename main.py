@@ -31,16 +31,15 @@ except KeyError:
     i_job = np.random.randint(1000)
 
 LRs = [0.005, 0.001, 0.0005, 0.00001]
-Ps  = [0.01, 0.003, 0.001, 0.0003, 0.0001, 0.00003]
-HPs = sum([[[p, l] for l in LRs] for p in Ps],[])
-p, lr = HPs[0]
-
+alphas  = [0.3, 0.1, 0.03, 0.01]
+HPs = sum([[[a, l] for l in LRs] for a in alphas],[])
+alpha, lr = HPs[0]
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
 #task = Coin_Task(4, 6, one_hot=True, deterministic=False)
-task = Sine_Wave(p, [0.001, 0.003, 0.001, 0.0003], amplitude=0.1, method='regular')
-data = task.gen_data(4000, 5000)
+task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
+data = task.gen_data(5000, 200)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -58,7 +57,7 @@ b_out = np.zeros(n_out)
 A = np.zeros_like(W_rec)
 n_S = 10
 
-alpha = 0.03
+alpha = 0.1
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
@@ -85,7 +84,7 @@ learn_alg = RTRL(rnn)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 monitors = ['loss_', 'y_hat']#, 'sg_loss', 'loss_a']
 
-sim = Simulation(rnn, learn_alg, optimizer, l2_reg=0.00001, sigma=0.0001)#, comparison_alg=comp_alg)
+sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.0001, sigma=0.0001)#, comparison_alg=comp_alg)
 sim.run(data,
         monitors=monitors,
         verbose=True,
