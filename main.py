@@ -37,9 +37,9 @@ alpha, lr = HPs[0]
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
-task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
+task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=10)
 #task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
-data = task.gen_data(5000, 200)
+data = task.gen_data(100000, 10000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -62,8 +62,8 @@ alpha = 0.1
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=identity,
-          loss=mean_squared_error)
+          output=softmax,
+          loss=softmax_cross_entropy)
 
 #rnn = Fast_Weights_RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       activation=tanh,
@@ -72,7 +72,7 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       loss=softmax_cross_entropy,
 #                       A=A, lmbda=0.95, eta=0.5, n_S=10)
 
-optimizer = SGD(lr=lr)#, clipnorm=1.0)
+optimizer = SGD(lr=0.001)#, clipnorm=1.0)
 #SG_optimizer = SGD(lr=0.001)
 #learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.001, backprop_weights='approximate',
 #                SG_label_activation=tanh, W_FB=W_FB)

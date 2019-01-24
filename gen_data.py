@@ -74,7 +74,7 @@ class Coin_Task(Task):
             X = []
             Y = []
             
-            N = N//self.tau
+            N = N//self.tau_task
             
             for i in range(N):
                 
