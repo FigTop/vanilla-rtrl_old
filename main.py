@@ -34,7 +34,6 @@ LRs = [0.005, 0.001, 0.0005, 0.00001]
 alphas  = [0.3, 0.1, 0.03, 0.01]
 HPs = sum([[[a, l] for l in LRs] for a in alphas],[])
 alpha, lr = HPs[0]
-
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)

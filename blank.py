@@ -9,6 +9,7 @@ Created on Tue Oct 30 14:23:44 2018
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import os
 
 #a = rnn.mons['a']
 #T = 100
@@ -45,8 +46,8 @@ figs = []
 
 n_errors = 0
 
-n_row = 2
-n_col = 5
+n_row = 4
+n_col = 6
 
 fig, axarr = plt.subplots(n_row, n_col, figsize=(20, 10))
 
@@ -63,7 +64,7 @@ for file_name in os.listdir(data_dir):
         except EOFError:
             n_errors += 1
             
-    if [result['sim'].net.alpha, result['sim'].net.n_hidden]==[0.03, 64]:
+    if [result['task'].p_transition, result['sim'].optimizer.lr]==[0.01, 0.00001]:
          break
         
 #    if result['config'] not in configs:
@@ -87,11 +88,11 @@ for file_name in os.listdir(data_dir):
     #axarr[i_x, i_y].plot(result['sim'].mons['loss_'])
     #axarr[i_x, i_y].plot(result['sim'].mons['y_hat'][:,0])
     #axarr[i_x, i_y].plot(data['train']['Y'][:,0])
-    title = 'Alpha = {}, n = {}'.format(result['sim'].net.alpha, result['sim'].net.n_hidden)
+    title = 'P = {}, LR = {}'.format(result['task'].p_transition, result['sim'].optimizer.lr)
     axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
     axarr[i_x, i_y].set_yticks([])
-    axarr[i_x, i_y].set_xlim([1000, 4000])
+    #axarr[i_x, i_y].set_xlim([1000, 4000])
     axarr[i_x, i_y].set_ylim([-0.2, 0.2])
     
 #    for key, col in zip(['loss_', 'acc'], ['b', 'k']):

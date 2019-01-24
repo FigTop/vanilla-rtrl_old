@@ -34,7 +34,7 @@ class Learning_Algorithm:
 class Real_Time_Learning_Algorithm(Learning_Algorithm):
     
     def get_outer_grads(self):
-        
+
         return [np.multiply.outer(self.net.e, self.net.a), self.net.e]
         
     def propagate_feedback_to_hidden(self):
