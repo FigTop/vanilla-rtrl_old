@@ -5,7 +5,25 @@ https://gist.github.com/Harhro94/3b809c5ae778485a9ea9d253c4bfc90a
 
 import numpy as np
 
-class Adam:
+class Optimizer:
+    
+    def __init__(self, allowed_kwargs_, **kwargs):
+    
+        allowed_kwargs = {'clipnorm', 'clipvalue'}.union(allowed_kwargs_)
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to optimizer: ' + str(k))
+        self.__dict__.update(kwargs)
+        
+    def clip_norm(self, g, norm):
+        
+        if norm>self.clipnorm:
+            return (g/norm)*self.clipnorm
+        else:
+            return g
+
+class Adam(Optimizer):
     
     """Adam optimizer.
     Default parameters follow those provided in the original paper.
@@ -22,12 +40,9 @@ class Adam:
     def __init__(self, lr=0.001, beta_1=0.9, beta_2=0.999,
                  epsilon=1e-8, decay=0., **kwargs):
         
-        allowed_kwargs = {'clipnorm', 'clipvalue'}
-        for k in kwargs:
-            if k not in allowed_kwargs:
-                raise TypeError('Unexpected keyword argument '
-                                'passed to optimizer: ' + str(k))
-        self.__dict__.update(kwargs)
+        allowed_kwargs_ = set()
+        super().__init__(allowed_kwargs_, **kwargs)
+        
         self.iterations = 0
         self.lr = lr
         self.beta_1 = beta_1
@@ -79,16 +94,8 @@ class Adam:
             ret[i] = ret[i].reshape(original_shapes[i])
         
         return ret
-    
-    def clip_norm(self, g, norm):
-        
-        if norm>self.clipnorm:
-            return (g/norm)*self.clipnorm
-        else:
-            return g
 
-
-class SGD:
+class SGD(Optimizer):
     """SGD optimizer.
     # Arguments
         lr: float >= 0. Learning rate.
@@ -96,12 +103,9 @@ class SGD:
 
     def __init__(self, lr=0.001, **kwargs):
         
-        allowed_kwargs = {'clipnorm', 'clipvalue'}
-        for k in kwargs:
-            if k not in allowed_kwargs:
-                raise TypeError('Unexpected keyword argument '
-                                'passed to optimizer: ' + str(k))
-        self.__dict__.update(kwargs)
+        allowed_kwargs_ = set()
+        super().__init__(allowed_kwargs_, **kwargs)
+        
         self.lr = lr
 
     def get_update(self, params, grads):
@@ -132,9 +136,21 @@ class SGD:
         
         return ret
     
-    def clip_norm(self, g, norm):
+class rprop(Optimizer):
+    
+    def __init__(self, step_gain=1.2, step_attenuate=0.5, init_step_size=0.1, **kwargs):
         
-        if norm>self.clipnorm:
-            return (g/norm)*self.clipnorm
-        else:
-            return g
+        allowed_kwargs_ = {'step_size_lb', 'step_size_ub'}
+        super().__init__(allowed_kwargs_, **kwargs)
+        
+        self.step_gain = step_gain
+        self.step_attenuate = step_attenuate
+        
+        self.step_size = init_step_size
+        
+    def get_update(self, params, grads):
+        
+        pass
+        
+        
+        
