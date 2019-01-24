@@ -87,6 +87,9 @@ class RNN:
                                self.W_out.size +\
                                self.b_out.size
         
+        #Params for L2 regularization
+        self.L2_indices = [0, 1, 3]
+        
         #Initial state values
         self.reset_network()
         

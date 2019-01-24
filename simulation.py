@@ -40,7 +40,7 @@ class Simulation:
                                 gradients which are compared with learn_alg.
                                 Default is none.
                                 
-        l2_reg                  Strength of L2 regularization used on non-bias
+        L2_reg                  Strength of L2 regularization used on non-bias
                                 trainable parameters in the model. Default is 0.
                                 
         monitors                List of strings dictating which variables should
@@ -66,7 +66,7 @@ class Simulation:
         '''
 
 
-        allowed_kwargs = {'l2_reg', 'update_interval', 'sigma',
+        allowed_kwargs = {'L2_reg', 'update_interval', 'sigma',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training',
                           'tau_avg', 'check_loss'}.union(allowed_kwargs_)
@@ -82,7 +82,7 @@ class Simulation:
         
         #Default simulation parameters
         self.sigma            = 0
-        self.l2_reg           = 0
+        self.L2_reg           = 0
         self.update_interval  = 1
         
         #Overwrite defaults with any provided keyword args
@@ -211,15 +211,20 @@ class Simulation:
             self.b_out_alignment = self.alignment[4]
         
         #Add L2 regularization derivative to gradient
-        for i_l2, W in zip([0, 1, 3], [net.W_rec, net.W_in, net.W_out]):
-            self.grads[i_l2] += self.l2_reg*W
+        if self.L2_reg>0:
+            self.L2_regularization()
             
         #If on the update cycle (always true for update_inteval=1),
         #pass gradients to the optimizer and update parameters.
         if (i_t + 1)%self.update_interval==0:
             net.params = self.optimizer.get_update(net.params, self.grads)
             net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
-            
+    
+    def L2_regularization(self):
+        
+        for i_L2, W in zip(self.net.L2_indices, [self.net.params[i] for i in self.L2_indices]):
+            self.grads[i_L2] += self.L2_reg*W
+    
     def report_progress(self, i_t, data):
         
         t2 = time.time()
