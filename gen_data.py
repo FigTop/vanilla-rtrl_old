@@ -53,14 +53,14 @@ class Task:
          
 class Coin_Task(Task):
     
-    def __init__(self, n1, n2, one_hot=True, deterministic=False, tau=1):
+    def __init__(self, n1, n2, one_hot=True, deterministic=False, tau_task=1):
         
         super().__init__(2, 2)
         
         #Dependencies in coin task
         self.n1 = n1
         self.n2 = n2
-        self.tau = tau
+        self.tau_task = tau_task
         
         #Use one hot representation of coin flips or not
         self.one_hot = one_hot
@@ -100,8 +100,8 @@ class Coin_Task(Task):
             X = np.array(X)
             Y = np.array(Y)
             
-            X = np.tile(X, self.tau).reshape((self.tau*N, 2))
-            Y = np.tile(Y, self.tau).reshape((self.tau*N, 2))
+            X = np.tile(X, self.tau_task).reshape((self.tau_task*N, 2))
+            Y = np.tile(Y, self.tau_task).reshape((self.tau_task*N, 2))
         
         else:
             
