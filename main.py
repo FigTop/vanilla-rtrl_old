@@ -33,14 +33,14 @@ except KeyError:
 LRs = [0.005, 0.001, 0.0005, 0.00001]
 Ps  = [0.01, 0.003, 0.001, 0.0003, 0.0001, 0.00003]
 HPs = sum([[[p, l] for l in LRs] for p in Ps],[])
-p, lr = HPs[i_job]
+p, lr = HPs[0]
 
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
 #task = Coin_Task(4, 6, one_hot=True, deterministic=False)
 task = Sine_Wave(p, [0.001, 0.003, 0.001, 0.0003], amplitude=0.1, method='regular')
-data = task.gen_data(4000000, 5000)
+data = task.gen_data(4000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
