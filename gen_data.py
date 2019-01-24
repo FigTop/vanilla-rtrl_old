@@ -53,13 +53,14 @@ class Task:
          
 class Coin_Task(Task):
     
-    def __init__(self, n1, n2, one_hot=True, deterministic=False):
+    def __init__(self, n1, n2, one_hot=True, deterministic=False, tau=1):
         
         super().__init__(2, 2)
         
         #Dependencies in coin task
         self.n1 = n1
         self.n2 = n2
+        self.tau = tau
         
         #Use one hot representation of coin flips or not
         self.one_hot = one_hot
@@ -94,6 +95,12 @@ class Coin_Task(Task):
                     y = p
                 Y.append(np.array([y, 1-y]))
         
+            X = np.array(X)
+            Y = np.array(Y)
+            
+            X = np.tile(X, self.tau).reshape((self.tau*N, 2))
+            Y = np.tile(Y, self.tau).reshape((self.tau*N, 2))
+        
         else:
             
             X = np.random.binomial(1, 0.5, N).reshape((-1, 1))
@@ -105,8 +112,8 @@ class Coin_Task(Task):
                 if X[i-self.n2,0]==1:
                     p -= 0.25
                 Y[i,0] = np.random.binomial(1, p)
-        
-        return np.array(X), np.array(Y)
+            
+        return X, Y
     
     def plot_loss_benchmarks(self):
         

@@ -38,8 +38,8 @@ alpha, lr = HPs[0]
 #i_seed = i_job
 i_seed = 1
 np.random.seed(i_seed)
-#task = Coin_Task(4, 6, one_hot=True, deterministic=False)
-task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
+task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau=4)
+#task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
 data = task.gen_data(5000, 200)
 
 n_in     = task.n_in
