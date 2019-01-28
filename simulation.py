@@ -147,7 +147,7 @@ class Simulation:
             
             #Model-specific updates
             try:
-                net.model_specific_update(self.tau_on, self.tau_off, self.phase_method)
+                net.model_specific_update()
             except AttributeError:
                 pass
             
@@ -248,7 +248,7 @@ class Simulation:
             
         if self.check_accuracy or self.check_loss:
             test_sim = copy(self)
-            test_sim.run(data, mode='test', monitors=['y_hat', 'loss_'], verbose=False)
+            test_sim.run(data, mode='test', monitors=['y_hat', 'loss_'], phase_method='fixed', verbose=False)
             if self.check_accuracy:
                 acc = classification_accuracy(data, test_sim.mons['y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
