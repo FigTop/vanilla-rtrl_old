@@ -146,10 +146,8 @@ class Simulation:
                 self.train_step(i_t)
             
             #Model-specific updates
-            try:
-                net.model_specific_update()
-            except AttributeError:
-                pass
+            if hasattr(net, 'model_specific_update'):
+                net.model_specific_update(self)
             
             if hasattr(self, 't_stop_SG_train'):
                 if self.t_stop_SG_train==i_t:
