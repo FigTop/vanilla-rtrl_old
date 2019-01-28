@@ -91,7 +91,7 @@ class Simulation:
     def run(self, data, mode='train', monitors=[], **kwargs):
         
         allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy', 'check_loss',
-                          'tau_phase'}
+                          'tau_on', 'tau_off', 'phase_method'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -147,7 +147,7 @@ class Simulation:
             
             #Model-specific updates
             try:
-                net.model_specific_update(self.tau_phase)
+                net.model_specific_update(self.tau_on, self.tau_off, self.phase_method)
             except AttributeError:
                 pass
             
