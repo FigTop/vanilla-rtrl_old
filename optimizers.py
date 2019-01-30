@@ -9,7 +9,7 @@ class Optimizer:
     
     def __init__(self, allowed_kwargs_, **kwargs):
     
-        allowed_kwargs = {'clipnorm', 'clipvalue'}.union(allowed_kwargs_)
+        allowed_kwargs = {'clipnorm', 'clipvalue', 'lr_decay_rate', 'min_lr'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -22,6 +22,15 @@ class Optimizer:
             return (g/norm)*self.clipnorm
         else:
             return g
+        
+    def lr_decay(self):
+        
+        self.lr_ = self.lr_*self.lr_decay_rate
+        try:
+            return np.max([self.lr_, self.min_lr])
+        except AttributeError:
+            return self.lr_
+        
 
 class Adam(Optimizer):
     
@@ -106,6 +115,7 @@ class SGD(Optimizer):
         allowed_kwargs_ = set()
         super().__init__(allowed_kwargs_, **kwargs)
         
+        self.lr_ = np.copy(lr)
         self.lr = lr
 
     def get_update(self, params, grads):
@@ -118,6 +128,9 @@ class SGD(Optimizer):
         if hasattr(self, 'clipnorm') and self.clipnorm > 0:
             norm = np.sqrt(sum([np.sum(np.square(g)) for g in grads]))
             grads = [self.clip_norm(g, norm) for g in grads]
+            
+        if hasattr(self, 'lr_decay_rate'):
+            self.lr = self.lr_decay()
         
         """ #TODO: implement clipping
         if hasattr(self, 'clipnorm') and self.clipnorm > 0:
