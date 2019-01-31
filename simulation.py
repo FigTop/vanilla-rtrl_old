@@ -298,8 +298,12 @@ class Simulation:
         
         for key in self.mons.keys():
             if 'radius' in key:
-                a = key.split('_')[0]
-                for obj in [self, net, self.learn_alg]:
+                spl = key.split('_')
+                if len(spl)>2:
+                    a = spl[0]+'_'+spl[1]
+                else:
+                    a = spl[0]
+                for obj in [self, self.net, self.learn_alg]:
                     if hasattr(obj, a):
                         setattr(self, key, get_spectral_radius(getattr(obj, a)))
     
