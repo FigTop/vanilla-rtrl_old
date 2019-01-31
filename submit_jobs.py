@@ -9,6 +9,25 @@ Created on Thu Oct 18 19:19:46 2018
 import subprocess
 import os
 
+class Cluster_Job:
+    
+    def __init__(self, job_name, signals, configs, random_seeds):
+        
+        self.name = job_name
+        self.signals = signals
+        self.configs = configs
+        self.random_seeds = random_seeds
+        
+    def test_network(self):
+        pass
+        
+    def plot_array_of_configs(self):
+        pass
+        
+    def plot_individual_config(self):
+        pass
+        
+    
 def clear_results(job_file, data_path='/Users/omarschall/cluster_results/vanilla-rtrl/'):
     
     job_name = job_file.split('/')[-1].split('.')[0]
@@ -36,11 +55,15 @@ def submit_job(job_file, n_array, scratch_path='/scratch/oem214/vanilla-rtrl/',
     
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
+        code_dir = os.path.join(data_dir, 'code')
+        os.mkdir(code_dir)
     
     #copy main script to results dir
-    subprocess.run(['cp',
-                    '/Users/omarschall/vanilla-rtrl/main.py',
-                    data_dir])
+    subprocess.run(['rsync',
+                    '-aav',
+                    '--exclude', '.git',
+                    '/Users/omarschall/vanilla-rtrl/',
+                    code_dir])
     
     subprocess.run(['rsync',
                     '-aav',
