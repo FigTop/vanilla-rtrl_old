@@ -42,9 +42,9 @@ def retrieve_results(job_file, scratch_path='/scratch/oem214/vanilla-rtrl/',
     data_path = '/Users/omarschall/cluster_results/vanilla-rtrl/'
     data_dir = os.path.join(data_path, job_name)
         
-    source_path = username+'@'+domain+':'+scratch_path+'library/'+job_name+'/*'
+    source_path = username+'@'+domain+':'+scratch_path+'library/'+job_name+'/'
         
-    subprocess.run(['scp', source_path, data_dir])
+    subprocess.run(['rsync', '-aav', source_path, data_dir])
 
 def submit_job(job_file, n_array, scratch_path='/scratch/oem214/vanilla-rtrl/',
                username='oem214', domain='prince.hpc.nyu.edu'):
