@@ -30,16 +30,18 @@ try:
 except KeyError:
     i_job = np.random.randint(1000)
 
-LRs = [0.005, 0.001, 0.0005, 0.00001]
-alphas  = [0.3, 0.1, 0.03, 0.01]
-HPs = sum([[[a, l] for l in LRs] for a in alphas],[])
-alpha, lr = HPs[0]
-#i_seed = i_job
-i_seed = 1
+#taus = [2, 3, 4]
+#alphas  = [1, 0.7, 0.5, 0.3]
+seeds = list(range(20))
+#HPs = sum(sum([[[[a, t, s] for t in taus] for a in alphas] for s in seeds],[]), [])
+#alpha, tau, i_seed = HPs[0]
+
+i_seed = i_job
 np.random.seed(i_seed)
-task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=10)
+
+task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
 #task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
-data = task.gen_data(100000, 10000)
+data = task.gen_data(200000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -57,7 +59,7 @@ b_out = np.zeros(n_out)
 A = np.zeros_like(W_rec)
 n_S = 10
 
-alpha = 0.1
+alpha = 0.3
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
@@ -72,38 +74,54 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 #                       loss=softmax_cross_entropy,
 #                       A=A, lmbda=0.95, eta=0.5, n_S=10)
 
-optimizer = SGD(lr=0.001)#, clipnorm=1.0)
-#SG_optimizer = SGD(lr=0.001)
-#learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.001, backprop_weights='approximate',
-#                SG_label_activation=tanh, W_FB=W_FB)
+optimizer = SGD(lr=0.0005)#, lr_decay_rate=0.9999, min_lr=0.00005)#, clipnorm=1.0)
+SG_optimizer = SGD(lr=0.01)
+learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.01, backprop_weights='approximate',
+                SG_label_activation=tanh, W_FB=W_FB)#, SG_target_clipnorm=1)#, W_FB=W_FB)
 #learn_alg = KF_RTRL(rnn, P0=0.8, P1=1.3)
 #learn_alg = UORO(rnn, epsilon=1e-10)
-learn_alg = RTRL(rnn)
+comp_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, alpha=alpha, W_FB=W_FB)
 #learn_alg = BPTT(rnn, 1, 20)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
-monitors = ['loss_', 'y_hat']#, 'sg_loss', 'loss_a']
+monitors = ['loss_', 'y_hat', 'sg_loss', 'loss_a', 'W_rec_alignment']
 
-sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.0001, sigma=0.0001)#, comparison_alg=comp_alg)
+sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.0001, comparison_alg=comp_alg)
 sim.run(data,
         monitors=monitors,
         verbose=True,
-        check_loss=True)
+        check_loss=True,
+        test_loss_thr=0.52,
+        report_interval=2000)
 
 if os.environ['HOME']=='/Users/omarschall':
 
-    signals1 = [sim.mons['loss_']]#, sim.mons['sg_loss'], sim.mons['loss_a']]
-    fig1 = plot_filtered_signals(signals1, filter_size=100, y_lim=[0, 1])
-    plt.legend(['Loss'])
+    signals = []
+    legend = []
+    for key in sim.mons.keys():
+        s = sim.mons[key].shape
+        if len(s)==1 and s[0]>0:
+            signals.append(sim.mons[key])
+            legend.append(key)
+    fig1 = plot_filtered_signals(signals, filter_size=100, y_lim=[0, 1])
+    plt.legend(legend)
     
     #Test run
-    sim = Simulation(rnn, learn_alg=None, optimizer=None)
-    sim.run(data, mode='test', monitors=['loss_', 'y_hat'])
+    test_sim = Simulation(rnn, learn_alg=None, optimizer=None)
+    test_sim.run(data, mode='test', monitors=['loss_', 'y_hat', 'sg_loss', 'loss_a'])
     plt.figure()
-    plt.plot(sim.mons['y_hat'][:,0])
+    plt.plot(test_sim.mons['y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
-    plt.ylim([-0.15, 0.15])
-    #plt.title('RFLO on (4,6)-back task')
+    plt.ylim([0, 1.2])
+    plt.xlim([3000, 3100])
+    
+    
+    plt.figure()
+    plt.plot(test_sim.mons['y_hat'][:,0],data['test']['Y'][:,0], '.', alpha=0.05)
+    plt.plot([0, 1], [0, 1], 'k', linestyle='--')
+    #plt.axis('equal')
+    plt.ylim([0, 1.1])
+    plt.xlim([0, 1.1])
 
 if os.environ['HOME']=='/home/oem214':
 

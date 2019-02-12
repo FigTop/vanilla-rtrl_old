@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import os
+from utils import *
 
 #a = rnn.mons['a']
 #T = 100
@@ -35,7 +36,7 @@ import os
 
 ### -------- Make big fig ---- ####
 
-job_name = 'n_hidden_sw'
+job_name = 'tau_alpha_2'
 data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
 #alpha = 0.05
 #filter_size = 100
@@ -47,13 +48,22 @@ figs = []
 n_errors = 0
 
 n_row = 4
-n_col = 6
+n_col = 5
+
+loss_avg_1 = [0]*30
+loss_avg_2 = [0]*30
+loss_avg_3 = [0]*30
+
+n_files = len(os.listdir(data_dir)) - 1
 
 fig, axarr = plt.subplots(n_row, n_col, figsize=(20, 10))
 
-for file_name in os.listdir(data_dir):
+#for file_name in os.listdir(data_dir):
+for i_file in range(n_files):
     
-    if 'main' in file_name or '.' in file_name:
+    file_name = 'rnn_'+str(i_file)
+    
+    if 'code' in file_name or '.' in file_name:
         continue
     
     file_no = int(file_name.split('_')[-1])
@@ -63,38 +73,94 @@ for file_name in os.listdir(data_dir):
             result = pickle.load(f)
         except EOFError:
             n_errors += 1
-            
-    if [result['task'].p_transition, result['sim'].optimizer.lr]==[0.01, 0.00001]:
-         break
         
-#    if result['config'] not in configs:
-#        configs.append(result['config'])
-#        signals.append({'loss_': [], 'sg_loss': [], 'loss_a': [], 'acc': []})
-#        i_conf = len(configs) - 1
-#    else:
-#        i_conf = configs.index(result['config'])
+    config = [result['sim'].net.alpha, result['task'].tau_task]
     
-    i_x = file_no%n_row
-    i_y = file_no//n_row
+    if config not in configs:
+        configs.append(config)
+        i_conf = len(configs) - 1
+        first = True
+    else:
+        i_conf = configs.index(config)
+        first = False
     
-    np.random.seed(result['i_seed'])
-    data = result['task'].gen_data(1000, 10000)
+    if config==[0.3, 4]:
+        i_seed = result['i_seed']
+        if i_seed==17:
+            break
+    else:
+        continue
     
-    sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
-    sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
-    axarr[i_x, i_y].plot(sim.mons['y_hat'][:,0])
+    np.random.seed(1)
+    data = result['task'].gen_data(1000, 5000)
+        
+    #i_seed = result['i_seed']
+    i_x = i_seed%n_row
+    i_y = i_seed//n_row
+    
+    test_sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
+    test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
+    axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
     axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
-    
-    #axarr[i_x, i_y].plot(result['sim'].mons['loss_'])
-    #axarr[i_x, i_y].plot(result['sim'].mons['y_hat'][:,0])
-    #axarr[i_x, i_y].plot(data['train']['Y'][:,0])
-    title = 'P = {}, LR = {}'.format(result['task'].p_transition, result['sim'].optimizer.lr)
+    axarr[i_x, i_y].set_xlim([1000, 1100])
+    #axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0], data['test']['Y'][:,0], '.', alpha=0.01)
+    #axarr[i_x, i_y].plot([0, 1], [0, 1], 'k', linestyle='--')
+    title = 'Seed = {}'.format(i_seed)
     axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
     axarr[i_x, i_y].set_yticks([])
-    #axarr[i_x, i_y].set_xlim([1000, 4000])
-    axarr[i_x, i_y].set_ylim([-0.2, 0.2])
+        
+
     
+    continue
+        
+    i_x = i_conf%n_row
+    i_y = i_conf//n_row
+    
+    #np.random.seed(result['i_seed'])
+    #data = result['task'].gen_data(1000, 10000)
+    
+    #sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
+    #sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
+    #axarr[i_x, i_y].plot(sim.mons['y_hat'][:,0])
+    #axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
+    
+    loss_1 = rectangular_filter(result['sim'].mons['loss_'], filter_size=1000)
+    #loss_2 = rectangular_filter(result['sim'].mons['sg_loss'], filter_size=1000)
+    #loss_3 = rectangular_filter(result['sim'].mons['loss_a'], filter_size=1000)
+    
+    loss_avg_1[i_conf] += loss_1
+    #loss_avg_2[i_conf] += loss_2
+    #loss_avg_3[i_conf] += loss_3
+    
+    axarr[i_x, i_y].plot(loss_1, color='b', alpha=0.05)
+    #axarr[i_x, i_y].plot(loss_2, color='y', alpha=0.05)
+    #axarr[i_x, i_y].plot(loss_3, color='r', alpha=0.05)
+    
+    if first:
+        axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
+        axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
+        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')
+    #axarr[i_x, i_y].plot(result['sim'].mons['loss_'])
+    #axarr[i_x, i_y].plot(result['sim'].mons['y_hat'][:,0])
+    #axarr[i_x, i_y].plot(data['train']['Y'][:,0])
+        title = 'Alpha = {}, Tau = {}'.format(config[0], config[1])
+        axarr[i_x, i_y].set_title(title)
+        axarr[i_x, i_y].set_xticks([])
+        axarr[i_x, i_y].set_yticks([])
+        #axarr[i_x, i_y].set_xlim([1000, 4000])
+        axarr[i_x, i_y].set_ylim([0, 0.8])
+
+n_seeds = 20
+for i_conf in range(len(configs)):
+    
+    i_x = i_conf%n_row
+    i_y = i_conf//n_row
+    
+    axarr[i_x, i_y].plot(loss_avg_1[i_conf]/n_seeds, color='b')
+    #axarr[i_x, i_y].plot(loss_avg_2[i_conf]/n_seeds, color='y')
+    #axarr[i_x, i_y].plot(loss_avg_3[i_conf]/n_seeds, color='r')    
+
 #    for key, col in zip(['loss_', 'acc'], ['b', 'k']):
 #        smoothed_signal = np.convolve(result['rnn'].mons[key],
 #                                      np.ones(filter_size)/filter_size,

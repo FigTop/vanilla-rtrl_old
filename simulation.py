@@ -91,7 +91,7 @@ class Simulation:
     def run(self, data, mode='train', monitors=[], **kwargs):
         
         allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy', 'check_loss',
-                          'tau_on', 'tau_off', 'phase_method'}
+                          'tau_on', 'tau_off', 'phase_method', 'test_loss_thr'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -166,6 +166,8 @@ class Simulation:
             #Make report if conditions are met
             if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
                 self.report_progress(i_t, data)
+                if hasattr(self, 'stop'):
+                    break
                 
             if hasattr(self, 't_stop_training') and self.mode=='train':
                 if self.t_stop_training==i_t:
@@ -255,7 +257,11 @@ class Simulation:
                 test_loss = np.mean(test_sim.mons['loss_'])
                 loss_summary = 'Test loss: {} \n'.format(test_loss)
                 summary += loss_summary
-            
+        
+        if hasattr(self, 'test_loss_thr'):
+            if test_loss < self.test_loss_thr:
+                self.stop = True
+        
         print(summary.format(progress, time_elapsed))
     
     def update_monitors(self):
