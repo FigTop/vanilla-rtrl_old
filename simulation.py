@@ -11,6 +11,7 @@ import time
 from copy import copy
 from pdb import set_trace
 from analysis_funcs import *
+from utils import *
 
 class Simulation:
     
@@ -159,7 +160,7 @@ class Simulation:
             net.y_prev = np.copy(net.y)
             
             #Compute spectral radii if desired
-            self.get_spectral_radii()
+            self.get_radii_and_norms()
             
             #Monitor relevant variables
             self.update_monitors()
@@ -306,18 +307,19 @@ class Simulation:
             except ValueError:
                 pass
             
-    def get_spectral_radii(self):
+    def get_radii_and_norms(self):
         
-        for key in self.mons.keys():
-            if 'radius' in key:
-                spl = key.split('_')
-                if len(spl)>2:
-                    a = spl[0]+'_'+spl[1]
-                else:
-                    a = spl[0]
-                for obj in [self, self.net, self.learn_alg]:
-                    if hasattr(obj, a):
-                        setattr(self, key, get_spectral_radius(getattr(obj, a)))
+        for feature, func in zip(['radius', 'norm'], [get_spectral_radius, norm]):
+            for key in self.mons.keys():
+                if feature in key:
+                    spl = key.split('_')
+                    if len(spl)>2:
+                        a = spl[0]+'_'+spl[1]
+                    else:
+                        a = spl[0]
+                    for obj in [self, self.net, self.learn_alg]:
+                        if hasattr(obj, a):
+                            setattr(self, key, func(getattr(obj, a)))
                         
     def save_best_model(self, data):
         
