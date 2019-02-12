@@ -91,7 +91,7 @@ class Simulation:
     def run(self, data, mode='train', monitors=[], **kwargs):
         
         allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy', 'check_loss',
-                          'tau_on', 'tau_off', 'phase_method', 'test_loss_thr'}
+                          'tau_on', 'tau_off', 'phase_method', 'test_loss_thr', 'save_model_interval'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -103,6 +103,7 @@ class Simulation:
         self.verbose        = True
         self.check_accuracy = False
         self.check_loss     = False
+        self.best_val_loss  = 1000
         
         #Make local copies of (meta)-data
         x_inputs             = data[self.mode]['X']
@@ -112,7 +113,7 @@ class Simulation:
         
         #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
-
+        
         #Initialize monitors
         self.mons = {}
         for mon in monitors:
@@ -162,6 +163,11 @@ class Simulation:
             
             #Monitor relevant variables
             self.update_monitors()
+            
+            #Evaluate model and save if performance is best
+            if hasattr(self, 'save_model_interval') and mode=='train':
+                if (i_t%self.save_model_interval)==0:
+                    self.save_best_model(data)
             
             #Make report if conditions are met
             if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
@@ -312,4 +318,14 @@ class Simulation:
                 for obj in [self, self.net, self.learn_alg]:
                     if hasattr(obj, a):
                         setattr(self, key, get_spectral_radius(getattr(obj, a)))
-    
+                        
+    def save_best_model(self, data):
+        
+        val_sim = copy(self)
+        val_sim.run(data, mode='test', monitors=['y_hat', 'loss_'], phase_method='fixed', verbose=False)
+        val_loss = np.mean(val_sim.mons['loss_'])
+        
+        if val_loss < self.best_val_loss:
+            self.best_net = copy(self.net)
+            self.best_val_loss = val_loss
+        

@@ -196,7 +196,7 @@ class DNI(Real_Time_Learning_Algorithm):
         
         allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
                            'activation', 'SG_label_activation', 'backprop_weights',
-                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval'}
+                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e'}
         #Default parameters
         self.optimizer = optimizer
         self.l2_reg = 0
@@ -218,6 +218,7 @@ class DNI(Real_Time_Learning_Algorithm):
         self.U = np.copy(self.A)
         self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
         self.SG_params = [self.A, self.B, self.C]
+        self.e_w = np.zeros((self.n_h, self.n_h + self.n_in + 1))
         
     def update_learning_vars(self):
         
@@ -314,7 +315,18 @@ class DNI(Real_Time_Learning_Algorithm):
                 self.sg = self.sg / sg_norm
                 
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        return np.multiply.outer(self.sg_scaled, self.a_hat)
+        
+        if hasattr(self, 'alpha_e'):
+            self.update_synaptic_eligibility_trace()
+            return (self.e_w.T*self.sg).T
+        else:
+            return np.multiply.outer(self.sg_scaled, self.a_hat)
+    
+    def update_synaptic_eligibility_trace(self):
+        
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
 
 class BPTT(Learning_Algorithm):
     

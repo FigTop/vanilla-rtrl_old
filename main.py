@@ -36,7 +36,7 @@ seeds = list(range(20))
 #HPs = sum(sum([[[[a, t, s] for t in taus] for a in alphas] for s in seeds],[]), [])
 #alpha, tau, i_seed = HPs[0]
 
-i_seed = i_job
+i_seed = 884
 np.random.seed(i_seed)
 
 task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
@@ -80,19 +80,18 @@ learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.01, backprop_weights='approximate',
                 SG_label_activation=tanh, W_FB=W_FB)#, SG_target_clipnorm=1)#, W_FB=W_FB)
 #learn_alg = KF_RTRL(rnn, P0=0.8, P1=1.3)
 #learn_alg = UORO(rnn, epsilon=1e-10)
-comp_alg = RTRL(rnn)
+#comp_alg = RTRL(rnn)
 #learn_alg = RFLO(rnn, alpha=alpha, W_FB=W_FB)
 #learn_alg = BPTT(rnn, 1, 20)
 #monitors = ['loss_', 'a', 'y_hat', 'sg_loss', 'loss_a']
 monitors = ['loss_', 'y_hat', 'sg_loss', 'loss_a', 'W_rec_alignment']
 
-sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.0001, comparison_alg=comp_alg)
+sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.0001)#, comparison_alg=comp_alg)
 sim.run(data,
         monitors=monitors,
         verbose=True,
         check_loss=True,
-        test_loss_thr=0.52,
-        report_interval=2000)
+        save_model_interval=2000)
 
 if os.environ['HOME']=='/Users/omarschall':
 
@@ -107,7 +106,7 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.legend(legend)
     
     #Test run
-    test_sim = Simulation(rnn, learn_alg=None, optimizer=None)
+    test_sim = Simulation(sim.best_net, learn_alg=None, optimizer=None)
     test_sim.run(data, mode='test', monitors=['loss_', 'y_hat', 'sg_loss', 'loss_a'])
     plt.figure()
     plt.plot(test_sim.mons['y_hat'][:,0])
