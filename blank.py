@@ -36,7 +36,7 @@ from utils import *
 
 ### -------- Make big fig ---- ####
 
-job_name = 'tau_alpha_2'
+job_name = 'alpha03_tau4_checkpoints'
 data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
 #alpha = 0.05
 #filter_size = 100
@@ -47,8 +47,8 @@ figs = []
 
 n_errors = 0
 
-n_row = 4
-n_col = 5
+n_row = 3
+n_col = 3
 
 loss_avg_1 = [0]*30
 loss_avg_2 = [0]*30
@@ -58,8 +58,10 @@ n_files = len(os.listdir(data_dir)) - 1
 
 fig, axarr = plt.subplots(n_row, n_col, figsize=(20, 10))
 
+val_losses = {}
+
 #for file_name in os.listdir(data_dir):
-for i_file in range(n_files):
+for i_file in [29]:
     
     file_name = 'rnn_'+str(i_file)
     
@@ -73,32 +75,54 @@ for i_file in range(n_files):
             result = pickle.load(f)
         except EOFError:
             n_errors += 1
+    
+    #plt.figure(figsize=(10, 20))
+    for i in range(9):
+        i_x = i%n_row
+        i_y = i//n_row
+        np.random.seed(i+100)
+        data = result['task'].gen_data(1000, 5000)
         
-    config = [result['sim'].net.alpha, result['task'].tau_task]
+
     
-    if config not in configs:
-        configs.append(config)
-        i_conf = len(configs) - 1
-        first = True
-    else:
-        i_conf = configs.index(config)
-        first = False
+        test_sim = Simulation(result['sim'].best_net, learn_alg=None, optimizer=None)
+        test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
+        axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
+        axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
+        axarr[i_x, i_y].set_xlim([1000, 1400])
+        #axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0], data['test']['Y'][:,0], '.', alpha=0.01)
+        #axarr[i_x, i_y].plot([0, 1], [0, 1], 'k', linestyle='--')
+        title = 'Seed = {}'.format(i)
+        #axarr[i_x, i_y].set_title(title)
+        axarr[i_x, i_y].set_xticks([])
+        axarr[i_x, i_y].set_yticks([])
     
-    if config==[0.3, 4]:
-        i_seed = result['i_seed']
-        if i_seed==17:
-            break
-    else:
-        continue
+    continue 
+#    config = [result['sim'].net.alpha, result['task'].tau_task]
+#    
+#    if config not in configs:
+#        configs.append(config)
+#        i_conf = len(configs) - 1
+#        first = True
+#    else:
+#        i_conf = configs.index(config)
+#        first = False
+#    
+#    if config==[0.3, 4]:
+#        i_seed = result['i_seed']
+#        if i_seed==17:
+#            break
+#    else:
+#        continue
     
-    np.random.seed(1)
+    np.random.seed(100)
     data = result['task'].gen_data(1000, 5000)
         
-    #i_seed = result['i_seed']
+    i_seed = result['i_seed']
     i_x = i_seed%n_row
     i_y = i_seed//n_row
     
-    test_sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
+    test_sim = Simulation(result['sim'].best_net, learn_alg=None, optimizer=None)
     test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
     axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
     axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
@@ -106,11 +130,11 @@ for i_file in range(n_files):
     #axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0], data['test']['Y'][:,0], '.', alpha=0.01)
     #axarr[i_x, i_y].plot([0, 1], [0, 1], 'k', linestyle='--')
     title = 'Seed = {}'.format(i_seed)
-    axarr[i_x, i_y].set_title(title)
+    #axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
     axarr[i_x, i_y].set_yticks([])
         
-
+    val_losses[file_name] = result['sim'].best_val_loss
     
     continue
         
@@ -160,6 +184,31 @@ for i_conf in range(len(configs)):
     axarr[i_x, i_y].plot(loss_avg_1[i_conf]/n_seeds, color='b')
     #axarr[i_x, i_y].plot(loss_avg_2[i_conf]/n_seeds, color='y')
     #axarr[i_x, i_y].plot(loss_avg_3[i_conf]/n_seeds, color='r')    
+
+### STATE SPACE STUFF ###
+#State space
+#plt.figure()
+#ssa = State_Space_Analysis(test_sim.mons['a'], n_PCs=3)
+#for i, col in enumerate(['C{}'.format(i_col) for i_col in range(8)]):
+#    cond = np.array([True]*(n_test-6))
+#    prev_inputs = [int(s) for s in bin(i)[2:].zfill(5)]
+#    for i_back, prev_input in enumerate(prev_inputs):
+#        set_trace()
+#        cond_ = data['test']['X'][5-i_back:-1-i_back,0]==prev_input
+#        cond = np.logical_and(cond, cond_)
+#    print(cond.sum())
+#    ssa.plot_in_state_space(test_sim.mons['a'][5:-1][cond], '.', alpha=0.1, color=col)
+#    
+##    for past in [[0,0], [0, 1], [1, 0], [1, 1]]:
+##        cond = np.where(np.logical_and(data['test']['X'][2:-2,0]==past[0], data['test']['X'][4:,0]==past[1]))
+##        ssa.plot_in_state_space(test_sim.mons['a'][:-4,][cond], '.', alpha=0.3)
+#    
+#for y in [0.25, 0.5, 0.75, 1]:
+#    cond = np.where(data['test']['Y'][:,0]==y)
+#    ssa.plot_in_state_space(test_sim.mons['a'][cond], '.', alpha=0.3)
+    
+#ssa.plot_in_state_space(test_sim.mons['a'])
+
 
 #    for key, col in zip(['loss_', 'acc'], ['b', 'k']):
 #        smoothed_signal = np.convolve(result['rnn'].mons[key],

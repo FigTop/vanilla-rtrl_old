@@ -29,15 +29,17 @@ class Learning_Algorithm:
         self.n_in  = self.net.n_in
         self.n_h   = self.net.n_hidden
         self.n_out = self.net.n_out
-      
+        self.q     = np.zeros(self.n_h)
         
 class Real_Time_Learning_Algorithm(Learning_Algorithm):
     
     def get_outer_grads(self):
 
         return [np.multiply.outer(self.net.e, self.net.a), self.net.e]
-        
+    
     def propagate_feedback_to_hidden(self):
+        
+        self.q_prev = np.copy(self.q)
         
         if not hasattr(self, 'W_FB'):
             self.q = self.net.e.dot(self.net.W_out)
@@ -196,7 +198,8 @@ class DNI(Real_Time_Learning_Algorithm):
         
         allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
                            'activation', 'SG_label_activation', 'backprop_weights',
-                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e'}
+                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e',
+                           'train_SG_with_exact_CA'}
         #Default parameters
         self.optimizer = optimizer
         self.l2_reg = 0
@@ -205,12 +208,12 @@ class DNI(Real_Time_Learning_Algorithm):
         self.SG_label_activation = identity
         self.backprop_weights = 'exact'
         self.sg_loss_thr = 0.05
+        self.train_SG_with_exact_CA = False
         #Override defaults with kwargs
         super().__init__(net, allowed_kwargs_, **kwargs)
         
-        self.A = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
-        self.B = np.random.normal(0, 1/np.sqrt(self.n_out), (self.n_h, self.n_out))
-        self.C = np.zeros(self.n_h)
+        sigma = np.sqrt(1/self.n_h)
+        self.SG_init(sigma)
         
         self.i_fix = 0
         
@@ -219,6 +222,12 @@ class DNI(Real_Time_Learning_Algorithm):
         self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
         self.SG_params = [self.A, self.B, self.C]
         self.e_w = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+        
+    def SG_init(self, sigma):
+        
+        self.A = np.random.normal(0, sigma, (self.n_h, self.n_h))
+        self.B = np.random.normal(0, sigma, (self.n_h, self.n_out))
+        self.C = np.zeros(self.n_h)
         
     def update_learning_vars(self):
         
@@ -275,11 +284,14 @@ class DNI(Real_Time_Learning_Algorithm):
         self.propagate_feedback_to_hidden()
         
         if self.backprop_weights=='exact':
-            sg_target = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
+            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
         elif self.backprop_weights=='approximate':
-            sg_target = self.q + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
+            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
         elif self.backprop_weights=='composite':
-            sg_target = self.q + self.U.dot(self.net.a)
+            sg_target = self.q_prev + self.U.dot(self.net.a)
+        
+        if self.train_SG_with_exact_CA:
+            sg_target = self.net.CA
         
         return sg_target
     
@@ -415,4 +427,77 @@ class BPTT(Learning_Algorithm):
         
         return grads
     
+class Forward_BPTT(Real_Time_Learning_Algorithm):
     
+    def __init__(self, net, T, **kwargs):
+        
+        allowed_kwargs_ = set()
+        super().__init__(net, allowed_kwargs_, **kwargs)
+        
+        self.T = T
+        
+        self.CA_hist = []
+        self.a_hat_hist = []
+        self.h_hist = []
+        
+    def update_learning_vars(self):
+        
+        #Initialize new credit assignment for current time step
+        self.CA_hist.append([0])
+        
+        #Update history
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.a_hat_hist.append(np.copy(self.a_hat))
+        self.h_hist.append(np.copy(self.net.h))
+        
+        self.propagate_feedback_to_hidden()
+        
+        for i_CA in range(len(self.CA_hist)):
+            
+            J = np.eye(self.n_h)
+            
+            for i_BP in range(i_CA):
+            
+                J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
+                
+            self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
+                 
+    def get_rec_grads(self):
+        
+        if len(self.CA_hist)==self.T:
+            
+            self.net.CA = np.copy(self.CA_hist[0])
+            
+            self.D = self.net.activation.f_prime(self.h_hist[0])
+            rec_grads = np.multiply.outer(self.net.CA*self.D, self.a_hat_hist[0])
+            
+            self.delete_history()
+            
+        else:
+            
+            rec_grads = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+            
+        return rec_grads
+            
+    def delete_history(self):
+        
+        for attr in ['CA', 'a_hat', 'h']:
+            del(self.__dict__[attr+'_hist'][0])
+            
+            
+            
+        
+                
+        
+
+
+
+
+
+
+
+
+
+
+
+

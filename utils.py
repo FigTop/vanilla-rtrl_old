@@ -7,6 +7,7 @@ Created on Thu Jan  3 12:08:30 2019
 """
 
 import numpy as np
+import itertools
 
 def norm(z):
     
@@ -20,3 +21,9 @@ def split_weight_matrix(A, sizes, axis=1):
 def rectangular_filter(signal, filter_size=100):
     
     return np.convolve(signal, np.ones(filter_size)/filter_size, mode='valid')
+
+def config_generator(**kwargs):
+    keys = kwargs.keys()
+    vals = kwargs.values()
+    for instance in itertools.product(*vals):
+        yield dict(zip(keys, instance))

@@ -101,6 +101,10 @@ class RNN:
             self.h = np.random.normal(0, 1/np.sqrt(self.n_hidden), self.n_hidden)
             
         self.a = self.activation.f(self.h)
+        
+        if 'a' in kwargs.keys():
+            self.a = kwargs['a']
+        
         self.z = self.W_out.dot(self.a) + self.b_out
         
     def next_state(self, x, a=None, update=True, sigma=0):
@@ -165,8 +169,8 @@ class RNN:
             self.a_J = np.copy(a_J)
         else:
             return a_J
-    
-    
-    
-    
+        
+        
+        
+        
     

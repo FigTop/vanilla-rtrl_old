@@ -92,7 +92,8 @@ class Simulation:
     def run(self, data, mode='train', monitors=[], **kwargs):
         
         allowed_kwargs = {'verbose', 'report_interval', 'check_accuracy', 'check_loss',
-                          'tau_on', 'tau_off', 'phase_method', 'test_loss_thr', 'save_model_interval'}
+                          'tau_on', 'tau_off', 'phase_method', 'test_loss_thr', 'save_model_interval',
+                          'a_initial', 'est_CA_interval'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -119,9 +120,15 @@ class Simulation:
         self.mons = {}
         for mon in monitors:
             self.mons[mon] = []
+        self.objs = [self, self.net, self.learn_alg, self.optimizer]
+        if hasattr(self, 'comparison_alg'):
+            self.objs += [self.comparison_alg]
         
         #Set a random initial state of the network
-        net.reset_network()
+        if hasattr(self, 'a_initial'):
+            net.reset_network(a=self.a_initial)
+        else:
+            net.reset_network()
         
         #Make local copies of (meta-)data
         x_inputs = data[self.mode]['X']
@@ -154,7 +161,7 @@ class Simulation:
             if hasattr(self, 't_stop_SG_train'):
                 if self.t_stop_SG_train==i_t:
                     self.learn_alg.optimizer.lr = 0
-                    
+                
             #Current inputs/labels become previous inputs/labels
             net.x_prev = np.copy(net.x)
             net.y_prev = np.copy(net.y)
@@ -179,6 +186,10 @@ class Simulation:
             if hasattr(self, 't_stop_training') and self.mode=='train':
                 if self.t_stop_training==i_t:
                     break
+                
+            if hasattr(self, 'est_CA_interval') and self.mode=='train':
+                if (i_t%self.est_CA_interval)==0:
+                    self.forward_estimate_credit_assignment(i_t, data)
         
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
@@ -205,6 +216,10 @@ class Simulation:
         self.learn_alg.update_learning_vars()
         #Use learning algorithm to generate gradients
         self.grads = self.learn_alg()
+        #Define each grad individuallyas well as a global grad for monitoring purposes
+        for i, w in enumerate(['W_rec', 'W_in', 'b_rec', 'W_out', 'b_out']):
+            setattr(self, w+'_grad', self.grads[i])
+        self.global_grad = np.concatenate([g.flatten() for g in self.grads])
         
         #If a comparison algorithm is provided, update
         #its internal parameters, generate gradients,
@@ -214,15 +229,16 @@ class Simulation:
             self.comparison_alg.update_learning_vars()
             self.grads_ = self.comparison_alg()
             G = zip(self.grads, self.grads_)
-            try:
-                self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
-            except RuntimeWarning:
-                self.alignment = [0]*5
-            self.W_rec_alignment = self.alignment[0]
-            self.W_in_alignment  = self.alignment[1]
-            self.b_rec_alignment = self.alignment[2]
-            self.W_out_alignment = self.alignment[3]
-            self.b_out_alignment = self.alignment[4]
+            if False:
+                try:
+                    self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
+                except RuntimeWarning:
+                    self.alignment = [0]*5
+                self.W_rec_alignment = self.alignment[0]
+                self.W_in_alignment  = self.alignment[1]
+                self.b_rec_alignment = self.alignment[2]
+                self.W_out_alignment = self.alignment[3]
+                self.b_out_alignment = self.alignment[4]
         
         #Add L2 regularization derivative to gradient
         if self.L2_reg>0:
@@ -274,7 +290,7 @@ class Simulation:
     def update_monitors(self):
 
         for key in self.mons.keys():
-            for obj in [self, self.net, self.learn_alg, self.optimizer]:
+            for obj in self.objs:
                 try:
                     self.mons[key].append(getattr(obj, key))
                 except AttributeError:
@@ -288,7 +304,7 @@ class Simulation:
         
         objs = [self, self.learn_alg]
         if hasattr(self, 'comparison_alg'):
-            objs += self.comparison_alg
+            objs += [self.comparison_alg]
             
         for obj in objs:
             if hasattr(obj, 'mons'):
@@ -312,11 +328,7 @@ class Simulation:
         for feature, func in zip(['radius', 'norm'], [get_spectral_radius, norm]):
             for key in self.mons.keys():
                 if feature in key:
-                    spl = key.split('_')
-                    if len(spl)>2:
-                        a = spl[0]+'_'+spl[1]
-                    else:
-                        a = spl[0]
+                    a = key.split('-')[0]
                     for obj in [self, self.net, self.learn_alg]:
                         if hasattr(obj, a):
                             setattr(self, key, func(getattr(obj, a)))
@@ -330,4 +342,54 @@ class Simulation:
         if val_loss < self.best_val_loss:
             self.best_net = copy(self.net)
             self.best_val_loss = val_loss
+            
+    def forward_estimate_credit_assignment(self, i_t, data, t_steps=14, delta_a=0.0001):
+        
+        try:
+            truncated_data = {'test': {'X': data['train']['X'][i_t:i_t+t_steps,:],
+                                       'Y': data['train']['Y'][i_t:i_t+t_steps,:]}}
+        except IndexError:
+            return
+        
+        fiducial_rnn = copy(self.net)
+        fiducial_sim = copy(self)
+        perturbed_rnn = copy(self.net)
+        perturbed_sim = copy(self)
+        
+        direction = np.random.normal(0, 1, self.net.n_hidden)
+        perturbation = delta_a*direction/norm(direction)
+        a_fiducial = self.net.a - perturbation
+        a_perturbed = self.net.a + perturbation
+        
+        fiducial_sim.run(truncated_data,
+                         mode='test',
+                         monitors=['loss_'],
+                         a_initial=a_fiducial,
+                         verbose=False)
+        
+        perturbed_sim.run(truncated_data,
+                          mode='test',
+                          monitors=['loss_'],
+                          a_initial=a_perturbed,
+                          verbose=False)
+        
+        delta_loss = perturbed_sim.mons['loss_'].sum() - fiducial_sim.mons['loss_'].sum()
+        self.CA_forward_est = delta_loss/(2*delta_a)
+        self.CA_SG_est = self.learn_alg.sg.dot(direction)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
