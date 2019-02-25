@@ -10,6 +10,7 @@ import numpy as np
 from pdb import set_trace
 from utils import *
 from functions import *
+from copy import copy
 
 class Learning_Algorithm:
     
@@ -484,15 +485,81 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
         for attr in ['CA', 'a_hat', 'h']:
             del(self.__dict__[attr+'_hist'][0])
             
-            
-            
+class KeRNL(Real_Time_Learning_Algorithm):
+    
+    def __init__(self, net, optimizer, T=20, sigma_noise=0.00001,
+                 use_approx_kernel=False, **kwargs):
+
+        self.n_h = net.n_hidden
+        self.n_in = net.n_in
+        self.T = T
+        self.sigma_noise = sigma_noise
+        self.optimizer = optimizer
+        self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
         
-                
+        #Initialize learning variables
+        self.beta = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        self.gamma = (1/self.T)**np.random.uniform(0, 2, self.n_h)
+        self.eligibility = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+        self.Omega = np.zeros(self.n_h)
+        self.Gamma = np.zeros(self.n_h)
         
-
-
-
-
+        #Initialize noisy network
+        self.noisy_net = copy(net)
+        
+        allowed_kwargs_ = {'beta', 'gamma', 'Omega', 'Gamma', 'eligibility'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+        
+        if use_approx_kernel:
+            self.kernel = self.approx_kernel
+        else:
+            self.kernel = self.exact_kernel
+        
+    def exact_kernel(self, delta_t):
+        
+        return np.exp(-self.gamma*(delta_t))
+    
+    def approx_kernel(self, delta_t):
+        
+        return 1 - self.gamma*delta_t
+    
+    def update_learning_vars(self):
+        
+        #Observe Jacobian if desired:
+        self.J = self.net.get_a_jacobian(update=False)
+        
+        #Update noisy net's parameters
+        self.noisy_net.W_rec = self.net.W_rec
+        self.noisy_net.W_in = self.net.W_in
+        self.noisy_net.b_rec = self.net.b_rec
+        
+        #Update noisy net forward
+        self.noisy_net.a += self.zeta
+        self.noisy_net.next_state(self.net.x)
+        
+        #Update learning varialbes
+        self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
+        self.Gamma = self.kernel(1)*(self.Gamma - self.Omega)
+        self.Omega = self.kernel(1)*self.Omega + self.zeta
+        
+        #Update eligibility traces
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.papw = self.net.alpha*np.multiply.outer(self.D, self.a_hat)
+        self.eligibility = (self.eligibility.T*self.kernel(1)).T + self.papw
+        
+        #Get error in predicting perturbations effect
+        self.e_noise = self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a)
+        
+        #Update beta and gamma
+        self.beta_grads = np.multiply.outer(self.e_noise, self.Omega)
+        self.gamma_grads = self.e_noise.dot(self.beta)*self.Gamma
+        self.beta, self.gamma = self.optimizer.get_update([self.beta, self.gamma],
+                                                          [self.beta_grads, self.gamma_grads])
+        
+    def get_rec_grads(self):
+        
+        return (self.eligibility.T*self.q.dot(self.beta)).T
 
 
 

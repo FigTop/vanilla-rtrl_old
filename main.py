@@ -44,12 +44,10 @@ if os.environ['HOME']=='/home/oem214':
     np.random.seed(i_seed)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'lr': 0.001,
-              'W_a_lr': 0.01,
-              'alpha': 0.3}
+    params = {}
 
 task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
-data = task.gen_data(1000000, 8000)
+data = task.gen_data(100000, 1000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -71,7 +69,8 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=params['lr'])#, clipnorm=5)
+optimizer = SGD(lr=0.001)#, clipnorm=5)
+KeRNL_optimizer = SGD(lr=0.001)
 #SG_optimizer = SGD(lr=0.01)
 #learn_alg = DNI(rnn, SG_optimizer, W_a_lr=params['W_a_lr'], backprop_weights='exact',
 #                SG_label_activation=identity)#, W_FB=W_FB)
@@ -80,11 +79,12 @@ optimizer = SGD(lr=params['lr'])#, clipnorm=5)
 #learn_alg = RTRL(rnn)
 #T = 20
 #comp_alg = Forward_BPTT(rnn, T)
-learn_alg = RFLO(rnn, alpha=params['alpha_RFLO'], W_FB=W_FB)
+#learn_alg = RFLO(rnn, alpha=params['alpha_RFLO'], W_FB=W_FB)
+learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.01)
 #cCclearn_alg = BPTT(rnn, 1, 10)
 #monitors = ['loss_', 'y_hat', 'sg_loss', 'loss_a', 'sg_target-norm', 'global_grad-norm', 'A-norm', 'a-norm']
 #monitors += ['CA_forward_est', 'CA_SG_est']
-monitors = ['loss_', 'y_hat']#, 'sg_loss', 'loss_a', 'sg', 'CA', 'W_rec_alignment']
+monitors = ['loss_', 'y_hat', 'beta', 'J']#, 'sg_loss', 'loss_a', 'sg', 'CA', 'W_rec_alignment']
 
 sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.00001)#, comparison_alg=comp_alg)
 sim.run(data,
@@ -112,7 +112,7 @@ if os.environ['HOME']=='/Users/omarschall':
         dots = (sim.mons['sg'][:-(T-1)]*sim.mons['CA']).sum(1)
         norms = np.sqrt(np.square(sim.mons['sg'][:-(T-1)]).sum(1)*np.square(sim.mons['CA']).sum(1))
         plt.plot(dots/norms, '.', alpha=0.3)
-    except ValueError:
+    except:
         pass
     
     #Test run

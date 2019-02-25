@@ -21,13 +21,13 @@ class Test_Learning_Algorithm(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         
-        task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
+        cls.task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
         #task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
-        cls.data = task.gen_data(100, 100)
+        cls.data = cls.task.gen_data(100, 100)
         
-        n_in     = task.n_in
+        n_in     = cls.task.n_in
         n_hidden = 32
-        n_out    = task.n_out
+        n_out    = cls.task.n_out
         
         cls.W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
         cls.W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
@@ -85,13 +85,13 @@ class Test_Learning_Algorithm(unittest.TestCase):
         
     def test_forward_bptt(self):
         
-        self.data = task.gen_data(2000, 100)
+        self.data = self.task.gen_data(2000, 100)
         
         np.random.seed(1)
-        self.optimizer_1 = SGD(lr=0.00001)
+        self.optimizer_1 = SGD(lr=0.000001)
         self.learn_alg_1 = RTRL(self.rnn_1)
         np.random.seed(1)
-        self.optimizer_2 = SGD(lr=0.00001)
+        self.optimizer_2 = SGD(lr=0.000001)
         self.learn_alg_2 = Forward_BPTT(self.rnn_2, 15)
         
         monitors = ['loss_', 'y_hat', 'a']
@@ -111,6 +111,43 @@ class Test_Learning_Algorithm(unittest.TestCase):
         self.assertTrue(np.isclose(self.rnn_1.W_rec, self.rnn_2.W_rec, atol=1e-5).all())
         self.assertFalse(np.isclose(self.W_rec, self.rnn_2.W_rec, atol=1e-3).all())
         
+    def test_kernl_reduce_rflo(self):
+        
+        self.data = self.task.gen_data(2000, 100)
+        
+        alpha = 0.3
+        
+        self.rnn_1.alpha = alpha
+        self.rnn_2.alpha = alpha
+        
+        np.random.seed(1)
+        self.optimizer_1 = SGD(lr=0.001)
+        self.learn_alg_1 = RFLO(self.rnn_1, alpha)
+        np.random.seed(1)
+        self.optimizer_2 = SGD(lr=0.001)
+        self.KeRNL_optimizer = SGD(lr=0)
+        beta = np.eye(self.rnn_2.n_hidden)
+        gamma = np.ones(self.rnn_2.n_hidden)*alpha
+        self.learn_alg_2 = KeRNL(self.rnn_2, self.KeRNL_optimizer,
+                                 beta=beta, gamma=gamma,
+                                 use_approx_kernel=True)
+        
+        monitors = ['loss_', 'y_hat', 'a']
+        
+        np.random.seed(2)
+        self.sim_1 = Simulation(self.rnn_1, self.learn_alg_1, self.optimizer_1, L2_reg=0.0001)
+        self.sim_1.run(self.data,
+                       monitors=monitors,
+                       verbose=False)
+        
+        np.random.seed(2)
+        self.sim_2 = Simulation(self.rnn_2, self.learn_alg_2, self.optimizer_2, L2_reg=0.0001)
+        self.sim_2.run(self.data,
+                       monitors=monitors,
+                       verbose=False)
+        
+        self.assertTrue(np.isclose(self.rnn_1.W_rec, self.rnn_2.W_rec, atol=1e-5).all())
+        self.assertFalse(np.isclose(self.W_rec, self.rnn_2.W_rec, atol=1e-3).all())
         
 if __name__=='__main__':
     unittest.main()
