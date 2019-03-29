@@ -13,17 +13,19 @@ from mpl_toolkits.mplot3d import Axes3D
 
 class State_Space_Analysis:
     
-    def __init__(self, trajectories, n_PCs=2):
+    def __init__(self, trajectories, n_PCs=2, add_fig=True):
         '''
         The array trajectories must have a shape of (sample, unit)
         '''
         
         self.n_PCs = n_PCs
-        self.fig = plt.figure()
-        if n_PCs==2:
-            self.ax = self.fig.add_subplot(111)
-        if n_PCs==3:
-            self.ax = self.fig.add_subplot(111, projection='3d')
+        
+        if add_fig:
+            self.fig = plt.figure()
+            if n_PCs==2:
+                self.ax = self.fig.add_subplot(111)
+            if n_PCs==3:
+                self.ax = self.fig.add_subplot(111, projection='3d')
         
         self.trajectories = trajectories
         
@@ -36,5 +38,17 @@ class State_Space_Analysis:
         
         if self.n_PCs==2:
             self.ax.plot(PCs[:,0], PCs[:,1], *args, **kwargs)
+            self.ax.plot([PCs[0,0]], [PCs[0,1]], '*', color=kwargs['color'])
         if self.n_PCs==3:
             self.ax.plot(PCs[:,0], PCs[:,1], PCs[:,2], *args, **kwargs)
+   
+if __name__=='__main__':    
+    ssa2 = State_Space_Analysis(test_sim.mons['a'], n_PCs=2)
+    a = test_sim.mons['a'].reshape((-1, task.time_steps_per_trial, n_hidden))
+    x = data['test']['X'].reshape((-1, task.time_steps_per_trial, n_in))
+    on_trials = np.where(x[:,1,0]>0)[0]
+    for i in range(a.shape[0]):
+        if i in on_trials:
+            ssa2.plot_in_state_space(a[i], color='b', alpha=0.2)
+        else:
+            ssa2.plot_in_state_space(a[i], color='g', alpha=0.2)

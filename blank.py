@@ -12,6 +12,34 @@ import pickle
 import os
 from utils import *
 
+
+job_name = 'ssa_learning_bptt_sg'
+data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)
+
+data_dir = '/Users/omarschall/vanilla-rtrl/library'
+file_name = 'rnn_0_trial_0'
+with open(os.path.join(data_dir, file_name), 'rb') as f:
+    #result = pickle.load(f)
+    test_data = pickle.load(f)
+
+for i in range(test_data['PC_on_trajs'].shape[0]):
+    plt.plot(test_data['PC_on_trajs'][i,:,0],test_data['PC_on_trajs'][i,:,1], color='b', alpha=0.2)
+for i in range(test_data['PC_off_trajs'].shape[0]):
+    plt.plot(test_data['PC_off_trajs'][i,:,0],test_data['PC_off_trajs'][i,:,1], color='g', alpha=0.2)
+    
+#sim = result['sim']
+#print(result['config'])
+#
+#n_trials = len(sim.SSAs)
+#n_PCs = 3
+#alignments = np.zeros((n_trials, n_trials))
+#for i in range(n_trials):
+#    for j in range(n_trials):
+#        alignments[i,j] = (norm(sim.SSAs[i][:,:n_PCs].T.dot(sim.SSAs[j][:,:n_PCs]))**2)/n_PCs
+#        
+#plt.imshow(alignments)
+
+
 #a = rnn.mons['a']
 #T = 100
 #n_tau = 5
@@ -33,6 +61,26 @@ from utils import *
 #plt.ylabel('Autoorrelation')
 #plt.xlabel('Time')
 #plt.xticks(range(0, n_tau, 4))
+
+#signals = []
+#legend = []
+#for key in sim.mons.keys():
+#    s = sim.mons[key].shape
+#    if len(s)==1 and s[0]>0:
+#        signals.append(sim.mons[key])
+#        legend.append(key)
+#fig1 = plot_filtered_signals(signals, filter_size=100, y_lim=[0, 1])
+#plt.legend(legend)
+#fig2 = plot_filtered_signals(signals, filter_size=100, y_lim=[0, 20])
+#plt.legend(legend)
+#
+#try:
+#    plt.figure()
+#    dots = (sim.mons['sg'][:-(T-1)]*sim.mons['CA']).sum(1)
+#    norms = np.sqrt(np.square(sim.mons['sg'][:-(T-1)]).sum(1)*np.square(sim.mons['CA']).sum(1))
+#    plt.plot(dots/norms, '.', alpha=0.3)
+#except:
+#    pass
 
 ### -------- Make big fig ---- ####
 

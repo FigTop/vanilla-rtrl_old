@@ -174,13 +174,13 @@ class Mimic_RNN(Task):
             
 class Sine_Wave(Task):
     
-    def __init__(self, p_transition, frequencies, **kwargs):
+    def __init__(self, p_transition, frequencies, never_off=False, **kwargs):
         
         allowed_kwargs = {'p_frequencies', 'amplitude', 'method'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
-                                'passed to RFLO.__init__: ' + str(k))
+                                'passed to Sine_Wave.__init__: ' + str(k))
         
         super().__init__(2, 2)
         
@@ -189,6 +189,7 @@ class Sine_Wave(Task):
         self.amplitude = 0.1
         self.frequencies = frequencies
         self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
+        self.never_off = never_off
         self.__dict__.update(kwargs)
                  
     def gen_dataset(self, N):
@@ -214,12 +215,12 @@ class Sine_Wave(Task):
                 
                 t = 0
                 
-                if active:
+                if active and not self.never_off:
                     X[i,0] = 1
                     X[i,1] = 0
                     Y[i,:] = 0
                 
-                if not active:
+                if not active or self.never_off:
                     X[i,0] = np.random.choice(self.frequencies, p=self.p_frequencies)
                     X[i,1] = 1
                     Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)
@@ -231,8 +232,8 @@ class Sine_Wave(Task):
                 
                 t+=1
                 X[i,:] = X[i-1,:]
-                Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*active
-                Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*active
+                Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*(active or self.never_off)
+                Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*(active or self.never_off)
                 
             self.switch_cond = False
                 
@@ -240,9 +241,46 @@ class Sine_Wave(Task):
                 
         return X, Y
         
+class Sensorimotor_Mapping(Task):
+    
+    def __init__(self, t_stim=1, stim_duration=3,
+                       t_report=20, report_duration=3):
         
+        super().__init__(2, 2)
         
+        self.t_stim = t_stim
+        self.stim_duration = stim_duration
+        self.t_report = t_report
+        self.report_duration = report_duration
+        self.time_steps_per_trial = t_report + report_duration
         
+        #Make mask for preferential learning within task
+        self.trial_lr_mask = np.ones(self.time_steps_per_trial)*0.1
+        self.trial_lr_mask[self.t_report:self.t_report+self.report_duration] = 1
+        
+    def gen_dataset(self, N):
+        
+        X = []
+        Y = []
+        
+        for i in range(N//self.time_steps_per_trial):
+            
+            x = np.zeros((self.time_steps_per_trial, 2))
+            y = np.ones_like(x)*0.5
+            
+            LR = 2*np.random.binomial(1, 0.5) - 1
+            x[self.t_stim:self.t_stim+self.stim_duration, 0] = LR
+            x[self.t_report:self.t_report+self.report_duration, 1] = 1
+            y[self.t_report:self.t_report+self.report_duration, 0] = 0.5*(LR + 1)
+            y[self.t_report:self.t_report+self.report_duration, 1] = 1 - 0.5*(LR + 1)
+        
+            X.append(x)
+            Y.append(y)
+            
+        X = np.concatenate(X, axis=0)
+        Y = np.concatenate(Y, axis=0)
+        
+        return X, Y
         
         
         

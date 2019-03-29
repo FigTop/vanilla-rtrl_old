@@ -80,6 +80,10 @@ class RTRL(Real_Time_Learning_Algorithm):
 
         return self.q.dot(self.dadw).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
     
+    def reset_learning(self):
+        
+        self.dadw *= 0
+    
 class UORO(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, **kwargs):
@@ -128,6 +132,11 @@ class UORO(Real_Time_Learning_Algorithm):
         self.Q = self.q.dot(self.a_tilde) #"Global learning signal"
         return (self.Q*self.w_tilde).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
     
+    def reset_learning(self):
+        
+        self.w_tilde = np.random.normal(0, 1, self.net.n_hidden_params)
+        self.a_tilde = np.random.normal(0, 1, self.net.n_hidden)
+    
 class KF_RTRL(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, **kwargs):
@@ -168,6 +177,11 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
         
         self.qA = self.q.dot(self.A) #Unit-specific learning signal
         return np.kron(self.u, self.qA).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
+    
+    def reset_learning(self):
+        
+        self.A = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        self.u = np.random.normal(0, 1, self.n_h + self.n_in +1)
 
 class RFLO(Real_Time_Learning_Algorithm):
     
@@ -192,6 +206,10 @@ class RFLO(Real_Time_Learning_Algorithm):
     def get_rec_grads(self):
         
         return (self.q*self.P.T).T
+    
+    def reset_learning(self):
+        
+        self.P *= 0
     
 class DNI(Real_Time_Learning_Algorithm):
     
@@ -340,6 +358,10 @@ class DNI(Real_Time_Learning_Algorithm):
         self.D = self.net.activation.f_prime(self.net.h)
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
+        
+    def reset_learning(self):
+        
+        pass
 
 class BPTT(Learning_Algorithm):
     
@@ -480,6 +502,12 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
             
         return rec_grads
             
+    def reset_learning(self):
+        
+        self.CA_hist = []
+        self.a_hat_hist = []
+        self.h_hist = []
+    
     def delete_history(self):
         
         for attr in ['CA', 'a_hat', 'h']:

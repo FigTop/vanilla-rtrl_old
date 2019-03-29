@@ -12,6 +12,9 @@ from copy import copy
 from pdb import set_trace
 from analysis_funcs import *
 from utils import *
+from state_space import State_Space_Analysis
+import pickle
+import os
 
 class Simulation:
     
@@ -70,7 +73,8 @@ class Simulation:
         allowed_kwargs = {'L2_reg', 'update_interval', 'sigma',
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training',
-                          'tau_avg', 'check_loss'}.union(allowed_kwargs_)
+                          'tau_avg', 'check_loss', 'time_steps_per_trial', 'reset_sigma',
+                          'trial_lr_mask', 'SSA_PCs', 'i_job', 'save_dir'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -140,10 +144,59 @@ class Simulation:
         net.x_prev = x_inputs[0]
         net.y_prev = y_labels[0]
         
+        if hasattr(self, 'time_steps_per_trial'):
+            X_reshaped = data['test']['X'].reshape((-1, self.time_steps_per_trial, self.net.n_in))
+            on_trials = np.where(X_reshaped[:,1,0]>0)[0]
+            off_trials = np.where(X_reshaped[:,1,0]<0)[0]
+        
+        #Initialize test data
+        if hasattr(self, 'SSA_PCs') and mode=='train':
+            test_data = {}
+            file_name = 'rnn_{}_test_data'.format(self.i_job)
+            save_path = os.path.join(self.save_dir, file_name)
+            with open(save_path, 'wb') as f:
+                pickle.dump(test_data, f)
+        
         #Track computation time
         self.t1 = time.time()
         
         for i_t in range(self.T):
+            
+            ### --- Reset model if there is a trial structure --- ###
+            
+            if hasattr(self, 'time_steps_per_trial'):
+                self.i_t_trial = i_t%self.time_steps_per_trial
+                if self.i_t_trial==0:
+                    self.i_trial = i_t//self.time_steps_per_trial
+                    self.net.reset_network(sigma=self.reset_sigma)
+                    try:
+                        self.learn_alg.reset_learning()
+                    except AttributeError:
+                        pass
+                    
+                    if hasattr(self, 'SSA_PCs') and self.mode=='train':
+                        
+                        with open(save_path, 'rb') as f:
+                            test_data = pickle.load(f)
+                        
+                        np.random.seed(0)
+                        test_sim = copy(self)
+                        test_sim.run(data, mode='test', monitors=['a'], verbose=False)
+                        
+                        test_data_trial = {}
+                        PCs = State_Space_Analysis(test_sim.mons['a'], add_fig=False).V[:,:self.SSA_PCs]
+                        A = test_sim.mons['a'].reshape((-1, self.time_steps_per_trial, self.net.n_hidden))
+                        PC_on_trajs = A[on_trials].dot(PCs)
+                        PC_off_trajs = A[off_trials].dot(PCs)
+                        test_data_trial['PCs'] = PCs
+                        test_data_trial['PC_on_trajs'] = PC_on_trajs
+                        test_data_trial['PC_off_trajs'] = PC_off_trajs
+                        
+                        test_data[self.i_trial] = test_data_trial
+                        with open(save_path, 'wb') as f:
+                            pickle.dump(test_data, f)
+            
+            np.random.seed()
             
             ### --- Run network forwards and get error --- ###
             
@@ -153,7 +206,7 @@ class Simulation:
 
             if self.mode=='train':
                 self.train_step(i_t)
-            
+                    
             #Model-specific updates
             if hasattr(net, 'model_specific_update'):
                 net.model_specific_update(self)
@@ -219,7 +272,8 @@ class Simulation:
         #Define each grad individuallyas well as a global grad for monitoring purposes
         for i, w in enumerate(['W_rec', 'W_in', 'b_rec', 'W_out', 'b_out']):
             setattr(self, w+'_grad', self.grads[i])
-        self.global_grad = np.concatenate([g.flatten() for g in self.grads])
+        if 'global_grad' in self.mons:
+            self.global_grad = np.concatenate([g.flatten() for g in self.grads])
         
         #If a comparison algorithm is provided, update
         #its internal parameters, generate gradients,
@@ -244,8 +298,13 @@ class Simulation:
         if self.L2_reg>0:
             self.L2_regularization()
             
+        #Rescale the gradients based on the point in trial structure, if any
+        if hasattr(self, 'trial_lr_mask'):
+            m = self.trial_lr_mask[self.i_t_trial]
+            self.grads = [m*g for g in self.grads]
+            
         #If on the update cycle (always true for update_inteval=1),
-        #pass gradients to the optimizer and update parameters.
+        #pass gradients to the optimizer and update parameters.            
         if (i_t + 1)%self.update_interval==0:
             net.params = self.optimizer.get_update(net.params, self.grads)
             net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
