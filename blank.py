@@ -12,6 +12,39 @@ import pickle
 import os
 from utils import *
 
+data_dir = '/scratch/oem214/vanilla-rtrl/library/ssa_learning_rtrl_sg'
+
+i_file = i_job
+file_name = 'rnn_{}'.format(i_file)
+test_file_name = 'rnn_{}_test_data'.format(i_file)
+
+data_path = os.path.join(data_dir, test_file_name)
+rnn_path = os.path.join(data_dir, file_name)
+with open(data_path, 'rb') as f:
+    test_data = pickle.load(f)
+with open(rnn_path, 'rb') as f:
+    result = pickle.load(f)
+    
+n_trials = len(test_data.keys())
+alignments = np.zeros((n_trials, n_trials))
+for i in range(n_trials):
+    for j in range(n_trials):
+        alignments[i,j] = np.square(test_data[i]['PCs'].T.dot(test_data[j]['PCs'])).sum()/3
+
+result = {}
+result[file_name+'_alignments'] = alignments
+
+if os.environ['HOME']=='/home/oem214':
+
+    save_dir = os.environ['SAVEPATH']
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    save_path = os.path.join(save_dir, 'rnn_{}_analysis'.format(i_file))
+    
+    with open(save_path, 'wb') as f:
+        pickle.dump(result, f)
+
+##-----
 
 job_name = 'ssa_learning_bptt_sg'
 data_dir = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/', job_name)

@@ -74,7 +74,8 @@ class Simulation:
                           'verbose', 'report_interval', 'comparison_alg', 'mode',
                           'check_accuracy', 't_stop_SG_train', 't_stop_training',
                           'tau_avg', 'check_loss', 'time_steps_per_trial', 'reset_sigma',
-                          'trial_lr_mask', 'SSA_PCs', 'i_job', 'save_dir'}.union(allowed_kwargs_)
+                          'trial_lr_mask', 'SSA_PCs', 'i_job', 'save_dir',
+                          'reset_at_trial_start'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -168,11 +169,12 @@ class Simulation:
                 self.i_t_trial = i_t%self.time_steps_per_trial
                 if self.i_t_trial==0:
                     self.i_trial = i_t//self.time_steps_per_trial
-                    self.net.reset_network(sigma=self.reset_sigma)
-                    try:
-                        self.learn_alg.reset_learning()
-                    except AttributeError:
-                        pass
+                    if self.reset_at_trial_start:
+                        self.net.reset_network(sigma=self.reset_sigma)
+                        try:
+                            self.learn_alg.reset_learning()
+                        except AttributeError:
+                            pass
                     
                     if hasattr(self, 'SSA_PCs') and self.mode=='train':
                         
