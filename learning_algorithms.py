@@ -16,13 +16,17 @@ class Learning_Algorithm:
     
     def __init__(self, net, allowed_kwargs_, **kwargs):
         
-        allowed_kwargs = {'W_FB'}.union(allowed_kwargs_)
+        allowed_kwargs = {'W_FB', 'n_repeats'}.union(allowed_kwargs_)
                 
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
                                 'passed to Learning_Algorithm.__init__: ' + str(k))
         
+        for attr in allowed_kwargs:
+            if not hasattr(self, attr):
+                setattr(self, attr, None)
+            
         self.__dict__.update(kwargs)
         
         #RNN instance the algorithm is being applied to
@@ -30,6 +34,7 @@ class Learning_Algorithm:
         self.n_in  = self.net.n_in
         self.n_h   = self.net.n_hidden
         self.n_out = self.net.n_out
+        self.m = self.n_h + self.n_in + 1
         self.q     = np.zeros(self.n_h)
         
 class Real_Time_Learning_Algorithm(Learning_Algorithm):
@@ -42,7 +47,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         
         self.q_prev = np.copy(self.q)
         
-        if not hasattr(self, 'W_FB'):
+        if self.W_FB is None:
             self.q = self.net.e.dot(self.net.W_out)
         else:
             self.q = self.net.e.dot(self.W_FB)
@@ -104,7 +109,7 @@ class UORO(Real_Time_Learning_Algorithm):
         self.nu = np.random.uniform(-1, 1, self.n_h)
         
         #Forward differentiation method
-        if hasattr(self, 'epsilon'):
+        if self.epsilon is not None:
             self.a_eps = self.net.a_prev + self.epsilon*self.a_tilde
             self.f1 = self.net.next_state(self.net.x, self.a_eps, update=False)  
             self.f2 = self.net.next_state(self.net.x, self.net.a_prev, update=False)
@@ -118,9 +123,9 @@ class UORO(Real_Time_Learning_Algorithm):
             self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/self.n_h)
             
         #Override with fixed P0 and P1 if given
-        if hasattr(self, 'P0'):
+        if self.P0 is not None:
             self.p0 = np.copy(self.P0)
-        if hasattr(self, 'P1'):
+        if self.P1 is not None:
             self.p1 = np.copy(self.P1)
             
         #Update outer product approximation
@@ -137,6 +142,42 @@ class UORO(Real_Time_Learning_Algorithm):
         self.w_tilde = np.random.normal(0, 1, self.net.n_hidden_params)
         self.a_tilde = np.random.normal(0, 1, self.net.n_hidden)
     
+class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
+    
+    def __init__(self, net, rho_A=1, rho_B=1, gamma=0.5, **kwargs):
+        
+        allowed_kwargs_ = set()
+        super().__init__(net, allowed_kwargs_, **kwargs)
+        
+        self.gamma = gamma
+        self.rho_A = rho_A
+        self.rho_B = rho_B
+        self.A = np.zeros((self.n_h, self.m))
+        self.B = np.zeros((self.n_h, self.n_h))
+    
+    def update_learning_vars(self):
+        
+        self.net.get_a_jacobian()
+        a_J = self.net.a_J
+        
+        self.nu = np.random.choice([-1, 1], self.n_h)
+        
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        
+        self.e_ij = np.multiply.outer(self.D**(1-self.gamma),
+                                      self.a_hat)
+        self.e_ki = np.diag(self.D**self.gamma)
+        
+        self.A = self.A + (self.nu*(self.rho_A*self.e_ij).T).T
+        self.B = a_J.dot(self.B) + self.nu*self.rho_B*self.e_ki
+        
+    def get_rec_grads(self):
+        
+        return (self.q.dot(self.B)*self.A.T).T
+        
 class KF_RTRL(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, **kwargs):
@@ -145,9 +186,9 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
         super().__init__(net, allowed_kwargs_, **kwargs)
         
         #Initialize A and u matrices
-        if not hasattr(self, 'A'):
+        if self.A is None:
             self.A = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
-        if not hasattr(self, 'u'):
+        if self.u is None:
             self.u = np.random.normal(0, 1, self.n_h + self.n_in +1)
         
     def update_learning_vars(self):
@@ -160,11 +201,11 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
         self.c0, self.c1 = np.random.uniform(-1, 1, 2)
         
         #Calculate p0, p1 or override with fixed P0, P1 if given
-        if not hasattr(self, 'P0'):
+        if self.P0 is None:
             self.p0 = np.sqrt(norm(self.H_prime)/norm(self.u))
         else:
             self.p0 = np.copy(self.P0)
-        if not hasattr(self, 'P1'):
+        if self.P1 is None:
             self.p1 = np.sqrt(norm(self.D)/norm(self.a_hat))
         else:
             self.p1 = np.copy(self.P1)
@@ -191,7 +232,7 @@ class RFLO(Real_Time_Learning_Algorithm):
         super().__init__(net, allowed_kwargs_, **kwargs)
         
         self.alpha = alpha
-        if not hasattr(self, 'P'):
+        if self.P is None:
             self.P = np.zeros((self.n_h, self.n_h + self.n_in + 1))
         
     def update_learning_vars(self):
@@ -256,14 +297,14 @@ class DNI(Real_Time_Learning_Algorithm):
         #Computer SG error term
         self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
         
-        if hasattr(self, 'SG_clipnorm'):
+        if self.SG_clipnorm is not None:
             self.sg_norm = norm(self.sg)
             if self.sg_norm > self.SG_clipnorm:
                 self.sg = self.sg / self.sg_norm
                 
         self.sg_target = self.get_sg_target()
         
-        if hasattr(self, 'SG_target_clipnorm'):
+        if self.SG_target_clipnorm is not None:
             self.sg_target_norm = norm(self.sg_target)
             if self.sg_target_norm > self.SG_target_clipnorm:
                 self.sg_target = self.sg_target / self.sg_target_norm
@@ -292,10 +333,10 @@ class DNI(Real_Time_Learning_Algorithm):
         else:
             self.i_fix += 1
         
-        if hasattr(self, 'W_a_lr'):
+        if self.W_a_lr is not None:
             self.update_W_a()
-            
-        if hasattr(self, 'U_lr'):
+        
+        if self.U_lr is not None:
             self.update_U()
         
     def get_sg_target(self):
@@ -340,14 +381,14 @@ class DNI(Real_Time_Learning_Algorithm):
         self.sg = self.synthetic_grad(self.net.a, self.net.y)
         self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
         
-        if hasattr(self, 'SG_clipnorm'):
+        if self.SG_clipnorm is not None:
             sg_norm = norm(self.sg)
             if sg_norm > self.SG_clipnorm:
                 self.sg = self.sg / sg_norm
                 
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         
-        if hasattr(self, 'alpha_e'):
+        if self.alpha_e is not None:
             self.update_synaptic_eligibility_trace()
             return (self.e_w.T*self.sg).T
         else:
@@ -477,13 +518,18 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
         
         for i_CA in range(len(self.CA_hist)):
             
-            J = np.eye(self.n_h)
+            q = np.copy(self.q)
+            #J = np.eye(self.n_h)
             
             for i_BP in range(i_CA):
-            
-                J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
                 
-            self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
+                J = self.net.get_a_jacobian(update=False,
+                                            h=self.h_hist[-(i_BP+1)])
+                q = q.dot(J)
+                #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
+                
+            #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
+            self.CA_hist[-(i_CA + 1)] += q
                  
     def get_rec_grads(self):
         

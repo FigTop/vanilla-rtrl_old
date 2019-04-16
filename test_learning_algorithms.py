@@ -15,6 +15,7 @@ from functions import *
 from gen_data import *
 from optimizers import *
 from utils import *
+from pdb import set_trace
 
 class Test_Learning_Algorithm(unittest.TestCase):
     
