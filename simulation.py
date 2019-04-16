@@ -39,6 +39,8 @@ class Simulation:
             time_steps_per_trial (int): Number of time steps in a trial, if
                 task has a trial structure. Leave empty if task runs
                 continuously.
+            trial_lr_mask (numpy array): Array of shape (time_steps_per_trial)
+                that scales the loss at each time step within a trial.
             reset_sigma (float): Standard deviation of RNN initial state at
                 start of each trial. Leave empty if RNN state should carry over
                 from last state of previous trial.
@@ -48,7 +50,8 @@ class Simulation:
                 results, if desired.
         """
 
-        allowed_kwargs = {'time_steps_per_trial', 'reset_sigma',
+        allowed_kwargs = {'time_steps_per_trial',
+                          'reset_sigma', 'trial_lr_mask',
                           'i_job', 'save_dir'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
@@ -95,7 +98,7 @@ class Simulation:
                 specifies the initial state of the network when running. If
                 not specified, the default initialization practice is inherited
                 from the RNN.
-            comparison_algs (list): A list of instances of Learning_Algorithm
+            comp_algs (list): A list of instances of Learning_Algorithm
                 specified to passively run in parallel with learn_alg to enable
                 comparisons between the algorithms.
             verbose (bool): Boolean that indicates whether to print progress
@@ -117,7 +120,7 @@ class Simulation:
         
         
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial',
-                          'comparison_algs', 'verbose', 'report_interval',
+                          'comp_algs', 'verbose', 'report_interval',
                           'check_accuracy', 'check_loss',
                           'save_model_interval'}
         for k in kwargs:
@@ -125,7 +128,7 @@ class Simulation:
                 raise TypeError('Unexpected keyword argument '
                                 'passed to Simulation.run: ' + str(k))
         
-        #Local pointers for conveneince
+        #Create new pointers for conveneince
         net = self.net
         self.mode = mode
         x_inputs = data[mode]['X']
@@ -136,11 +139,8 @@ class Simulation:
         self.verbose = True
         self.check_accuracy = False
         self.check_loss = False
-        self.comparison_algs = []
+        self.comp_algs = []
         self.report_interval = max(self.T//10, 1)
-        
-        #Initial best validation loss is infinite
-        self.best_val_loss = np.inf
         
         #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
@@ -149,27 +149,8 @@ class Simulation:
         for attr in allowed_kwargs:
             if not hasattr(self, attr):
                 setattr(self, attr, None)
-        
-        #Initialize monitors
-        self.mons = {}
-        for mon in monitors:
-            self.mons[mon] = []
-        self.objs = [self, self.net, self.learn_alg, self.optimizer]
-        self.objs += self.comparison_algs
-        
-        #Set a random initial state of the network
-        if self.a_initial is not None:
-            net.reset_network(a=self.a_initial)
-        else:
-            net.reset_network()
-        
-        #To avoid errors, initialize "previous"
-        #inputs/labels as the first inputs/labels
-        net.x_prev = x_inputs[0]
-        net.y_prev = y_labels[0]
-        
-        #Track computation time
-        self.t1 = time.time()
+
+        self.initialize_run()
         
         for i_t in range(self.T):
             
@@ -186,33 +167,44 @@ class Simulation:
 
             if mode=='train':
                 self.train_step(i_t)
+                
+            ### --- Clean up --- ###
             
-            #Current inputs/labels become previous inputs/labels
-            net.x_prev = np.copy(net.x)
-            net.y_prev = np.copy(net.y)
-            
-            #Compute spectral radii if desired
-            self.get_radii_and_norms()
-            
-            #Monitor relevant variables
-            self.update_monitors()
-            
-            #Evaluate model and save if performance is best
-            if self.save_model_interval is not None and mode=='train':
-                if (i_t%self.save_model_interval)==0:
-                    self.save_best_model(data)
-            
-            #Make report if conditions are met
-            if (i_t%self.report_interval)==0 and i_t>0 and self.verbose:
-                self.report_progress(i_t, data)
+            self.end_time_step(i_t)
         
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
 
+    def initialize_run(self):
+        
+        #Initial best validation loss is infinite
+        self.best_val_loss = np.inf
+        
+        #Initialize monitors
+        self.mons = {}
+        for mon in monitors:
+            self.mons[mon] = []
+        self.objs = [self, self.net, self.learn_alg, self.optimizer]
+        self.objs += self.comp_algs
+        
+        #Set a random initial state of the network
+        if self.a_initial is not None:
+            self.net.reset_network(a=self.a_initial)
+        else:
+            self.net.reset_network()
+        
+        #To avoid errors, initialize "previous"
+        #inputs/labels as the first inputs/labels
+        self.net.x_prev = x_inputs[0]
+        self.net.y_prev = y_labels[0]
+        
+        #Track computation time
+        self.t1 = time.time()
+
     def trial_structure(self, i_t):
         
-        i_t_trial = i_t%self.time_steps_per_trial
-        if i_t_trial==0:
+        self.i_t_trial = i_t%self.time_steps_per_trial
+        if self.i_t_trial==0:
             self.i_trial = i_t//self.time_steps_per_trial
             if self.reset_sigma is not None:
                 self.net.reset_network(sigma=self.reset_sigma)
@@ -220,56 +212,81 @@ class Simulation:
         
     def forward_pass(self, x, y):
         
+        #Pointer for convenience
         net = self.net
         
+        #Pass data to network
         net.x = x
         net.y = y
         
+        #Run network forwards and get predictions
         net.next_state(net.x, sigma=self.sigma)
         net.z_out()
         
+        #Compare outputs with labels, get immediate loss and errors
         net.y_hat  = net.output.f(net.z)
         net.loss_  = net.loss.f(net.z, net.y)
         net.e      = net.loss.f_prime(net.z, net.y)
+        
+        if self.trial_lr_mask is not None:
+            self.loss_ *= self.trial_lr_mask[self.i_t_trial]
+            self.e *= self.trial_lr_mask[self.i_t_trial]            
 
     def train_step(self, i_t):
         
+        ### --- Calculate gradients --- ###
+        
+        #Pointer for convenience
         net = self.net
         
-        #Update internal learning algorithm parameters
+        #Update learn_alg variables and get gradients
         self.learn_alg.update_learning_vars()
-        #Use learning algorithm to generate gradients
-        self.grads = self.learn_alg()
-        #Define each grad individually for monitoring purposes
-        for i, w in enumerate(['W_rec', 'W_in', 'b_rec', 'W_out', 'b_out']):
-            setattr(self, w+'_grad', self.grads[i])
+        self.grads_list = self.learn_alg()
         
-        #If a comparison algorithm is provided, update
-        #its internal parameters, generate gradients,
-        #and measure their alignment with the main
-        #algorithm's gradients.
-        for i_comp_alg, comp_alg in enumerate(self.comparison_algs):
+        ### --- Calculate gradients for comparison algorithms --- ###
+        
+        self.rec_grads_dict = {'learn_alg': self.learn_alg.rec_grads}
+        for i_comp_alg, comp_alg in enumerate(self.comp_algs):
             comp_alg.update_learning_vars()
-            comp_ = comp_alg()[:3]
-            G = zip(self.grads, self.grads_)
-                try:
-                    self.alignment = [normalized_dot_product(g,g_) for g, g_ in G]
-                except RuntimeWarning:
-                    self.alignment = [0]*3
-                self.W_rec_alignment = self.alignment[0]
-                self.W_in_alignment  = self.alignment[1]
-                self.b_rec_alignment = self.alignment[2]
+            _ = comp_alg()
+            key = 'comp_alg_{}'.format(i_comp_alg)
+            self.rec_grads_dict[key] = comp_alg.rec_grads
             
-        #Rescale the gradients based on the point in trial structure, if any
-        if hasattr(self, 'trial_lr_mask'):
-            m = self.trial_lr_mask[self.i_t_trial]
-            self.grads = [m*g for g in self.grads]
+        if 'alignment_matrix' in self.mons.keys():
+            n_algs = 1 + len(self.comp_algs)
+            self.alignment_matrix = np.zeros((n_algs, n_algs))
+            for i in range(n_algs):
+                for j in range(n_algs):
+                    
+                    self.alignment_matrix[i,j] = normalized_dot_product()
             
-        #If on the update cycle (always true for update_inteval=1),
-        #pass gradients to the optimizer and update parameters.            
-        if (i_t + 1)%self.update_interval==0:
-            net.params = self.optimizer.get_update(net.params, self.grads)
+        ### --- Pass gradients to optimizer --- ###
+        
+        if i_t%self.update_interval==0:
+            net.params = self.optimizer.get_update(net.params,
+                                                   self.grads_list)
             net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
+    
+    def end_time_step(self, i_t):
+        
+        #Current inputs/labels become previous inputs/labels
+        net.x_prev = np.copy(net.x)
+        net.y_prev = np.copy(net.y)
+        
+        #Compute spectral radii if desired
+        self.get_radii_and_norms()
+        
+        #Monitor relevant variables
+        self.update_monitors()
+        
+        #Evaluate model and save if performance is best
+        if self.save_model_interval is not None and mode=='train':
+            if i_t%self.save_model_interval==0:
+                self.save_best_model(data)
+        
+        #Make report if conditions are met
+        if i_t%self.report_interval==0 and i_t>0 and self.verbose:
+            self.report_progress(i_t, data)
     
     def report_progress(self, i_t, data):
         
@@ -281,13 +298,16 @@ class Simulation:
         summary = '\rProgress: {}% complete \nTime Elapsed: {}s \n'
         
         if 'loss_' in self.mons.keys():
-            avg_loss = sum(self.mons['loss_'][-self.report_interval:])/self.report_interval
+            interval = self.report_interval
+            avg_loss = sum(self.mons['loss_'][-interval:])/interval
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
             
         if self.check_accuracy or self.check_loss:
-            test_sim = copy(self)
-            test_sim.run(data, mode='test', monitors=['y_hat', 'loss_'], phase_method='fixed', verbose=False)
+            test_sim = self.get_test_sim()
+            test_sim.run(data, mode='test',
+                         monitors=['y_hat', 'loss_'],
+                         verbose=False)
             if self.check_accuracy:
                 acc = classification_accuracy(data, test_sim.mons['y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
@@ -328,13 +348,24 @@ class Simulation:
                         
     def save_best_model(self, data):
         
-        val_sim = copy(self)
-        val_sim.run(data, mode='test', monitors=['y_hat', 'loss_'], phase_method='fixed', verbose=False)
+        val_sim = self.get_test_sim()
+        val_sim.run(data, mode='test',
+                    monitors=['y_hat', 'loss_'],
+                    verbose=False)
         val_loss = np.mean(val_sim.mons['loss_'])
         
         if val_loss < self.best_val_loss:
             self.best_net = copy(self.net)
             self.best_val_loss = val_loss
+            
+    def get_test_sim(self):
+        
+        sim = Simulation(self.net,
+                         time_steps_per_trial=self.time_steps_per_trial,
+                         reset_sigma=self.reset_sigma,
+                         i_job=self.i_job,
+                         save_dir=self.save_dir)
+        return sim
             
 
         

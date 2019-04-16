@@ -17,7 +17,8 @@ from pdb import set_trace
 
 class RNN:
     
-    def __init__(self, W_in, W_rec, W_out, b_rec, b_out, activation, alpha, output, loss):
+    def __init__(self, W_in, W_rec, W_out, b_rec, b_out,
+                 activation, alpha, output, loss):
         '''
         Initializes a vanilla RNN object that follows the forward equation
         
