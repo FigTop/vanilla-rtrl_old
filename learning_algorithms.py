@@ -16,12 +16,12 @@ class Learning_Algorithm:
     
     def __init__(self, net, allowed_kwargs_, **kwargs):
         
-        allowed_kwargs = {'W_FB', 'n_repeats'}.union(allowed_kwargs_)
+        allowed_kwargs = {'W_FB', 'L2_reg'}.union(allowed_kwargs_)
                 
         for k in kwargs:
             if k not in allowed_kwargs:
-                raise TypeError('Unexpected keyword argument '
-                                'passed to Learning_Algorithm.__init__: ' + str(k))
+                raise TypeError('Unexpected keyword argument passed'
+                                'to Learning_Algorithm.__init__: ' + str(k))
         
         for attr in allowed_kwargs:
             if not hasattr(self, attr):
@@ -31,11 +31,15 @@ class Learning_Algorithm:
         
         #RNN instance the algorithm is being applied to
         self.net = net
-        self.n_in  = self.net.n_in
-        self.n_h   = self.net.n_hidden
+        self.n_in = self.net.n_in
+        self.n_h = self.net.n_hidden
         self.n_out = self.net.n_out
         self.m = self.n_h + self.n_in + 1
-        self.q     = np.zeros(self.n_h)
+        self.q = np.zeros(self.n_h)
+        
+    def reset_learning(self):
+        
+        pass
         
 class Real_Time_Learning_Algorithm(Learning_Algorithm):
     
@@ -52,12 +56,23 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         else:
             self.q = self.net.e.dot(self.W_FB)
     
+    def L2_regularization(self, grads):
+        
+        #Get parameters affected by L2 regularization
+        L2_params = [self.net.params[i] for i in self.net.L2_indices]
+        for i_L2, W in zip(self.net.L2_indices, L2_params):
+            grads[i_L2] += self.L2_reg*W
+        return grads
+    
     def __call__(self):
         
         outer_grads = self.get_outer_grads()
         self.propagate_feedback_to_hidden()
         rec_grads = split_weight_matrix(self.get_rec_grads(), [self.n_h, self.n_in, 1])
         grads = rec_grads + outer_grads
+        
+        if self.L2_reg is not None:
+            self.L2_regularization(grads)
         
         return grads
         
@@ -399,10 +414,6 @@ class DNI(Real_Time_Learning_Algorithm):
         self.D = self.net.activation.f_prime(self.net.h)
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
-        
-    def reset_learning(self):
-        
-        pass
 
 class BPTT(Learning_Algorithm):
     

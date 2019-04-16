@@ -131,30 +131,6 @@ class RNN:
             h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec + noise
             return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
 
-#    def next_state_inv(self, x, a=None, update=True, sigma=0):
-#        '''
-#        Return or update the previous state of the network given its
-#        current state.
-#        '''
-#        
-#        if update:
-#            if type(x) is np.ndarray:
-#                self.x = x
-#            else:
-#                self.x = np.array([x])
-#            
-#            self.h_prev = np.copy(self.h)
-#            self.a_prev = np.copy(self.a)
-#            
-#            self.noise = np.random.normal(0, sigma, self.n_hidden)
-#            self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec + self.noise
-#            self.a = (1 - self.alpha)*self.a + self.alpha*self.activation.f(self.h)
-#        else:
-#            noise = np.random.normal(0, sigma, self.n_hidden)
-#            h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec + noise
-#            return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
-        
-
     def z_out(self):
         '''
         Updates the output of the RNN using the current activations

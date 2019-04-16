@@ -12,6 +12,47 @@ import pickle
 import os
 from utils import *
 
+
+
+            
+if hasattr(self, 't_stop_SG_train'):
+    if self.t_stop_SG_train==i_t:
+        self.learn_alg.optimizer.lr = 0
+
+def forward_estimate_credit_assignment(self, i_t, data, t_steps=14, delta_a=0.0001):
+    
+    try:
+        truncated_data = {'test': {'X': data['train']['X'][i_t:i_t+t_steps,:],
+                                   'Y': data['train']['Y'][i_t:i_t+t_steps,:]}}
+    except IndexError:
+        return
+    
+    fiducial_rnn = copy(self.net)
+    fiducial_sim = copy(self)
+    perturbed_rnn = copy(self.net)
+    perturbed_sim = copy(self)
+    
+    direction = np.random.normal(0, 1, self.net.n_hidden)
+    perturbation = delta_a*direction/norm(direction)
+    a_fiducial = self.net.a - perturbation
+    a_perturbed = self.net.a + perturbation
+    
+    fiducial_sim.run(truncated_data,
+                     mode='test',
+                     monitors=['loss_'],
+                     a_initial=a_fiducial,
+                     verbose=False)
+    
+    perturbed_sim.run(truncated_data,
+                      mode='test',
+                      monitors=['loss_'],
+                      a_initial=a_perturbed,
+                      verbose=False)
+    
+    delta_loss = perturbed_sim.mons['loss_'].sum() - fiducial_sim.mons['loss_'].sum()
+    self.CA_forward_est = delta_loss/(2*delta_a)
+    self.CA_SG_est = self.learn_alg.sg.dot(direction)
+
 if False:
     data_dir = '/scratch/oem214/vanilla-rtrl/library/ssa_2_run'
     
@@ -93,6 +134,40 @@ for i in range(test_data['PC_on_trajs'].shape[0]):
 for i in range(test_data['PC_off_trajs'].shape[0]):
     plt.plot(test_data['PC_off_trajs'][i,:,0],test_data['PC_off_trajs'][i,:,1], color='g', alpha=0.2)
     
+if hasattr(self, 'time_steps_per_trial'):
+    X_reshaped = data['test']['X'].reshape((-1, self.time_steps_per_trial, self.net.n_in))
+    on_trials = np.where(X_reshaped[:,1,0]>0)[0]
+    off_trials = np.where(X_reshaped[:,1,0]<0)[0]
+    
+#Initialize test data
+if hasattr(self, 'SSA_PCs') and mode=='train':
+    test_data = {}
+    file_name = 'rnn_{}_test_data'.format(self.i_job)
+    save_path = os.path.join(self.save_dir, file_name)
+    with open(save_path, 'wb') as f:
+        pickle.dump(test_data, f)
+        
+if hasattr(self, 'SSA_PCs') and self.mode=='train':
+    
+    with open(save_path, 'rb') as f:
+        test_data = pickle.load(f)
+    
+    np.random.seed(0)
+    test_sim = copy(self)
+    test_sim.run(data, mode='test', monitors=['a'], verbose=False)
+    
+    test_data_trial = {}
+    PCs = State_Space_Analysis(test_sim.mons['a'], add_fig=False).V[:,:self.SSA_PCs]
+    A = test_sim.mons['a'].reshape((-1, self.time_steps_per_trial, self.net.n_hidden))
+    PC_on_trajs = A[on_trials].dot(PCs)
+    PC_off_trajs = A[off_trials].dot(PCs)
+    test_data_trial['PCs'] = PCs
+    test_data_trial['PC_on_trajs'] = PC_on_trajs
+    test_data_trial['PC_off_trajs'] = PC_off_trajs
+    
+    test_data[self.i_trial] = test_data_trial
+    with open(save_path, 'wb') as f:
+        pickle.dump(test_data, f)
 #sim = result['sim']
 #print(result['config'])
 #

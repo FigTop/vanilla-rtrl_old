@@ -24,10 +24,10 @@ class Test_Learning_Algorithm(unittest.TestCase):
         
         cls.task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
         #task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
-        cls.data = cls.task.gen_data(100, 100)
+        cls.data = cls.task.gen_data(50, 50)
         
         n_in     = cls.task.n_in
-        n_hidden = 32
+        n_hidden = 16
         n_out    = cls.task.n_out
         
         cls.W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -86,7 +86,7 @@ class Test_Learning_Algorithm(unittest.TestCase):
         
     def test_forward_bptt(self):
         
-        self.data = self.task.gen_data(2000, 100)
+        self.data = self.task.gen_data(200, 100)
         
         np.random.seed(1)
         self.optimizer_1 = SGD(lr=0.000001)
@@ -114,7 +114,7 @@ class Test_Learning_Algorithm(unittest.TestCase):
         
     def test_kernl_reduce_rflo(self):
         
-        self.data = self.task.gen_data(2000, 100)
+        self.data = self.task.gen_data(200, 100)
         
         alpha = 0.3
         
