@@ -21,7 +21,7 @@ class Function:
     """
     
     def __init__(self, f, f_prime):
-        """Inits a Function by specifying f and f_prime."""
+        """Inits an instance of Function by specifying f and f_prime."""
         
         self.f = f
         self.f_prime = f_prime
@@ -56,11 +56,13 @@ sigmoid_cross_entropy = Function(sigmoid_cross_entropy_, sigmoid_cross_entropy_d
 
 ### --- Define ReLu --- ###
 
-def relu_(h, right_slope=1, left_slope=0.05):
+right_slope = 1
+left_slope = 0
+def relu_(h):
     
     return np.maximum(0, right_slope*h) - np.maximum(0, left_slope*(-h))
 
-def relu_derivative(h, right_slope=1, left_slope=0.5):
+def relu_derivative(h):
     
     return (h>0)*(right_slope - left_slope) + left_slope
 
@@ -99,7 +101,7 @@ softmax = Function(softmax_, softmax_derivative)
 def softmax_cross_entropy_(z, y, epsilon=0.0001):
     
     p = softmax_(z)
-    p = np.maximum(p, epsilon)
+    p = np.maximum(p, epsilon) #Regularize in case p is small
     
     return -y.dot(np.log(p))
 

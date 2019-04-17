@@ -34,52 +34,32 @@ class RNN:
             output layer weights.
         activation (functions.Function): An instance of the Function class
             used as the network's nonlinearity.
-    
+        alpha (float): Ratio of time constant of integration to time constant
+            of leak. Must be less than 1.
+        output (functions.Function): An instance of the Function class used
+            for calculating final output from z.
+        loss (functions.Function): An instance of the Function class used for
+            calculating loss from z (must implicitly include output function,
+            e.g. softmax_cross_entropy if output is softmax).
     """
     
     def __init__(self, W_in, W_rec, W_out, b_rec, b_out,
                  activation, alpha, output, loss):
-        '''
-        Initializes a vanilla RNN object that follows the forward equation
-        
-
-        
-        with initial parameter values given by W_in, W_rec, W_out, b_rec, b_in
-        and specified activation and loss functions, which must be function
-        objects--see utils.py.
-        
-        ___Arguments___
-        
-        W_*                 Initial values of (in)put, (rec)urrent and (out)put
-                            weights in the network.
-                            
-        b_*                 Initial values of (rec)urrent and (out)put biases.
-        
-        activation          Instance of function class (see utils.py) used for
-                            calculating activations a from pre-activations h.
-                            
-        alpha               Ratio of time constant of integration to time constant
-                            of leak.
-                            
-        output              Instance of function class used for calculating final
-                            output from z.
-                            
-        loss                Instance of function class used for calculating loss
-                            from z (must implicitly include output function, e.g.
-                            softmax_cross_entropy if output is softmax).
-        '''
+        """Initializes an RNN by specifying its initial parameter values;
+        its activation, output, and loss functions; and alpha.
+        """
         
         #Initial parameter values
-        self.W_in  = W_in
+        self.W_in = W_in
         self.W_rec = W_rec
         self.W_out = W_out
         self.b_rec = b_rec
         self.b_out = b_out
         
         #Network dimensions
-        self.n_in     = W_in.shape[1]
+        self.n_in = W_in.shape[1]
         self.n_h = W_in.shape[0]
-        self.n_out    = W_out.shape[0]
+        self.n_out = W_out.shape[0]
         
         #Check dimension consistency
         assert self.n_h==W_rec.shape[0]
@@ -91,21 +71,22 @@ class RNN:
         
         #Define shapes and params lists for convenience later
         self.shapes = [w.shape for w in [W_rec, W_in, b_rec, W_out, b_out]]
-        self.params = [self.W_rec, self.W_in, self.b_rec, self.W_out, self.b_out]
+        self.params = [self.W_rec, self.W_in, self.b_rec,
+                       self.W_out, self.b_out]
         
         #Activation and loss functions
-        self.alpha      = alpha
+        self.alpha = alpha
         self.activation = activation
-        self.output     = output
-        self.loss       = loss
+        self.output = output
+        self.loss = loss
         
         #Number of parameters
-        self.n_h_params = self.W_rec.size +\
-                               self.W_in.size  +\
-                               self.b_rec.size
-        self.n_params        = self.n_h_params +\
-                               self.W_out.size +\
-                               self.b_out.size
+        self.n_h_params = (self.W_rec.size +
+                           self.W_in.size +
+                           self.b_rec.size)
+        self.n_params = (self.n_h_params +
+                         self.W_out.size +
+                         self.b_out.size)
         
         #Params for L2 regularization
         self.L2_indices = [0, 1, 3]

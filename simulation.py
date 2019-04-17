@@ -18,7 +18,7 @@ import os
 
 class Simulation:
     """Simulates an RNN for a provided set of inputs and training procedures.
-    
+
     By default, all variables are overwritten at each time step, but the user
     can specify which variables to track with 'monitors'.
     
@@ -215,7 +215,7 @@ class Simulation:
     def trial_structure(self, i_t):
         
         self.i_t_trial = i_t%self.time_steps_per_trial
-        if self.i_t_trial==0:
+        if self.i_t_trial == 0:
             self.i_trial = i_t//self.time_steps_per_trial
             if self.reset_sigma is not None:
                 self.net.reset_network(sigma=self.reset_sigma)
@@ -235,7 +235,7 @@ class Simulation:
         net.z_out()
         
         #Compare outputs with labels, get immediate loss and errors
-        net.y_hat  = net.output.f(net.z)
+        net.y_hat = net.output.f(net.z)
         net.loss_  = net.loss.f(net.z, net.y)
         net.e      = net.loss.f_prime(net.z, net.y)
         
