@@ -16,14 +16,33 @@ from copy import copy
 from pdb import set_trace
 
 class RNN:
+    """A vanilla recurrent neural network.
+    
+    Obeys the forward equation (in TeX)
+    
+    a_t = (1 - \alpha)a_{t-1} + W_{rec}\phi(a_{t-1}) + W_{in}x_t + b_{rec}
+    z_t = W_{out}a_t + b_out
+    
+    Attributes:
+        n_in (int): Number of input dimensions
+        n_h (int): Number of hidden units
+        n_out (int): Number of output dimensions
+        W_in (numpy array): Array of shape (n_h, n_in), weights task inputs.
+        W_rec (numpy array): Array of shape (n_h, n_h), weights recurrent
+            inputs.
+        W_out (numpy array): Array of shape (n_out, n_h), provides hidden to
+            output layer weights.
+        activation (functions.Function): An instance of the Function class
+            used as the network's nonlinearity.
+    
+    """
     
     def __init__(self, W_in, W_rec, W_out, b_rec, b_out,
                  activation, alpha, output, loss):
         '''
         Initializes a vanilla RNN object that follows the forward equation
         
-        h_t = (1 - alpha)*h_{t-1} + W_rec * phi(h_{t-1}) + W_in * x_t + b_rec
-        z_t = W_out * a_t + b_out
+
         
         with initial parameter values given by W_in, W_rec, W_out, b_rec, b_in
         and specified activation and loss functions, which must be function
@@ -59,15 +78,15 @@ class RNN:
         
         #Network dimensions
         self.n_in     = W_in.shape[1]
-        self.n_hidden = W_in.shape[0]
+        self.n_h = W_in.shape[0]
         self.n_out    = W_out.shape[0]
         
         #Check dimension consistency
-        assert self.n_hidden==W_rec.shape[0]
-        assert self.n_hidden==W_rec.shape[1]
-        assert self.n_hidden==W_in.shape[0]
-        assert self.n_hidden==W_out.shape[1]
-        assert self.n_hidden==b_rec.shape[0]
+        assert self.n_h==W_rec.shape[0]
+        assert self.n_h==W_rec.shape[1]
+        assert self.n_h==W_in.shape[0]
+        assert self.n_h==W_out.shape[1]
+        assert self.n_h==b_rec.shape[0]
         assert self.n_out==b_out.shape[0]
         
         #Define shapes and params lists for convenience later
@@ -81,10 +100,10 @@ class RNN:
         self.loss       = loss
         
         #Number of parameters
-        self.n_hidden_params = self.W_rec.size +\
+        self.n_h_params = self.W_rec.size +\
                                self.W_in.size  +\
                                self.b_rec.size
-        self.n_params        = self.n_hidden_params +\
+        self.n_params        = self.n_h_params +\
                                self.W_out.size +\
                                self.b_out.size
         
@@ -99,7 +118,7 @@ class RNN:
         if 'h' in kwargs.keys():
             self.h = kwargs['h']
         else:
-            self.h = np.random.normal(0, sigma, self.n_hidden)
+            self.h = np.random.normal(0, sigma, self.n_h)
             
         self.a = self.activation.f(self.h)
         
@@ -116,20 +135,22 @@ class RNN:
         '''
            
         if update:
-            if type(x) is np.ndarray:
-                self.x = x
-            else:
-                self.x = np.array([x])
-            
+            self.x = x
             self.h_prev = np.copy(self.h)
             self.a_prev = np.copy(self.a)
             
-            self.noise = np.random.normal(0, sigma, self.n_hidden)
-            self.h = self.W_rec.dot(self.a) + self.W_in.dot(self.x) + self.b_rec + self.noise
-            self.a = (1 - self.alpha)*self.a + self.alpha*self.activation.f(self.h)
+            self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
+                      self.b_rec)
+            if sigma>0:
+                self.noise = np.random.normal(0, sigma, self.n_h)
+                self.h += self.noise
+            self.a = ((1 - self.alpha)*self.a + 
+                      self.alpha*self.activation.f(self.h))
         else:
-            noise = np.random.normal(0, sigma, self.n_hidden)
-            h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec + noise
+            h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
+            if sigma>0:
+                noise = np.random.normal(0, sigma, self.n_h)
+                h += noise
             return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
 
     def z_out(self):
@@ -164,7 +185,7 @@ class RNN:
         
         #Element-wise nonlinearity derivative
         D = self.activation.f_prime(h)
-        a_J = self.alpha*np.diag(D).dot(W_rec) + (1 - self.alpha)*np.eye(self.n_hidden)
+        a_J = self.alpha*np.diag(D).dot(W_rec) + (1 - self.alpha)*np.eye(self.n_h)
         
         if update:
             self.a_J = np.copy(a_J)

@@ -8,11 +8,22 @@ Created on Mon Sep 10 14:25:20 2018
 
 import numpy as np
 
-class function:
+class Function:
+    """Defines a function and its derivative.
+    
+    Attributes:
+        f (function): An element-wise differentiable function that acts on a
+            1-d numpy array of arbitrary dimension. May include a second
+            argument for a label, e.g. for softmax-cross-entropy.
+        f_prime (function): The element-wise derivative of f with respect to
+            the first argument, must also act on 1-d numpy arrays of arbitrary
+            dimension.
+    """
     
     def __init__(self, f, f_prime):
+        """Inits a Function by specifying f and f_prime."""
         
-        self.f       = f
+        self.f = f
         self.f_prime = f_prime
         
 ### --- Define sigmoid --- ###
@@ -25,9 +36,8 @@ def sigmoid_derivative(z):
     
     return sigmoid_(z)*(1-sigmoid_(z))
 
-sigmoid = function(sigmoid_, sigmoid_derivative)
+sigmoid = Function(sigmoid_, sigmoid_derivative)
         
-
 ### --- Define sigmoid cross entropy --- ###
 
 def sigmoid_cross_entropy_(z, y):
@@ -42,7 +52,7 @@ def sigmoid_cross_entropy_derivative(z, y):
     
     return (-y/p + (1 - y)/(1 - p))*sigmoid.f_prime(z)
 
-sigmoid_cross_entropy = function(sigmoid_cross_entropy_, sigmoid_cross_entropy_derivative)
+sigmoid_cross_entropy = Function(sigmoid_cross_entropy_, sigmoid_cross_entropy_derivative)
 
 ### --- Define ReLu --- ###
 
@@ -54,20 +64,19 @@ def relu_derivative(h, right_slope=1, left_slope=0.5):
     
     return (h>0)*(right_slope - left_slope) + left_slope
 
-relu = function(relu_, relu_derivative)
+relu = Function(relu_, relu_derivative)
 
 ### --- Define tanh --- ###
 
-def tanh_(h):
+def tanh_(z):
     
-    return np.tanh(h)
+    return np.tanh(z)
 
-def tanh_derivative(h):
+def tanh_derivative(z):
     
-    return 1 - np.tanh(h)**2
+    return 1 - np.tanh(z)**2
 
-tanh = function(tanh_, tanh_derivative)
-
+tanh = Function(tanh_, tanh_derivative)
 
 ### --- Define softmax --- ###
 
@@ -83,7 +92,7 @@ def softmax_derivative(z):
     
     return np.multiply.outer(softmax_(z), 1 - softmax_(z))
 
-softmax = function(softmax_, softmax_derivative)
+softmax = Function(softmax_, softmax_derivative)
 
 ### --- Define softmax cross-entropy --- ###
 
@@ -98,7 +107,7 @@ def softmax_cross_entropy_derivative(z, y):
     
     return softmax_(z) - y
 
-softmax_cross_entropy = function(softmax_cross_entropy_, softmax_cross_entropy_derivative)
+softmax_cross_entropy = Function(softmax_cross_entropy_, softmax_cross_entropy_derivative)
 
 ### --- Define softplus --- ###
 
@@ -110,7 +119,7 @@ def softplus_derivative(z):
     
     return sigmoid_(z)
 
-softplus = function(softplus_, softplus_derivative)
+softplus = Function(softplus_, softplus_derivative)
 
 ### --- Define Identity --- ###
 
@@ -122,19 +131,7 @@ def identity_derivative(z):
     
     return np.ones_like(z)
 
-identity = function(identity_, identity_derivative)
-
-### --- Define Layer Normalization --- ###
-
-def layer_normalization_(z):
-    
-    return (z - np.mean(z))/np.std(z)
-
-def layer_normalization_derivative(z):
-    
-    return "don't care"
-
-layer_normalization = function(layer_normalization_, layer_normalization_derivative)
+identity = Function(identity_, identity_derivative)
 
 ### --- Define Mean-Squared Error --- ###
 
@@ -146,7 +143,7 @@ def mean_squared_error_derivative(z, y):
     
     return z - y
     
-mean_squared_error = function(mean_squared_error_, mean_squared_error_derivative)
+mean_squared_error = Function(mean_squared_error_, mean_squared_error_derivative)
     
     
 

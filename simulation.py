@@ -19,13 +19,14 @@ import os
 class Simulation:
     """Simulates an RNN for a provided set of inputs and training procedures.
     
-    Has two main types of attributes that are provided either upon init or
-    when calling self.run.
+    By default, all variables are overwritten at each time step, but the user
+    can specify which variables to track with 'monitors'.
     
-    
-    Attributes:
-        
-    
+    Has two types of attributes that are provided either upon init or
+    when calling self.run. The distinction matters because init attributes
+    should carry over into test runs, whereas run attributes will likely be
+    different in train and test runs. Details given in __init__ and run
+    docstrings.
     """
     
     def __init__(self, net, allowed_kwargs_=set(), **kwargs):
@@ -94,10 +95,14 @@ class Simulation:
             optimizer (optimizers.Optimizer): The instance of an optimizer
                 used to update the network using gradients computed by
                 learn_alg.
+            update_interval (int): Number of time steps between each parameter
+                update.
             a_initial (numpy array): An array of shape (net.n_hidden) that
                 specifies the initial state of the network when running. If
                 not specified, the default initialization practice is inherited
                 from the RNN.
+            sigma (float): Specifies standard deviation of white noise to add
+                to the network pre-activations at each time step.
             comp_algs (list): A list of instances of Learning_Algorithm
                 specified to passively run in parallel with learn_alg to enable
                 comparisons between the algorithms.
@@ -118,22 +123,23 @@ class Simulation:
         
         """
         
-        
-        allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial',
-                          'comp_algs', 'verbose', 'report_interval',
-                          'check_accuracy', 'check_loss',
+        allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
+                          'update_interval', 'comp_algs', 'verbose',
+                          'report_interval', 'check_accuracy', 'check_loss',
                           'save_model_interval'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
                                 'passed to Simulation.run: ' + str(k))
         
+        ### --- Set new object attributes for run --- ###
+        
         #Create new pointers for conveneince
-        net = self.net
         self.mode = mode
-        x_inputs = data[mode]['X']
-        y_labels = data[mode]['Y']
-        self.T = x_inputs.shape[0]
+        self.monitors = monitors
+        self.x_inputs = data[mode]['X']
+        self.y_labels = data[mode]['Y']
+        self.T = self.x_inputs.shape[0]
         
         #Set defaults
         self.verbose = True
@@ -141,6 +147,8 @@ class Simulation:
         self.check_loss = False
         self.comp_algs = []
         self.report_interval = max(self.T//10, 1)
+        self.update_interval = 1
+        self.sigma = 0
         
         #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
@@ -149,6 +157,8 @@ class Simulation:
         for attr in allowed_kwargs:
             if not hasattr(self, attr):
                 setattr(self, attr, None)
+
+        ### --- Pre-run housekeeping --- ###
 
         self.initialize_run()
         
@@ -161,11 +171,12 @@ class Simulation:
             
             ### --- Run network forwards and get error --- ###
             
-            self.forward_pass(x_inputs[i_t], y_labels[i_t])
+            self.forward_pass(self.x_inputs[i_t],
+                              self.y_labels[i_t])
             
             ### --- Update parameters if in 'train' mode --- ###
 
-            if mode=='train':
+            if self.mode=='train':
                 self.train_step(i_t)
                 
             ### --- Clean up --- ###
@@ -182,7 +193,7 @@ class Simulation:
         
         #Initialize monitors
         self.mons = {}
-        for mon in monitors:
+        for mon in self.monitors:
             self.mons[mon] = []
         self.objs = [self, self.net, self.learn_alg, self.optimizer]
         self.objs += self.comp_algs
@@ -195,8 +206,8 @@ class Simulation:
         
         #To avoid errors, initialize "previous"
         #inputs/labels as the first inputs/labels
-        self.net.x_prev = x_inputs[0]
-        self.net.y_prev = y_labels[0]
+        self.net.x_prev = self.x_inputs[0]
+        self.net.y_prev = self.y_labels[0]
         
         #Track computation time
         self.t1 = time.time()
@@ -228,6 +239,7 @@ class Simulation:
         net.loss_  = net.loss.f(net.z, net.y)
         net.e      = net.loss.f_prime(net.z, net.y)
         
+        #Re-scale losses and errors if trial structure is provided
         if self.trial_lr_mask is not None:
             self.loss_ *= self.trial_lr_mask[self.i_t_trial]
             self.e *= self.trial_lr_mask[self.i_t_trial]            
@@ -251,18 +263,20 @@ class Simulation:
             _ = comp_alg()
             key = 'comp_alg_{}'.format(i_comp_alg)
             self.rec_grads_dict[key] = comp_alg.rec_grads
-            
         if 'alignment_matrix' in self.mons.keys():
             n_algs = 1 + len(self.comp_algs)
             self.alignment_matrix = np.zeros((n_algs, n_algs))
             for i in range(n_algs):
                 for j in range(n_algs):
-                    
-                    self.alignment_matrix[i,j] = normalized_dot_product()
+                    g1 = self.rec_grads_dict.values()[i]
+                    g2 = self.rec_grads_dict.values()[j]
+                    self.alignment_matrix[i,j] = normalized_dot_product(g1, g2)
             
         ### --- Pass gradients to optimizer --- ###
         
+        #Only update on schedule (default update_interval=1)
         if i_t%self.update_interval==0:
+            #Get updated parameters
             net.params = self.optimizer.get_update(net.params,
                                                    self.grads_list)
             net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
@@ -270,8 +284,8 @@ class Simulation:
     def end_time_step(self, i_t):
         
         #Current inputs/labels become previous inputs/labels
-        net.x_prev = np.copy(net.x)
-        net.y_prev = np.copy(net.y)
+        self.net.x_prev = np.copy(self.net.x)
+        self.net.y_prev = np.copy(self.net.y)
         
         #Compute spectral radii if desired
         self.get_radii_and_norms()

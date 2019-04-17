@@ -13,7 +13,17 @@ import os
 from utils import *
 
 
+### --- Define Layer Normalization --- ###
 
+def layer_normalization_(z):
+    
+    return (z - np.mean(z))/np.std(z)
+
+def layer_normalization_derivative(z):
+    
+    return "don't care"
+
+layer_normalization = function(layer_normalization_, layer_normalization_derivative)
             
 if hasattr(self, 't_stop_SG_train'):
     if self.t_stop_SG_train==i_t:

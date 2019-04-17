@@ -32,7 +32,7 @@ class Learning_Algorithm:
         #RNN instance the algorithm is being applied to
         self.net = net
         self.n_in = self.net.n_in
-        self.n_h = self.net.n_hidden
+        self.n_h = self.net.n_h
         self.n_out = self.net.n_out
         self.m = self.n_h + self.n_in + 1
         self.q = np.zeros(self.n_h)
@@ -44,9 +44,9 @@ class Learning_Algorithm:
 class Real_Time_Learning_Algorithm(Learning_Algorithm):
     
     def get_outer_grads(self):
-
-        self.a_ = np.concatenate(self.net.a, np.array([1]))
-        return np.multiply.outer(self.e, self.net.a_)
+        
+        self.a_ = np.concatenate([self.net.a, np.array([1])])
+        return np.multiply.outer(self.net.e, self.a_)
     
     def propagate_feedback_to_hidden(self):
         
@@ -89,7 +89,7 @@ class RTRL(Real_Time_Learning_Algorithm):
         super().__init__(net, allowed_kwargs_, **kwargs)
         
         #Initialize influence matrix
-        self.dadw  = np.zeros((self.n_h, self.net.n_hidden_params))
+        self.dadw  = np.zeros((self.n_h, self.net.n_h_params))
         
     def update_learning_vars(self):
         
@@ -117,8 +117,8 @@ class UORO(Real_Time_Learning_Algorithm):
         super().__init__(net, allowed_kwargs_, **kwargs)
         
         #Initialize a_tilde and w_tilde vectors
-        self.w_tilde = np.random.normal(0, 1, net.n_hidden_params)
-        self.a_tilde = np.random.normal(0, 1, net.n_hidden)
+        self.w_tilde = np.random.normal(0, 1, net.n_h_params)
+        self.a_tilde = np.random.normal(0, 1, net.n_h)
         
     def update_learning_vars(self):
         
@@ -159,8 +159,8 @@ class UORO(Real_Time_Learning_Algorithm):
     
     def reset_learning(self):
         
-        self.w_tilde = np.random.normal(0, 1, self.net.n_hidden_params)
-        self.a_tilde = np.random.normal(0, 1, self.net.n_hidden)
+        self.w_tilde = np.random.normal(0, 1, self.net.n_h_params)
+        self.a_tilde = np.random.normal(0, 1, self.net.n_h)
     
 class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
     
@@ -433,8 +433,8 @@ class BPTT(Learning_Algorithm):
         self.use_historical_W = use_historical_W
         
         #Lists storing relevant net history
-        self.h_hist = [np.zeros(self.net.n_hidden) for _ in range(self.T)]
-        self.a_hist = [np.zeros(self.net.n_hidden) for _ in range(self.T)]
+        self.h_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
+        self.a_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
         self.e_hist = [np.zeros(self.net.n_out) for _ in range(t1)]
         self.x_hist = [np.zeros(self.net.n_in) for _ in range(self.T)]
         self.W_rec_hist = [self.net.W_rec for _ in range(self.T)]
@@ -476,7 +476,7 @@ class BPTT(Learning_Algorithm):
                          h_prev=self.h_hist[-(i+1)],
                          W_rec=self.net.W_rec) for i in range(1, self.T)] 
         
-        n_h, n_in = self.net.n_hidden, self.net.n_in
+        n_h, n_in = self.net.n_h, self.net.n_in
         self.rec_grad = np.zeros((n_h, n_h+n_in+1))
         
         CA_list = []
@@ -580,7 +580,7 @@ class KeRNL(Real_Time_Learning_Algorithm):
     def __init__(self, net, optimizer, T=20, sigma_noise=0.00001,
                  use_approx_kernel=False, **kwargs):
 
-        self.n_h = net.n_hidden
+        self.n_h = net.n_h
         self.n_in = net.n_in
         self.T = T
         self.sigma_noise = sigma_noise

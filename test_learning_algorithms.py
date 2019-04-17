@@ -21,21 +21,23 @@ class Test_Learning_Algorithm(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
+        """Initializes task data and RNNs so that simulations can be run."""
         
-        cls.task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=4)
-        #task = Sine_Wave(0.001, [0.01, 0.007, 0.003, 0.001], amplitude=0.1, method='regular')
+        cls.task = Coin_Task(4, 6, one_hot=True,
+                             deterministic=True, tau_task=4)
         cls.data = cls.task.gen_data(50, 50)
         
-        n_in     = cls.task.n_in
-        n_hidden = 16
-        n_out    = cls.task.n_out
+        n_in = cls.task.n_in
+        n_h = 16
+        n_out = cls.task.n_out
         
-        cls.W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-        cls.W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-        cls.W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-        cls.W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
+        cls.W_in = np.random.normal(0, np.sqrt(1/(n_in)), (n_h, n_in))
+        M_rand = np.random.normal(0, 1, (n_h, n_h))
+        cls.W_rec = np.linalg.qr(M_rand)[0]
+        cls.W_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
+        cls.W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_h))
         
-        cls.b_rec = np.zeros(n_hidden)
+        cls.b_rec = np.zeros(n_h)
         cls.b_out = np.zeros(n_out)
         
         alpha = 1
@@ -57,34 +59,47 @@ class Test_Learning_Algorithm(unittest.TestCase):
         
         
     def test_DNI_eligibility_traces(self):
+        """Verifies that DNI algorithm gives save result whether using
+        explicit parameter influence or a filtered version with time constant
+        of 1."""
         
         np.random.seed(1)
         self.optimizer_1 = SGD(lr=0.0005)
         self.SG_optimizer_1 = SGD(lr=0.01)
-        self.learn_alg_1 = DNI(self.rnn_1, self.SG_optimizer_1, W_a_lr=0.01, backprop_weights='approximate',
+        self.learn_alg_1 = DNI(self.rnn_1, self.SG_optimizer_1,
+                               W_a_lr=0.01, backprop_weights='approximate',
                                SG_label_activation=tanh, W_FB=self.W_FB)
         np.random.seed(1)
         self.optimizer_2 = SGD(lr=0.0005)
         self.SG_optimizer_2 = SGD(lr=0.01)
-        self.learn_alg_2 = DNI(self.rnn_2, self.SG_optimizer_2, W_a_lr=0.01, backprop_weights='approximate',
-                               SG_label_activation=tanh, W_FB=self.W_FB, alpha_e=1)
-        monitors = ['loss_', 'y_hat', 'a']
+        self.learn_alg_2 = DNI(self.rnn_2, self.SG_optimizer_2,
+                               W_a_lr=0.01, backprop_weights='approximate',
+                               SG_label_activation=tanh, W_FB=self.W_FB,
+                               alpha_e=1)
+        monitors = ['a']
         
         np.random.seed(2)
-        self.sim_1 = Simulation(self.rnn_1, self.learn_alg_1, self.optimizer_1, L2_reg=0.0001)
-        self.sim_1.run(self.data,
+        self.sim_1 = Simulation(self.rnn_1)
+        self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
+                       optimizer=self.optimizer_1,
                        monitors=monitors,
                        verbose=False)
         
         np.random.seed(2)
-        self.sim_2 = Simulation(self.rnn_2, self.learn_alg_2, self.optimizer_2, L2_reg=0.0001)
-        self.sim_2.run(self.data,
+        self.sim_2 = Simulation(self.rnn_2)
+        self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
+                       optimizer=self.optimizer_2,
                        monitors=monitors,
                        verbose=False)
         
-        self.assertTrue(np.isclose(self.sim_1.mons['a'], self.sim_2.mons['a']).all())
+        self.assertTrue(np.isclose(self.sim_1.mons['a'],
+                                   self.sim_2.mons['a']).all())
         
     def test_forward_bptt(self):
+        """Verifies that BPTT algorithm gives save aggregate weight change as
+        RTRL for a very small learning rate, while also checking that the
+        recurrent weights did change some amount (i.e. learning rate not *too*
+        small)."""
         
         self.data = self.task.gen_data(200, 100)
         
@@ -95,25 +110,39 @@ class Test_Learning_Algorithm(unittest.TestCase):
         self.optimizer_2 = SGD(lr=0.000001)
         self.learn_alg_2 = Forward_BPTT(self.rnn_2, 15)
         
-        monitors = ['loss_', 'y_hat', 'a']
+        monitors = []
         
         np.random.seed(2)
-        self.sim_1 = Simulation(self.rnn_1, self.learn_alg_1, self.optimizer_1, L2_reg=0.0001)
-        self.sim_1.run(self.data,
+        self.sim_1 = Simulation(self.rnn_1)
+        self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
+                       optimizer=self.optimizer_1,
                        monitors=monitors,
                        verbose=False)
         
         np.random.seed(2)
-        self.sim_2 = Simulation(self.rnn_2, self.learn_alg_2, self.optimizer_2, L2_reg=0.0001)
-        self.sim_2.run(self.data,
+        self.sim_2 = Simulation(self.rnn_2)
+        self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
+                       optimizer=self.optimizer_2,
                        monitors=monitors,
                        verbose=False)
         
-        self.assertTrue(np.isclose(self.rnn_1.W_rec, self.rnn_2.W_rec, atol=1e-5).all())
-        self.assertFalse(np.isclose(self.W_rec, self.rnn_2.W_rec, atol=1e-3).all())
+        #Assert networks learned similar weights with a small tolerance.
+        self.assertTrue(np.isclose(self.rnn_1.W_rec,
+                                   self.rnn_2.W_rec, atol=1e-5).all())
+        #Assert networks' parameters changed appreciably, despite a large
+        #tolerance for closeness.
+        self.assertFalse(np.isclose(self.W_rec,
+                                    self.rnn_2.W_rec, atol=1e-3).all())
         
     def test_kernl_reduce_rflo(self):
+        """Verifies that KeRNL reduces to RFLO in special case.
         
+        If beta is initialized to the identity while the gammas are all
+        initialized to the network inverse time constant alpha, and the KeRNL
+        optimizer has 0 learning rate (i.e. beta and gamma do not change), then
+        KeRNL should produce the same gradients as RFLO if the approximate
+        KeRNL of (1 - alpha) (rather than exp(-alpha)) is used.
+        """
         self.data = self.task.gen_data(200, 100)
         
         alpha = 0.3
@@ -121,34 +150,43 @@ class Test_Learning_Algorithm(unittest.TestCase):
         self.rnn_1.alpha = alpha
         self.rnn_2.alpha = alpha
         
+        #RFLO
         np.random.seed(1)
         self.optimizer_1 = SGD(lr=0.001)
         self.learn_alg_1 = RFLO(self.rnn_1, alpha)
+        #KeRNL with beta and gamma fixed to RFLO values
         np.random.seed(1)
         self.optimizer_2 = SGD(lr=0.001)
         self.KeRNL_optimizer = SGD(lr=0)
-        beta = np.eye(self.rnn_2.n_hidden)
-        gamma = np.ones(self.rnn_2.n_hidden)*alpha
+        beta = np.eye(self.rnn_2.n_h)
+        gamma = np.ones(self.rnn_2.n_h)*alpha
         self.learn_alg_2 = KeRNL(self.rnn_2, self.KeRNL_optimizer,
                                  beta=beta, gamma=gamma,
                                  use_approx_kernel=True)
         
-        monitors = ['loss_', 'y_hat', 'a']
+        monitors = []
         
         np.random.seed(2)
-        self.sim_1 = Simulation(self.rnn_1, self.learn_alg_1, self.optimizer_1, L2_reg=0.0001)
-        self.sim_1.run(self.data,
+        self.sim_1 = Simulation(self.rnn_1)
+        self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
+                       optimizer=self.optimizer_1,
                        monitors=monitors,
                        verbose=False)
         
         np.random.seed(2)
-        self.sim_2 = Simulation(self.rnn_2, self.learn_alg_2, self.optimizer_2, L2_reg=0.0001)
-        self.sim_2.run(self.data,
+        self.sim_2 = Simulation(self.rnn_2)
+        self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
+                       optimizer=self.optimizer_2,
                        monitors=monitors,
                        verbose=False)
         
-        self.assertTrue(np.isclose(self.rnn_1.W_rec, self.rnn_2.W_rec, atol=1e-5).all())
-        self.assertFalse(np.isclose(self.W_rec, self.rnn_2.W_rec, atol=1e-3).all())
+        #Assert networks learned similar weights with a small tolerance.
+        self.assertTrue(np.isclose(self.rnn_1.W_rec,
+                                   self.rnn_2.W_rec, atol=1e-5).all())
+        #Assert networks' parameters changed appreciably, despite a large
+        #tolerance for closeness.
+        self.assertFalse(np.isclose(self.W_rec,
+                                    self.rnn_2.W_rec, atol=1e-3).all())
         
 if __name__=='__main__':
     unittest.main()
