@@ -46,16 +46,16 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
     def get_outer_grads(self):
         
         self.a_ = np.concatenate([self.net.a, np.array([1])])
-        return np.multiply.outer(self.net.e, self.a_)
+        return np.multiply.outer(self.net.error, self.a_)
     
     def propagate_feedback_to_hidden(self):
         
         self.q_prev = np.copy(self.q)
         
         if self.W_FB is None:
-            self.q = self.net.e.dot(self.net.W_out)
+            self.q = self.net.error.dot(self.net.W_out)
         else:
-            self.q = self.net.e.dot(self.W_FB)
+            self.q = self.net.error.dot(self.W_FB)
     
     def L2_regularization(self, grads):
         
@@ -85,11 +85,12 @@ class RTRL(Real_Time_Learning_Algorithm):
 
     def __init__(self, net, **kwargs):
         
+        self.name = 'RTRL'
         allowed_kwargs_ = set()
         super().__init__(net, allowed_kwargs_, **kwargs)
         
         #Initialize influence matrix
-        self.dadw  = np.zeros((self.n_h, self.net.n_h_params))
+        self.dadw = np.zeros((self.n_h, self.net.n_h_params))
         
     def update_learning_vars(self):
         
@@ -113,6 +114,7 @@ class UORO(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, **kwargs):
         
+        self.name = 'UORO'
         allowed_kwargs_ = {'epsilon', 'P0', 'P1'}
         super().__init__(net, allowed_kwargs_, **kwargs)
         
@@ -135,12 +137,12 @@ class UORO(Real_Time_Learning_Algorithm):
             self.f2 = self.net.next_state(self.net.x, self.net.a_prev, update=False)
             self.a_tilde_ = (self.f1 - self.f2)/self.epsilon
             self.p0 = np.sqrt(norm(self.w_tilde)/(norm(self.a_tilde_) + self.epsilon)) + self.epsilon
-            self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/(self.n_h + self.epsilon)) + self.epsilon
+            self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/(np.sqrt(self.n_h) + self.epsilon)) + self.epsilon
         #Backpropagation method
         else:
             self.a_tilde_ = self.net.a_J.dot(self.a_tilde)
             self.p0 = np.sqrt(norm(self.w_tilde)/norm(self.a_tilde_))
-            self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/self.n_h)
+            self.p1 = np.sqrt(norm(self.nu.dot(self.papw))/np.sqrt(self.n_h))
             
         #Override with fixed P0 and P1 if given
         if self.P0 is not None:
@@ -166,6 +168,7 @@ class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, rho_A=1, rho_B=1, gamma=0.5, **kwargs):
         
+        self.name = 'RW-RTRL'
         allowed_kwargs_ = set()
         super().__init__(net, allowed_kwargs_, **kwargs)
         
@@ -202,6 +205,7 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, **kwargs):
         
+        self.name = 'KF-RTRL'
         allowed_kwargs_ = {'P0', 'P1', 'A', 'u'}
         super().__init__(net, allowed_kwargs_, **kwargs)
         
@@ -248,6 +252,7 @@ class RFLO(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, alpha, monitors=[], **kwargs):
         
+        self.name = 'RFLO'
         allowed_kwargs_ = {'P'}
         super().__init__(net, allowed_kwargs_, **kwargs)
         
@@ -276,6 +281,7 @@ class DNI(Real_Time_Learning_Algorithm):
     
     def __init__(self, net, optimizer, **kwargs):
         
+        self.name = 'DNI'
         allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
                            'activation', 'SG_label_activation', 'backprop_weights',
                            'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e',
@@ -509,12 +515,13 @@ class BPTT(Learning_Algorithm):
     
 class Forward_BPTT(Real_Time_Learning_Algorithm):
     
-    def __init__(self, net, T, **kwargs):
+    def __init__(self, net, T_truncation, **kwargs):
         
+        self.name = 'F-BPTT'
         allowed_kwargs_ = set()
         super().__init__(net, allowed_kwargs_, **kwargs)
         
-        self.T = T
+        self.T_truncation = T_truncation
         
         self.CA_hist = []
         self.a_hat_hist = []
@@ -549,7 +556,7 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
                  
     def get_rec_grads(self):
         
-        if len(self.CA_hist)==self.T:
+        if len(self.CA_hist)==self.T_truncation:
             
             self.net.CA = np.copy(self.CA_hist[0])
             
@@ -580,8 +587,10 @@ class KeRNL(Real_Time_Learning_Algorithm):
     def __init__(self, net, optimizer, T=20, sigma_noise=0.00001,
                  use_approx_kernel=False, **kwargs):
 
+        self.name = 'KeRNL'
         self.n_h = net.n_h
         self.n_in = net.n_in
+        self.i_t = 0
         self.T = T
         self.sigma_noise = sigma_noise
         self.optimizer = optimizer
@@ -589,6 +598,7 @@ class KeRNL(Real_Time_Learning_Algorithm):
         
         #Initialize learning variables
         self.beta = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        self.beta = np.eye(self.n_h)
         self.gamma = (1/self.T)**np.random.uniform(0, 2, self.n_h)
         self.eligibility = np.zeros((self.n_h, self.n_h + self.n_in + 1))
         self.Omega = np.zeros(self.n_h)
@@ -615,6 +625,9 @@ class KeRNL(Real_Time_Learning_Algorithm):
     
     def update_learning_vars(self):
         
+        if self.i_t > 0 and self.i_t%1000 == 0 and False:
+            set_trace()
+        
         #Observe Jacobian if desired:
         self.J = self.net.get_a_jacobian(update=False)
         
@@ -624,6 +637,9 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.noisy_net.b_rec = self.net.b_rec
         
         #Update noisy net forward
+        if self.i_t%self.T == 0: #reset to network state every T time steps
+            self.reset_learning()
+        
         self.noisy_net.a += self.zeta
         self.noisy_net.next_state(self.net.x)
         
@@ -639,6 +655,7 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.eligibility = (self.eligibility.T*self.kernel(1)).T + self.papw
         
         #Get error in predicting perturbations effect
+        self.loss_noise = np.square((self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a))).sum()
         self.e_noise = self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a)
         
         #Update beta and gamma
@@ -647,13 +664,18 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.beta, self.gamma = self.optimizer.get_update([self.beta, self.gamma],
                                                           [self.beta_grads, self.gamma_grads])
         
+        self.i_t += 1
+        
     def get_rec_grads(self):
         
         return (self.eligibility.T*self.q.dot(self.beta)).T
 
+    def reset_learning(self):
 
-
-
+        self.noisy_net.a = np.copy(self.net.a)
+        self.Omega = np.zeros_like(self.Omega)
+        self.Gamma = np.zeros_like(self.Gamma)
+        self.eligibility = np.zeros_like(self.eligibility)
 
 
 

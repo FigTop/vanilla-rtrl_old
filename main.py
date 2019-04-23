@@ -51,12 +51,12 @@ if os.environ['HOME']=='/Users/omarschall':
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-task = Coin_Task(4, 6, one_hot=True, deterministic=True, tau_task=1)
+task = Coin_Task(6, 10, one_hot=True, deterministic=True, tau_task=1)
 #time_steps_per_trial = 30
 #task = Sine_Wave(1/time_steps_per_trial, [1, 0.7, 0.3, 0.1], method='regular', never_off=True)
 #task = Sensorimotor_Mapping(t_report=7, t_stim=1, stim_duration=3, report_duration=3)
 #reset_sigma = 0.05
-data = task.gen_data(50000, 1000)
+data = task.gen_data(100000, 1000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -80,38 +80,44 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           loss=softmax_cross_entropy)
 
 optimizer = SGD(lr=0.001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
-#KeRNL_optimizer = SGD(lr=0.001)
+KeRNL_optimizer = SGD(lr=0.001)
+SG_optimizer = SGD(lr=0.005)
 
-if params['algorithm']=='DNI':
-    SG_optimizer = SGD(lr=0.005)
-    learn_alg = DNI(rnn, SG_optimizer, W_a_lr=0.01, backprop_weights='exact',
-                    SG_label_activation=tanh, W_FB=W_FB)
-                    #train_SG_with_exact_CA=False)
-#learn_alg.SG_init(8)
-if params['algorithm']=='RTRL':
-    learn_alg = RTRL(rnn)
-if params['algorithm']=='BPTT':                    
-    T = 10
-    learn_alg = Forward_BPTT(rnn, T)
-#learn_alg = Random_Walk_RTRL(rnn, rho_A=1, rho_B=1)
-#learn_alg = UORO(rnn)
-#learn_alg = KF_RTRL(rnn)
+#learn_alg = Forward_BPTT(rnn, 12)
+#learn_alg = KeRNL(rnn, KeRNL_optimizer, T=10, sigma_noise=0.1)
+#learn_alg = RFLO(rnn, alpha=alpha)
+#learn_alg = DNI(rnn, SG_optimizer)
+learn_alg = RTRL(rnn)
+#learn_alg = Forward_BPTT(rnn, 12)
+comp_algs = [UORO(rnn),
+             KF_RTRL(rnn),
+             KeRNL(rnn, KeRNL_optimizer, T=12, sigma_noise=0.1),
+             RFLO(rnn, alpha=alpha),
+             Forward_BPTT(rnn, 12),
+             DNI(rnn, SG_optimizer)]
+#comp_algs = []
+
+ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
+
+#comp_alg_2 = Random_Walk_RTRL(rnn, rho_A=1, rho_B=1)
 #learn_alg = RFLO(rnn, alpha=params['alpha_RFLO'], W_FB=W_FB)
 #learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.01)
 #cCclearn_alg = BPTT(rnn, 1, 10)
 #monitors = ['loss_', 'y_hat', 'sg_loss', 'loss_a', 'sg_target-norm', 'global_grad-norm', 'A-norm', 'a-norm']
 #monitors += ['CA_forward_est', 'CA_SG_est']
-monitors = ['loss_', 'y_hat',]#
+monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']#, 'alignment_matrix']
+monitors = ['loss_', 'y_hat', 'alignment_matrix']
 #'lr', 'A-norm', 'B-norm']#, 'sg_loss', 'loss_a', 'sg', 'CA', 'W_rec_alignment']
 
-sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.0005)
+sim = Simulation(rnn)
 #                     time_steps_per_trial=task.time_steps_per_trial,
-#                     reset_sigma=reset_sigma,
+#                     reset_sigma=reset_sigma
 #                     reset_at_trial_start=True,
 #                     i_job=i_job,
 #                     save_dir=save_dir)
 #                     SSA_PCs=3)
-sim.run(data,
+sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+        comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
         check_accuracy=True)
@@ -146,9 +152,24 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.xlim([400, 500])
     
     plt.figure()
-    plot_filtered_signals([sim.mons['loss_']])
-    #                       sim.mons['A-norm'],
-    #                       sim.mons['B-norm']], plot_loss_benchmarks=True)
+    plot_filtered_signals([sim.mons['loss_'], sim.mons['loss_noise']])
+#                           sim.mons['a_tilde-norm'],
+#                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
+    
+    if True:
+        plt.figure()
+        plt.imshow(sim.mons['alignment_matrix'].mean(0),
+                   cmap='RdBu_r', vmin=-1, vmax=1)
+        plt.colorbar()
+        plt.xticks(list(range(len(ticks))), ticks)
+        plt.yticks(list(range(len(ticks))), ticks)
+        
+        plt.figure()
+        plt.imshow(sim.mons['alignment_matrix'].std(0),
+                   cmap='RdBu_r', vmin=-1, vmax=1)
+        plt.colorbar()
+        plt.xticks(list(range(len(ticks))), ticks)
+        plt.yticks(list(range(len(ticks))), ticks)
     
 #    plt.figure()
 #    plt.plot(test_sim.mons['y_hat'][:,0],data['test']['Y'][:,0], '.', alpha=0.05)

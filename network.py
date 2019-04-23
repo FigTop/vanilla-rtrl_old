@@ -17,12 +17,12 @@ from pdb import set_trace
 
 class RNN:
     """A vanilla recurrent neural network.
-    
+
     Obeys the forward equation (in TeX)
-    
+
     a_t = (1 - \alpha)a_{t-1} + W_{rec}\phi(a_{t-1}) + W_{in}x_t + b_{rec}
     z_t = W_{out}a_t + b_out
-    
+
     Attributes:
         n_in (int): Number of input dimensions
         n_h (int): Number of hidden units
@@ -40,27 +40,25 @@ class RNN:
             for calculating final output from z.
         loss (functions.Function): An instance of the Function class used for
             calculating loss from z (must implicitly include output function,
-            e.g. softmax_cross_entropy if output is softmax).
-    """
-    
+            e.g. softmax_cross_entropy if output is softmax)."""
+
     def __init__(self, W_in, W_rec, W_out, b_rec, b_out,
                  activation, alpha, output, loss):
         """Initializes an RNN by specifying its initial parameter values;
-        its activation, output, and loss functions; and alpha.
-        """
-        
+        its activation, output, and loss functions; and alpha."""
+
         #Initial parameter values
         self.W_in = W_in
         self.W_rec = W_rec
         self.W_out = W_out
         self.b_rec = b_rec
         self.b_out = b_out
-        
+
         #Network dimensions
         self.n_in = W_in.shape[1]
         self.n_h = W_in.shape[0]
         self.n_out = W_out.shape[0]
-        
+
         #Check dimension consistency
         assert self.n_h==W_rec.shape[0]
         assert self.n_h==W_rec.shape[1]
@@ -68,18 +66,18 @@ class RNN:
         assert self.n_h==W_out.shape[1]
         assert self.n_h==b_rec.shape[0]
         assert self.n_out==b_out.shape[0]
-        
+
         #Define shapes and params lists for convenience later
         self.shapes = [w.shape for w in [W_rec, W_in, b_rec, W_out, b_out]]
         self.params = [self.W_rec, self.W_in, self.b_rec,
                        self.W_out, self.b_out]
-        
+
         #Activation and loss functions
         self.alpha = alpha
         self.activation = activation
         self.output = output
         self.loss = loss
-        
+
         #Number of parameters
         self.n_h_params = (self.W_rec.size +
                            self.W_in.size +
@@ -87,45 +85,45 @@ class RNN:
         self.n_params = (self.n_h_params +
                          self.W_out.size +
                          self.b_out.size)
-        
+
         #Params for L2 regularization
         self.L2_indices = [0, 1, 3]
-        
+
         #Initial state values
         self.reset_network()
-        
+
     def reset_network(self, sigma=1, **kwargs):
-        
+
         if 'h' in kwargs.keys():
             self.h = kwargs['h']
         else:
             self.h = np.random.normal(0, sigma, self.n_h)
-            
+
         self.a = self.activation.f(self.h)
-        
+
         if 'a' in kwargs.keys():
             self.a = kwargs['a']
-        
+
         self.z = self.W_out.dot(self.a) + self.b_out
-        
+
     def next_state(self, x, a=None, update=True, sigma=0):
         '''
         Accepts as argument the current time step's input x and updates
         the state of the RNN, while storing the previous state h
         and activatation a.
         '''
-           
+
         if update:
             self.x = x
             self.h_prev = np.copy(self.h)
             self.a_prev = np.copy(self.a)
-            
+
             self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
                       self.b_rec)
             if sigma>0:
                 self.noise = np.random.normal(0, sigma, self.n_h)
                 self.h += self.noise
-            self.a = ((1 - self.alpha)*self.a + 
+            self.a = ((1 - self.alpha)*self.a +
                       self.alpha*self.activation.f(self.h))
         else:
             h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
@@ -138,10 +136,10 @@ class RNN:
         '''
         Updates the output of the RNN using the current activations
         '''
-        
+
         self.z_prev = np.copy(self.z)
         self.z = self.W_out.dot(self.a) + self.b_out
-            
+
     def get_a_jacobian(self, update=True, **kwargs):
         '''
         By default, it updates the Jacobian of the network,
@@ -153,7 +151,7 @@ class RNN:
         provided, these arguments are used instead of the
         network's current values.
         '''
-        
+
         #Use kwargs instead of defaults if provided
         try:
             h = kwargs['h']
@@ -163,17 +161,12 @@ class RNN:
             W_rec = kwargs['W_rec']
         except KeyError:
             W_rec = np.copy(self.W_rec)
-        
+
         #Element-wise nonlinearity derivative
         D = self.activation.f_prime(h)
         a_J = self.alpha*np.diag(D).dot(W_rec) + (1 - self.alpha)*np.eye(self.n_h)
-        
+
         if update:
             self.a_J = np.copy(a_J)
         else:
             return a_J
-        
-        
-        
-        
-    
