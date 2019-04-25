@@ -170,12 +170,12 @@ if True:
         plt.plot(test_sim.mons['y_hat'][:,0])
         plt.plot(data['test']['Y'][:,0])
         plt.plot(data['test']['X'][:,0])
-        plt.plot(test_sim.mons['a-norm'])
+        #plt.plot(test_sim.mons['a-norm'])
         plt.legend(['Prediction', 'Label', 'Stimulus', 'A Norm'])
         #plt.ylim([0, 1.2])
         for i in range(n_test//task.time_steps_per_trial):
             plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
-        plt.xlim([400, 500])
+        plt.xlim([0, 100])
         
         plt.figure()
         plot_filtered_signals([sim.mons['loss_']], plot_loss_benchmarks=False)

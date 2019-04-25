@@ -198,7 +198,7 @@ class Simulation:
                         with open(save_path, 'wb') as f:
                             pickle.dump(test_data, f)
             
-            np.random.seed()
+            #np.random.seed()
             
             ### --- Run network forwards and get error --- ###
             
