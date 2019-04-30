@@ -56,14 +56,18 @@ task = Coin_Task(6, 10, one_hot=True, deterministic=True, tau_task=1)
 #task = Sine_Wave(1/time_steps_per_trial, [1, 0.7, 0.3, 0.1], method='regular', never_off=True)
 #task = Sensorimotor_Mapping(t_report=7, t_stim=1, stim_duration=3, report_duration=3)
 #reset_sigma = 0.05
-data = task.gen_data(100000, 1000)
+
+data = task.gen_data(100000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
 n_out    = task.n_out
 
+np.random.seed(1)
+
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+W_rec = np.eye(n_hidden)
+#W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
 #W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
@@ -79,7 +83,7 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
+optimizer = SGD(lr=0.005)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
 KeRNL_optimizer = SGD(lr=0.001)
 SG_optimizer = SGD(lr=0.005)
 
@@ -87,7 +91,8 @@ SG_optimizer = SGD(lr=0.005)
 #learn_alg = KeRNL(rnn, KeRNL_optimizer, T=10, sigma_noise=0.1)
 #learn_alg = RFLO(rnn, alpha=alpha)
 #learn_alg = DNI(rnn, SG_optimizer)
-learn_alg = RTRL(rnn)
+#learn_alg = RTRL(rnn)
+learn_alg = Only_Output_Weights(rnn)
 #learn_alg = Forward_BPTT(rnn, 12)
 comp_algs = [UORO(rnn),
              KF_RTRL(rnn),
@@ -95,7 +100,7 @@ comp_algs = [UORO(rnn),
              RFLO(rnn, alpha=alpha),
              Forward_BPTT(rnn, 12),
              DNI(rnn, SG_optimizer)]
-#comp_algs = []
+comp_algs = []
 
 ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 
@@ -107,6 +112,7 @@ ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 #monitors += ['CA_forward_est', 'CA_SG_est']
 monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']#, 'alignment_matrix']
 monitors = ['loss_', 'y_hat', 'alignment_matrix']
+monitors = ['loss_', 'y_hat', 'a']
 #'lr', 'A-norm', 'B-norm']#, 'sg_loss', 'loss_a', 'sg', 'CA', 'W_rec_alignment']
 
 sim = Simulation(rnn)
@@ -134,29 +140,31 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 if os.environ['HOME']=='/Users/omarschall':
     
     #Test run
-    n_test = 500
-    data = task.gen_data(100, n_test)
-    test_sim = copy(sim)
-    test_sim.run(data,
-                 mode='test',
-                 monitors=['loss_', 'y_hat', 'a'],
-                 verbose=False)
-    plt.figure()
-    plt.plot(test_sim.mons['y_hat'][:,0])
-    plt.plot(data['test']['Y'][:,0])
-    plt.plot(data['test']['X'][:,0])
-    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
-    #plt.ylim([0, 1.2])
-    #for i in range(n_test//task.time_steps_per_trial):
-    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
-    plt.xlim([400, 500])
+#    n_test = 500
+#    data = task.gen_data(100, n_test)
+#    test_sim = copy(sim)
+#    test_sim.run(data,
+#                 mode='test',
+#                 monitors=['loss_', 'y_hat', 'a'],
+#                 verbose=False)
+#    plt.figure()
+#    plt.plot(test_sim.mons['y_hat'][:,0])
+#    plt.plot(data['test']['Y'][:,0])
+#    plt.plot(data['test']['X'][:,0])
+#    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
+#    #plt.ylim([0, 1.2])
+#    #for i in range(n_test//task.time_steps_per_trial):
+#    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
+#    plt.xlim([400, 500])
     
     plt.figure()
-    plot_filtered_signals([sim.mons['loss_'], sim.mons['loss_noise']])
+    plot_filtered_signals([sim.mons['loss_']])
+    plt.ylim([0.3, 0.7])
+    plt.title(learn_alg.name)
 #                           sim.mons['a_tilde-norm'],
 #                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
     
-    if True:
+    if False:
         plt.figure()
         plt.imshow(sim.mons['alignment_matrix'].mean(0),
                    cmap='RdBu_r', vmin=-1, vmax=1)

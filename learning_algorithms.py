@@ -81,6 +81,22 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         
         return grads_list
         
+class Only_Output_Weights(Real_Time_Learning_Algorithm):
+    
+    def __init__(self, net, **kwargs):
+        
+        self.name = 'Only_Output_Weights'
+        allowed_kwargs_ = set()
+        super().__init__(net, allowed_kwargs_, **kwargs)
+        
+    def update_learning_vars(self):
+        
+        pass
+    
+    def get_rec_grads(self):
+        
+        return np.zeros((self.n_h, self.m))
+    
 class RTRL(Real_Time_Learning_Algorithm):
 
     def __init__(self, net, **kwargs):
