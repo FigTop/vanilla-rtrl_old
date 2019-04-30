@@ -9,11 +9,6 @@ Created on Fri Sep  7 17:20:39 2018
 import numpy as np
 from utils import *
 from functions import *
-from optimizers import *
-from analysis_funcs import *
-import time
-from copy import copy
-from pdb import set_trace
 
 class RNN:
     """A vanilla recurrent neural network.
@@ -64,6 +59,8 @@ class RNN:
         z (numpy array): Array of shape (n_out) reprenting the outputs of the
             network, before any final output nonlinearities, e.g. softmax,
             are applied.
+        error (numpy array): Array of shape (n_out) representing the derivative
+            of the loss with respect to z. Calculated by loss.f_prime.
         y_hat (numpy array): Array of shape (n_out) representing the final
             outputs of the network, to be directly compared with task labels.
             Not computed in any methods in this class.

@@ -141,8 +141,8 @@ class Test_Learning_Algorithm(unittest.TestCase):
         initialized to the network inverse time constant alpha, and the KeRNL
         optimizer has 0 learning rate (i.e. beta and gamma do not change), then
         KeRNL should produce the same gradients as RFLO if the approximate
-        KeRNL of (1 - alpha) (rather than exp(-alpha)) is used.
-        """
+        KeRNL of (1 - alpha) (rather than exp(-alpha)) is used."""
+
         self.data = self.task.gen_data(200, 100)
 
         alpha = 0.3
@@ -187,13 +187,13 @@ class Test_Learning_Algorithm(unittest.TestCase):
         #tolerance for closeness.
         self.assertFalse(np.isclose(self.W_rec,
                                     self.rnn_2.W_rec, atol=1e-3).all())
-        
+
     def test_uoro_unbiased(self):
         """Verifies that if several iid instances of the uoro approximation
         are run at each time step, their average is close to the true influence
         matrix from RTRL."""
-        
-        
+
+
 
 if __name__=='__main__':
     unittest.main()
