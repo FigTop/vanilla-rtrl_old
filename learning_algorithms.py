@@ -37,8 +37,7 @@ class Learning_Algorithm:
             net (network.RNN): An instance of RNN to be trained by the network.
             allowed_kwargs_ (set): Set of allowed kwargs in addition to those
                 common to all child classes of Learning_Algorithm, 'W_FB' and
-                'L2_reg'.
-        """
+                'L2_reg'."""
 
         allowed_kwargs = {'W_FB', 'L2_reg'}.union(allowed_kwargs_)
 
@@ -47,13 +46,15 @@ class Learning_Algorithm:
                 raise TypeError('Unexpected keyword argument passed'
                                 'to Learning_Algorithm.__init__: ' + str(k))
 
+        #Set all non-specified kwargs to None
         for attr in allowed_kwargs:
             if not hasattr(self, attr):
                 setattr(self, attr, None)
 
+        #Make kwargs attributes of the instance
         self.__dict__.update(kwargs)
 
-        #RNN instance the algorithm is being applied to
+        #Define basic learning algorithm properties
         self.net = net
         self.n_in = self.net.n_in
         self.n_h = self.net.n_h
@@ -94,6 +95,17 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         return np.multiply.outer(self.net.error, self.a_)
 
     def propagate_feedback_to_hidden(self):
+        """Performs one step of backpropagation from the outer-layer errors to
+        the hidden state.
+
+        Calculates the immediate derivative of the loss with respect to the
+        hidden state net.a. By default, this is done by taking net.error (dL/dz)
+        and applying the chain rule, i.e. taking its matrix product with the
+        derivative dz/da, which is net.W_out. Alternatively, if 'W_FB' attr is
+        provided to the instance, then these feedback weights, rather the W_out,
+        are used, as in feedback alignment. (See Lillicrap et al. 2016.)
+
+        Updates q to the current value of dL/da."""
 
         self.q_prev = np.copy(self.q)
 
@@ -103,14 +115,40 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
             self.q = self.net.error.dot(self.W_FB)
 
     def L2_regularization(self, grads):
+        """Adds L2 regularization to the gradient.
+
+        Args:
+            grads (list): List of numpy arrays representing gradients before L2
+                regularization is applied.
+        Returns:
+            A new list of grads with L2 regularization applied."""
 
         #Get parameters affected by L2 regularization
         L2_params = [self.net.params[i] for i in self.net.L2_indices]
+        #Add to each grad the corresponding weight's current value, weighted
+        #by the L2_reg hyperparameter.
         for i_L2, W in zip(self.net.L2_indices, L2_params):
             grads[i_L2] += self.L2_reg*W
+        #Calculate L2 loss for monitoring purposes
+        self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
         return grads
 
     def __call__(self):
+        """Calculates the final list of grads for this time step.
+
+        Assumes the user has already called self.update_learning_vars, a
+        method specific to each child class of Real_Time_Learning_Algorithm
+        that updates internal learning variables, e.g. the influence matrix of
+        RTRL. Then calculates the outer grads (gradients of W_out and b_out),
+        updates q using propagate_feedback_to_hidden, and finally calling the
+        get_rec_grads method (specific to each child class) to get the gradients
+        of W_rec, W_in, and b_rec as one numpy array with shape (n_h, m). Then
+        these gradients are split along the column axis into a list of 5
+        gradients for W_rec, W_in, b_rec, W_out, b_out. L2 regularization is
+        applied if L2_reg parameter is not None.
+
+        Returns:
+            List of gradients for W_rec, W_in, b_rec, W_out, b_out."""
 
         self.outer_grads = self.get_outer_grads()
         self.propagate_feedback_to_hidden()
@@ -127,6 +165,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         return grads_list
 
 class Only_Output_Weights(Real_Time_Learning_Algorithm):
+    """Updates only the output weights W_out and b_out"""
 
     def __init__(self, net, **kwargs):
 
@@ -135,16 +174,45 @@ class Only_Output_Weights(Real_Time_Learning_Algorithm):
         super().__init__(net, allowed_kwargs_, **kwargs)
 
     def update_learning_vars(self):
+        """No internal variables to update."""
 
         pass
 
     def get_rec_grads(self):
+        """Returns all 0s for the recurrent gradients."""
 
         return np.zeros((self.n_h, self.m))
 
 class RTRL(Real_Time_Learning_Algorithm):
+    """Implements the Real-Time Recurrent Learning (RTRL) algorithm.
+
+    RTRL maintains a long-term "influence matrix" dadw that represents the
+    derivative of the hidden state with respect to a flattened vector of
+    recurrent update parameters. We concatenate [W_rec, W_in, b_rec] along
+    the column axis and order the flattened vector of parameters by stacking
+    the columns end-to-end. In other words, w_k = W_{ij} when i = k%n_h and
+    j = k//n_h. The influence matrix updates according to the equation
+
+    M' = JM + M_immediate       (1)
+
+    where J is the network Jacobian and M_immediate is the immediate influence
+    of a parameter w on the hidden state a. (See paper for more detailed
+    notation.) M_immediate is notated as papw in the code for "partial a partial
+    w." For a vanilla network, this can be simply (if inefficiently) computed as
+    the Kronecker product of a_hat = [a_prev, x, 1] (a concatenation of the prev
+    hidden state, the input, and a constant 1 (for bias)) with the activation
+    derivatives organized in a diagonal matrix. The implementation of Eq. (1)
+    is in the update_learning_vars method.
+
+    Finally, the algorithm returns recurrent gradients by projecting the
+    feedback vector q onto the influence matrix M:
+
+    dL/dw = dL/da da/dw = qM        (2)
+
+    Eq. (2) is implemented in the get_rec_grads method."""
 
     def __init__(self, net, **kwargs):
+        """Inits an RTRL instance by setting the initial dadw matrix to zero."""
 
         self.name = 'RTRL'
         allowed_kwargs_ = set()
@@ -154,27 +222,60 @@ class RTRL(Real_Time_Learning_Algorithm):
         self.dadw = np.zeros((self.n_h, self.net.n_h_params))
 
     def update_learning_vars(self):
+        """Updates the influence matrix via Eq. (1)."""
 
-        #Get relevant values and derivatives from network
-        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        self.papw = np.kron(self.a_hat, np.diag(self.net.activation.f_prime(self.net.h)))
+        #Get relevant values and derivatives from network.
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        D = np.diag(self.net.activation.f_prime(self.net.h))
+        self.papw = np.kron(self.a_hat, D)
         self.net.get_a_jacobian()
 
-        #Update influence matrix
+        #Update influence matrix via Eq. (1).
         self.dadw = self.net.a_J.dot(self.dadw) + self.papw
 
     def get_rec_grads(self):
+        """Calculates recurrent grads using Eq. (2), reshapes into original
+        matrix form."""
 
-        return self.q.dot(self.dadw).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
+        return self.q.dot(self.dadw).reshape((self.n_h, self.m), order='F')
 
     def reset_learning(self):
+        """Resets learning algorithm by setting influence matrix to 0."""
 
         self.dadw *= 0
 
 class UORO(Real_Time_Learning_Algorithm):
+    """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm.
+
+    Full details in our review paper or in original Tallec et al. 2017. Broadly,
+    an outer product approximation of M is maintained by 2 vectors a_tilde and
+    w_tilde, which update by the equations
+
+    a_tilde' = p0 J a_tilde + p1 \nu        (1)
+    w_tilde' = 1/p0 w_tilde + 1/p1 \nu M_immediate      (2)
+
+    where \nu is a vector of iid samples of {-1, 1}. p0 and p1 are calculated by
+
+    p0 = \sqrt{norm(w_tilde)/norm(a_tilde)}       (3)
+    p1 = \sqrt{norm(\nu papw)/norm(\nu)}        (4)
+
+    These equations are implemented in update_learning_vars by two different
+    approaches. If 'epsilon' is provided as an argument, then the "forward
+    differentiation" method from the original paper is used, where the matrix-
+    vector product J a_tilde is estimated numerically by a perturbation of size
+    epsilon in the a_tilde direction.
+
+    Then the recurrent gradients are calculated by
+
+    dL/dw = qM = (q a_tilde) w_tilde    (5)
+
+    Eq. (5) is implemented in the get_rec_grads method."""
 
     def __init__(self, net, **kwargs):
-
+        """Inits an UORO instance by setting the initial values of a_tilde and
+        w_tilde to be random Gaussians, """
         self.name = 'UORO'
         allowed_kwargs_ = {'epsilon', 'P0', 'P1'}
         super().__init__(net, allowed_kwargs_, **kwargs)
