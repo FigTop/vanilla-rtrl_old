@@ -45,5 +45,19 @@ class Test_Utils(unittest.TestCase):
     def test_classification_accuracy(self):
         """Verifies that """
 
-if __name__=='__main__':
+    def test_regetattr(self):
+        """Verifies regetattr in a simple nested object case."""
+
+        class Foo:
+            def __init__(self):
+                self.y = 2
+        class Bar:
+            def __init__(self):
+                self.x = Foo()
+
+        bar = Bar()
+
+        self.assertEqual(rgetattr(bar, 'x.y'), 2)
+
+if __name__ == '__main__':
     unittest.main()

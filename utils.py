@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 from scipy.stats import unitary_group
+from functools import reduce
 
 ### --- Mathematical tools --- ###
 
@@ -58,7 +59,7 @@ def normalized_dot_product(a, b):
 
     a_norm = norm(a)
     b_norm = norm(b)
-    
+
     if a_norm >0 and b_norm > 0:
         return np.dot(a.flatten(),b.flatten())/(a_norm*b_norm)
     else:
@@ -85,11 +86,13 @@ def generate_real_matrix_with_given_eigenvalues(evals):
             the desired eigenvalues.
 
     Returns:
-        A real matrix, half of whose eigenvalues are evals."""
+        A real matrix, half of whose eigenvalues are evals.
+
+    CAVEAT: DOESN'T WORK."""
 
     n_half = len(evals)
     evals = np.concatenate([evals, np.conjugate(evals)])
-    
+
     evecs = unitary_group.rvs(2*n_half)[:,:n_half]
     evecs = np.concatenate([evecs, np.conjugate(evecs)], axis=1)
 
@@ -125,3 +128,15 @@ def config_generator(**kwargs):
     vals = kwargs.values()
     for instance in itertools.product(*vals):
         yield dict(zip(keys, instance))
+
+def rgetattr(obj, attr):
+    """A "recursive" version of getattr that can handle nested objects.
+
+    Args:
+        obj (object): Parent object
+        attr (string): Address of desired attribute with '.' between child
+            objects.
+    Returns:
+        The attribute of obj referred to."""
+
+    return reduce(getattr, [obj] + attr.split('.'))

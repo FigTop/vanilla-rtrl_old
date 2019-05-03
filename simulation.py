@@ -157,7 +157,7 @@ class Simulation:
         for i_t in range(self.total_time_steps):
 
             self.i_t = i_t
-            
+
             ### --- Reset model if there is a trial structure --- ###
 
             if self.time_steps_per_trial is not None:
@@ -337,7 +337,8 @@ class Simulation:
         object's attribute found.
 
         Warning: will produce nonsensical results if multiple objects in
-        self.objs have attributes with the same name."""
+        self.objs have attributes with the same name, and one such attribute
+        is included in monitors."""
 
         for key in self.mons:
             for obj in self.objs:
@@ -398,7 +399,7 @@ class Simulation:
     def compare_algorithms(self):
         """Computes alignment matrix for different learning algorithms run
         in parallel."""
-        
+
         for i_alg, alg in enumerate(self.algs):
             if i_alg > 0:
                 alg.update_learning_vars()
@@ -410,24 +411,25 @@ class Simulation:
             self.alignment_matrix = np.zeros((n_algs, n_algs))
             for i, key_i in enumerate(self.rec_grads_dict):
                 for j, key_j in enumerate(self.rec_grads_dict):
+
                     if 'BPTT' in key_i:
                         i_index = -1
                     else:
                         i_index = 0
-                        if 'UORO' not in key_i:
-                            i_index = 1
-                        if 'UORO' not in key_j:
-                            j_index = 1
+#                        if 'UORO' not in key_i:
+#                            i_index = 1
+#                        if 'UORO' not in key_j:
+#                            j_index = 1
                     if 'BPTT' in key_j:
                         j_index = -1
                     else:
                         j_index = 0
-                        if 'UORO' not in key_i:
-                            i_index = 1
-                        if 'UORO' not in key_j:
-                            j_index = 1
+#                        if 'UORO' not in key_i:
+#                            i_index = 1
+#                        if 'UORO' not in key_j:
+#                            j_index = 1
 
-                        
+
                     try:
                         g_i = self.rec_grads_dict[key_i][i_index]
                         g_j = self.rec_grads_dict[key_j][j_index]
@@ -435,7 +437,7 @@ class Simulation:
                         self.alignment_matrix[i, j] = alignment
                     except IndexError:
                         pass
-                    
+
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:
                 del(self.rec_grads_dict[key][0])

@@ -193,7 +193,28 @@ class Test_Learning_Algorithm(unittest.TestCase):
         are run at each time step, their average is close to the true influence
         matrix from RTRL."""
 
+        self.data = self.task.gen_data(6, 10)
+        self.learn_alg = UORO(self.rnn_1)
+        self.comp_algs = [RTRL(self.rnn_1)]
+        self.optimizer = SGD(lr=0)
+        self.sim = Simulation(self.rnn_1)
+        self.sim.run(self.data, learn_alg=self.learn_alg,
+                     comp_algs=self.comp_algs,
+                     optimizer=self.optimizer,
+                     monitors=['dadw'])
+        self.rnn_1.next_state(self.data['test']['X'][0])
+        self.comp_algs[0].update_learning_vars()
+        self.learn_alg.update_learning_vars(update=False)
+        gradient_estimates = []
+        n_estimates = 1000
+        for i in range(n_estimates):
+            a_tilde, w_tilde = self.learn_alg.get_influence_estimate()
+            gradient_estimates.append(np.multiply.outer(a_tilde, w_tilde))
+        mean_grad_estimate = sum(gradient_estimates)/n_estimates
+        set_trace()
+        self.assertTrue(np.isclose(mean_grad_estimate,
+                                   self.comp_algs[0].dadw).all())
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     unittest.main()
