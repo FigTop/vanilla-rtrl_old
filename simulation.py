@@ -9,7 +9,8 @@ Created on Mon Nov  5 12:54:56 2018
 from copy import copy
 import time
 from utils import (norm, classification_accuracy,
-                   normalized_dot_product, get_spectral_radius)
+                   normalized_dot_product, get_spectral_radius,
+                   rgetattr)
 import numpy as np
 
 class Simulation:
@@ -200,8 +201,11 @@ class Simulation:
 
         #Initialize monitors
         self.mons = {mon:[] for mon in self.monitors}
-        self.objs = [self, self.net, self.learn_alg, self.optimizer]
-        self.objs += self.comp_algs
+        #Make all relevant algorithms attributes of self
+        if self.mode == 'train':
+            for comp_alg in self.comp_algs:
+                setattr(self, comp_alg.name, comp_alg)
+            setattr(self, self.learn_alg.name, self.learn_alg)
 
         #Set a random initial state of the network
         if self.a_initial is not None:
@@ -310,23 +314,23 @@ class Simulation:
 
         summary = '\rProgress: {}% complete \nTime Elapsed: {}s \n'
 
-        if 'loss_' in self.mons.keys():
+        if 'net.loss_' in self.mons.keys():
             interval = self.report_interval
-            avg_loss = sum(self.mons['loss_'][-interval:])/interval
+            avg_loss = sum(self.mons['net.loss_'][-interval:])/interval
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
 
         if self.check_accuracy or self.check_loss:
             test_sim = self.get_test_sim()
             test_sim.run(data, mode='test',
-                         monitors=['y_hat', 'loss_'],
+                         monitors=['net.y_hat', 'net.loss_'],
                          verbose=False)
             if self.check_accuracy:
-                acc = classification_accuracy(data, test_sim.mons['y_hat'])
+                acc = classification_accuracy(data, test_sim.mons['net.y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
                 summary += accuracy
             if self.check_loss:
-                test_loss = np.mean(test_sim.mons['loss_'])
+                test_loss = np.mean(test_sim.mons['net.loss_'])
                 loss_summary = 'Test loss: {} \n'.format(test_loss)
                 summary += loss_summary
 
@@ -334,18 +338,13 @@ class Simulation:
 
     def update_monitors(self):
         """Loops through the monitor keys and appends current value of any
-        object's attribute found.
-
-        Warning: will produce nonsensical results if multiple objects in
-        self.objs have attributes with the same name, and one such attribute
-        is included in monitors."""
+        object's attribute found."""
 
         for key in self.mons:
-            for obj in self.objs:
-                try:
-                    self.mons[key].append(getattr(obj, key))
-                except AttributeError:
-                    pass
+            try:
+                self.mons[key].append(rgetattr(self, key))
+            except AttributeError:
+                pass
 
     def monitors_to_arrays(self):
         """Recasts monitors (lists by default) as numpy arrays for ease of use
@@ -366,9 +365,8 @@ class Simulation:
             for key in self.mons:
                 if feature in key:
                     attr = key.split('-')[0]
-                    for obj in [self, self.net, self.learn_alg]:
-                        if hasattr(obj, attr):
-                            setattr(self, key, func(getattr(obj, attr)))
+                    self.mons[key].append(func(rgetattr(self, attr)))
+                    #setattr(self, key, func(rgetattr(self, attr)))
 
     def save_best_model(self, data):
         """Runs a test simulation, compares loss to current best model, and
@@ -377,9 +375,9 @@ class Simulation:
 
         val_sim = self.get_test_sim()
         val_sim.run(data, mode='test',
-                    monitors=['y_hat', 'loss_'],
+                    monitors=['net.y_hat', 'net.loss_'],
                     verbose=False)
-        val_loss = np.mean(val_sim.mons['loss_'])
+        val_loss = np.mean(val_sim.mons['net.loss_'])
 
         if val_loss < self.best_val_loss:
             self.best_net = val_sim.net
@@ -416,27 +414,15 @@ class Simulation:
                         i_index = -1
                     else:
                         i_index = 0
-#                        if 'UORO' not in key_i:
-#                            i_index = 1
-#                        if 'UORO' not in key_j:
-#                            j_index = 1
                     if 'BPTT' in key_j:
                         j_index = -1
                     else:
                         j_index = 0
-#                        if 'UORO' not in key_i:
-#                            i_index = 1
-#                        if 'UORO' not in key_j:
-#                            j_index = 1
-
-
-                    try:
-                        g_i = self.rec_grads_dict[key_i][i_index]
-                        g_j = self.rec_grads_dict[key_j][j_index]
-                        alignment = normalized_dot_product(g_i, g_j)
-                        self.alignment_matrix[i, j] = alignment
-                    except IndexError:
-                        pass
+                        
+                    g_i = self.rec_grads_dict[key_i][i_index]
+                    g_j = self.rec_grads_dict[key_j][j_index]
+                    alignment = normalized_dot_product(g_i, g_j)
+                    self.alignment_matrix[i, j] = alignment
 
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:

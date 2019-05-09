@@ -51,13 +51,15 @@ if os.environ['HOME']=='/Users/omarschall':
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-task = Coin_Task(6, 10, one_hot=True, deterministic=True, tau_task=1)
+task = Coin_Task(4, 7, one_hot=True, deterministic=True, tau_task=3)
 #time_steps_per_trial = 30
 #task = Sine_Wave(1/time_steps_per_trial, [1, 0.7, 0.3, 0.1], method='regular', never_off=True)
 #task = Sensorimotor_Mapping(t_report=7, t_stim=1, stim_duration=3, report_duration=3)
 #reset_sigma = 0.05
 
-data = task.gen_data(80000, 5000)
+np.random.seed(10)
+
+data = task.gen_data(50000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -73,7 +75,7 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 1
+alpha = 0.4
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
@@ -81,32 +83,41 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.0002)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
-KeRNL_optimizer = SGD(lr=0.001)
+optimizer = SGD(lr=0.001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
+KeRNL_optimizer = SGD(lr=1)
 SG_optimizer = SGD(lr=0.005)
 
 #learn_alg = Forward_BPTT(rnn, 12)
 #learn_alg = KeRNL(rnn, KeRNL_optimizer, T=10, sigma_noise=0.1)
 #learn_alg = RFLO(rnn, alpha=alpha)
 #learn_alg = DNI(rnn, SG_optimizer)
-#learn_alg = RTRL(rnn)
+learn_alg = RTRL(rnn)
 #learn_alg = Only_Output_Weights(rnn)
 #learn_alg = Forward_BPTT(rnn, 12)
-learn_alg = UORO(rnn, nu_dist='gaussian')
+#learn_alg = UORO(rnn, nu_dist='discrete')
+#learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
+#                  use_approx_kernel=False)
+#learn_alg = RFLO(rnn, alpha=alpha)
 #comp_algs = [UORO(rnn),
 #             KF_RTRL(rnn),
 #             KeRNL(rnn, KeRNL_optimizer, T=12, sigma_noise=0.1),
 #             RFLO(rnn, alpha=alpha),
 #             Forward_BPTT(rnn, 12),
 #             DNI(rnn, SG_optimizer)]
-comp_algs = []
+comp_algs = [UORO(rnn),
+             KF_RTRL(rnn),
+             Forward_BPTT(rnn, 12),
+             DNI(rnn, SG_optimizer),
+             RFLO(rnn, alpha=alpha),
+             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.01)]
+#$comp_algs = [RTRL(rnn)]
+#comp_algs = [RFLO(rnn, alpha=alpha)]
 #comp_algs = [RTRL(rnn), RFLO(rnn, alpha=alpha)]
 
 ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 
-monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']#, 'alignment_matrix']
-monitors = ['loss_', 'y_hat', 'alignment_matrix']
-monitors = ['loss_', 'y_hat', 'a', 'alignment_matrix']
+monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']
+monitors = ['net.loss_', 'net.y_hat', 'net.a', 'alignment_matrix']
 #'lr', 'A-norm', 'B-norm']#, 'sg_loss', 'loss_a', 'sg', 'CA', 'W_rec_alignment']
 
 sim = Simulation(rnn)
@@ -152,13 +163,18 @@ if os.environ['HOME']=='/Users/omarschall':
 #    plt.xlim([400, 500])
     
     plt.figure()
-    plot_filtered_signals([sim.mons['loss_']])
+    plot_filtered_signals([sim.mons['net.loss_']])
     plt.ylim([0.3, 0.7])
     plt.title(learn_alg.name)
 #                           sim.mons['a_tilde-norm'],
 #                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
     
-    if True:
+    if len(comp_algs) > 0:
+        plot_array_of_histograms(sim.mons['alignment_matrix'], ticks)
+        title = ('Histogram of gradient alignments \n' +
+                 'over learning via {}').format(learn_alg.name)
+        plt.suptitle(title, fontsize=24)
+    if False:
         plt.figure()
         plt.imshow(sim.mons['alignment_matrix'].mean(0),
                    cmap='RdBu_r', vmin=-1, vmax=1)

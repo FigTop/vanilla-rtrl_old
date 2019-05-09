@@ -250,33 +250,33 @@ class UORO(Real_Time_Learning_Algorithm):
     """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm.
 
     Full details in our review paper or in original Tallec et al. 2017. Broadly,
-    an outer product approximation of M is maintained by 2 vectors a_tilde and
-    w_tilde (A_k and B_ij from paper), which update by the equations
+    an outer product approximation of M is maintained by 2 vectors A and B,
+    which update by the equations
 
-    a_tilde' = p0 J a_tilde + p1 \nu        (1)
-    w_tilde' = 1/p0 w_tilde + 1/p1 \nu M_immediate      (2)
+    A' = p0 J A + p1 \nu        (1)
+    B' = 1/p0 B + 1/p1 \nu M_immediate      (2)
 
     where \nu is a vector of zero-mean iid samples. p0 and p1 are calculated by
 
-    p0 = \sqrt{norm(w_tilde)/norm(a_tilde)}       (3)
+    p0 = \sqrt{norm(B)/norm(A)}       (3)
     p1 = \sqrt{norm(\nu papw)/norm(\nu)}        (4)
 
     These equations are implemented in update_learning_vars by two different
     approaches. If 'epsilon' is provided as an argument, then the "forward
     differentiation" method from the original paper is used, where the matrix-
-    vector product J a_tilde is estimated numerically by a perturbation of size
-    epsilon in the a_tilde direction.
+    vector product JA is estimated numerically by a perturbation of size
+    epsilon in the A direction.
 
     Then the recurrent gradients are calculated by
 
-    dL/dw = qM = (q a_tilde) w_tilde    (5)
+    dL/dw = qM = (q A) B    (5)
 
     Eq. (5) is implemented in the get_rec_grads method."""
 
     def __init__(self, net, **kwargs):
-        """Inits an UORO instance by setting the initial values of a_tilde and
-        w_tilde to be iid samples from a standard normal distribution, to avoid
-        dividing by zero in Eqs. (3) and (4).
+        """Inits an UORO instance by setting the initial values of A and B to be
+        iid samples from a standard normal distribution, to avoid dividing by
+        zero in Eqs. (3) and (4).
 
         Keyword args:
             epsilon (float): Scaling factor on perturbation for forward
@@ -291,23 +291,23 @@ class UORO(Real_Time_Learning_Algorithm):
             n_estimate (int): Number of times to sample nu (default is 1),
                 averages over samples."""
 
-        self.name = 'UORO' #Algorithm name
+        self.name = 'UORO' #Default algorithm name
         allowed_kwargs_ = {'epsilon', 'P0', 'P1',
                            'nu_dist'} #Special kwargs for UORO
         super().__init__(net, allowed_kwargs_, **kwargs)
 
-        #Initialize a_tilde and w_tilde vectors
-        self.w_tilde = np.random.normal(0, 1, net.n_h_params)
-        self.a_tilde = np.random.normal(0, 1, net.n_h)
+        #Initialize A and B vectors
+        self.A = np.random.normal(0, 1, net.n_h)
+        self.B = np.random.normal(0, 1, net.n_h_params)
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
-        approximation of the influence matrix by a_tilde and w_tilde.
+        approximation of the influence matrix by A and B.
 
         Args:
             update (bool): If True, updates the algorithm's current outer
-                product approximation w_tilde, a_tilde. If False, only
-                prepares for calling get_influence_estimate"""
+                product approximation B, A. If False, only prepares for calling
+                get_influence_estimate."""
 
         #Get relevant values and derivatives from network
         self.a_hat = np.concatenate([self.net.a_prev,
@@ -318,21 +318,21 @@ class UORO(Real_Time_Learning_Algorithm):
         self.papw = np.multiply.outer(D, self.a_hat)
         self.net.get_a_jacobian() #Get updated network Jacobian
 
-        a_tilde, w_tilde = self.get_influence_estimate()
+        A, B = self.get_influence_estimate()
 
         if update:
-            self.a_tilde, self.w_tilde = a_tilde, w_tilde
+            self.A, self.B = A, B
 
     def get_influence_estimate(self):
         """Generates one random outer-product estimate of the influence matrix.
 
         Samples a random vector nu of iid samples with 0 mean from a
         distribution given by nu_dist, and returns an updated estimate
-        of a_tilde and w_tilde from Eqs. (1)-(4).
+        of A and B from Eqs. (1)-(4).
 
         Returns:
-            Updated a_tilde (numpy array of shape (n_h)) and w_tilde (numpy
-                array of shape (n_h_params).
+            Updated A (numpy array of shape (n_h)) and B (numpy array of shape
+                (n_h_params)).
         """
 
         #Sample nu from specified distribution
@@ -345,29 +345,29 @@ class UORO(Real_Time_Learning_Algorithm):
 
         if self.epsilon is not None: #Forward differentiation method
             eps = self.epsilon
-            #Get perturbed state in direction of a_tilde
-            self.a_perturbed = self.net.a_prev + eps*self.a_tilde
+            #Get perturbed state in direction of A
+            self.a_perturbed = self.net.a_prev + eps*self.A
             #Get hypothetical next states from this perturbation
             self.a_perturbed_next = self.net.next_state(self.net.x,
                                                         self.a_perturbed,
                                                         update=False)
-            #Get forward-propagated a_tilde
-            self.a_tilde_forwards = (self.a_perturbed_next - self.net.a)/eps
+            #Get forward-propagated A
+            self.A_forwards = (self.a_perturbed_next - self.net.a)/eps
             #Calculate scaling factors
-            w_norm = norm(self.w_tilde)
-            a_norm = norm(self.a_tilde_forwards)
-            m_norm = norm((self.papw.T*self.nu).T)
-            self.p0 = np.sqrt(w_norm/(a_norm + eps)) + eps
-            self.p1 = np.sqrt(m_norm/(np.sqrt(self.n_h) + eps)) + eps
+            B_norm = norm(self.B)
+            A_norm = norm(self.A_forwards)
+            M_norm = norm((self.papw.T*self.nu).T)
+            self.p0 = np.sqrt(B_norm/(A_norm + eps)) + eps
+            self.p1 = np.sqrt(M_norm/(np.sqrt(self.n_h) + eps)) + eps
         else: #Backpropagation method
-            #Get forward-propagated a_tilde
-            self.a_tilde_forwards = self.net.a_J.dot(self.a_tilde)
+            #Get forward-propagated A
+            self.A_forwards = self.net.a_J.dot(self.A)
             #Calculate scaling factors
-            w_norm = norm(self.w_tilde)
-            a_norm = norm(self.a_tilde_forwards)
-            m_norm = norm((self.papw.T*self.nu).T)
-            self.p0 = np.sqrt(w_norm/a_norm)
-            self.p1 = np.sqrt(m_norm/np.sqrt(self.n_h))
+            B_norm = norm(self.B)
+            A_norm = norm(self.A_forwards)
+            M_norm = norm((self.papw.T*self.nu).T)
+            self.p0 = np.sqrt(B_norm/A_norm)
+            self.p1 = np.sqrt(M_norm/np.sqrt(self.n_h))
 
         #Override with fixed P0 and P1 if given
         if self.P0 is not None:
@@ -375,35 +375,35 @@ class UORO(Real_Time_Learning_Algorithm):
         if self.P1 is not None:
             self.p1 = np.copy(self.P1)
 
-        #Get random projection of w_tilde onto \nu
-        w_tilde_projection = (self.papw.T*self.nu).T.reshape(-1, order='F')
+        #Get random projection of M_immediate onto \nu
+        M_projection = (self.papw.T*self.nu).T.reshape(-1, order='F')
 
         #Update outer product approximation
-        a_tilde = self.p0*self.a_tilde_forwards + self.p1*self.nu
-        w_tilde = (1/self.p0)*self.w_tilde + (1/self.p1)*w_tilde_projection
+        A = self.p0*self.A_forwards + self.p1*self.nu
+        B = (1/self.p0)*self.B + (1 / self.p1)*M_projection
 
-        return a_tilde, w_tilde
+        return A, B
 
     def get_rec_grads(self):
         """Calculates recurrent grads by taking matrix product of q with the
         estimate of the influence matrix.
 
-        First associates q with a_tilde to calculate a "global learning signal"
+        First associates q with A to calculate a "global learning signal"
         Q, which multiplies by w_tilde to compute the recurrent gradient, which
         is reshaped into origina matrix form.
 
         Returns:
             An array of shape (n_h, m) representing the recurrent gradient."""
 
-        self.Q = self.q.dot(self.a_tilde) #"Global learning signal"
-        return (self.Q*self.w_tilde).reshape((self.n_h, self.m), order='F')
+        self.Q = self.q.dot(self.A) #"Global learning signal"
+        return (self.Q * self.B).reshape((self.n_h, self.m), order='F')
 
     def reset_learning(self):
         """Resets learning by re-randomizing the outer product approximation to
         random gaussian samples."""
 
-        self.w_tilde = np.random.normal(0, 1, self.net.n_h_params)
-        self.a_tilde = np.random.normal(0, 1, self.net.n_h)
+        self.A = np.random.normal(0, 1, self.net.n_h)
+        self.B = np.random.normal(0, 1, self.net.n_h_params)
 
 class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
 
@@ -446,28 +446,36 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
     """Implements the Kronecker-Factored Real-Time Recurrent Learning Algorithm
     (KF-RTRL).
 
-    Details in
+    Details in review paper or original Mujika et al. 2018.
     """
     def __init__(self, net, **kwargs):
 
         self.name = 'KF-RTRL'
-        allowed_kwargs_ = {'P0', 'P1', 'A', 'u', 'nu_dist'}
+        allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
-        #Initialize A and u matrices
+        #Initialize A and B arrays
         if self.A is None:
-            self.A = np.random.normal(0, 1/np.sqrt(self.n_h),
+            self.A = np.random.normal(0, 1, self.m)
+        if self.B is None:
+            self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
                                       (self.n_h, self.n_h))
-        if self.u is None:
-            self.u = np.random.normal(0, 1, self.m)
 
-    def update_learning_vars(self):
+    def update_learning_vars(self, update=True):
 
         #Get relevant values and derivatives from network
         self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.D       = np.diag(self.net.activation.f_prime(self.net.h))
         self.net.get_a_jacobian()
-        self.H_prime = self.net.a_J.dot(self.A)
+        self.B_forwards = self.net.a_J.dot(self.B)
+
+        A, B = self.get_influence_estimate()
+
+        if update:
+            self.A, self.B = A, B
+
+    def get_influence_estimate(self):
+
         #Sample nu from specified distribution
         if self.nu_dist == 'discrete' or self.nu_dist is None:
             self.nu = np.random.choice([-1, 1], 2)
@@ -475,12 +483,10 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
             self.nu = np.random.normal(0, 1, 2)
         elif self.nu_dist == 'uniform':
             self.nu = np.random.uniform(-1, 1, 2)
-        self.c0, self.c1 = np.random.uniform(-1, 1, 2)
-        self.c0, self.c1 = np.random.uniform(-1, 1, 2)
 
         #Calculate p0, p1 or override with fixed P0, P1 if given
         if self.P0 is None:
-            self.p0 = np.sqrt(norm(self.H_prime)/norm(self.u))
+            self.p0 = np.sqrt(norm(self.B_forwards)/norm(self.A))
         else:
             self.p0 = np.copy(self.P0)
         if self.P1 is None:
@@ -489,18 +495,21 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
             self.p1 = np.copy(self.P1)
 
         #Update Kronecker product approximation
-        self.u = self.c0*self.p0*self.u + self.c1*self.p1*self.a_hat
-        self.A = self.c0*(1/self.p0)*self.H_prime + self.c1*(1/self.p1)*self.D
+        A = self.nu[0]*self.p0*self.A + self.nu[1]*self.p1*self.a_hat
+        B = (self.nu[0]*(1/self.p0)*self.B_forwards +
+             self.nu[1]*(1/self.p1)*self.D)
+
+        return A, B
 
     def get_rec_grads(self):
 
-        self.qA = self.q.dot(self.A) #Unit-specific learning signal
-        return np.kron(self.u, self.qA).reshape((self.n_h, self.n_h + self.n_in + 1), order='F')
+        self.qB = self.q.dot(self.B) #Unit-specific learning signal
+        return np.kron(self.A, self.qB).reshape((self.n_h, self.m), order='F')
 
     def reset_learning(self):
 
-        self.A = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
-        self.u = np.random.normal(0, 1, self.n_h + self.n_in +1)
+        self.A = np.random.normal(0, 1, self.m)
+        self.B = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
 
 class RFLO(Real_Time_Learning_Algorithm):
 
@@ -838,22 +847,22 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
 
 class KeRNL(Real_Time_Learning_Algorithm):
 
-    def __init__(self, net, optimizer, T=20, sigma_noise=0.00001,
+    def __init__(self, net, optimizer, sigma_noise=0.00001,
                  use_approx_kernel=False, **kwargs):
 
         self.name = 'KeRNL'
         self.n_h = net.n_h
         self.n_in = net.n_in
         self.i_t = 0
-        self.T = T
         self.sigma_noise = sigma_noise
         self.optimizer = optimizer
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
 
         #Initialize learning variables
-        self.beta = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        #self.beta = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
         self.beta = np.eye(self.n_h)
-        self.gamma = (1/self.T)**np.random.uniform(0, 2, self.n_h)
+        #self.gamma = (1/10)**np.random.uniform(0, 2, self.n_h)
+        self.gamma = np.ones(self.n_h)
         self.eligibility = np.zeros((self.n_h, self.n_h + self.n_in + 1))
         self.Omega = np.zeros(self.n_h)
         self.Gamma = np.zeros(self.n_h)
@@ -861,7 +870,8 @@ class KeRNL(Real_Time_Learning_Algorithm):
         #Initialize noisy network
         self.noisy_net = copy(net)
 
-        allowed_kwargs_ = {'beta', 'gamma', 'Omega', 'Gamma', 'eligibility'}
+        allowed_kwargs_ = {'beta', 'gamma', 'Omega',
+                           'Gamma', 'eligibility', 'T_reset'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         if use_approx_kernel:
@@ -891,8 +901,9 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.noisy_net.b_rec = self.net.b_rec
 
         #Update noisy net forward
-        if self.i_t%self.T == 0: #reset to network state every T time steps
-            self.reset_learning()
+        if self.T_reset is not None:
+            if self.i_t % self.T_reset == 0:
+                self.reset_learning()
 
         self.noisy_net.a += self.zeta
         self.noisy_net.next_state(self.net.x)

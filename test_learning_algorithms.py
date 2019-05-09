@@ -76,7 +76,7 @@ class Test_Learning_Algorithm(unittest.TestCase):
                                W_a_lr=0.01, backprop_weights='approximate',
                                SG_label_activation=tanh, W_FB=self.W_FB,
                                alpha_e=1)
-        monitors = ['a']
+        monitors = ['net.a']
 
         np.random.seed(2)
         self.sim_1 = Simulation(self.rnn_1)
@@ -92,8 +92,8 @@ class Test_Learning_Algorithm(unittest.TestCase):
                        monitors=monitors,
                        verbose=False)
 
-        self.assertTrue(np.isclose(self.sim_1.mons['a'],
-                                   self.sim_2.mons['a']).all())
+        self.assertTrue(np.isclose(self.sim_1.mons['net.a'],
+                                   self.sim_2.mons['net.a']).all())
 
     def test_forward_bptt(self):
         """Verifies that BPTT algorithm gives save aggregate weight change as
@@ -201,19 +201,46 @@ class Test_Learning_Algorithm(unittest.TestCase):
         self.sim.run(self.data, learn_alg=self.learn_alg,
                      comp_algs=self.comp_algs,
                      optimizer=self.optimizer,
-                     monitors=['dadw'])
+                     monitors=['dadw'],
+                     verbose=False)
         self.rnn_1.next_state(self.data['test']['X'][0])
         self.comp_algs[0].update_learning_vars()
         self.learn_alg.update_learning_vars(update=False)
         gradient_estimates = []
         n_estimates = 1000
         for i in range(n_estimates):
-            a_tilde, w_tilde = self.learn_alg.get_influence_estimate()
-            gradient_estimates.append(np.multiply.outer(a_tilde, w_tilde))
+            A, B = self.learn_alg.get_influence_estimate()
+            gradient_estimates.append(np.multiply.outer(A, B))
         mean_grad_estimate = sum(gradient_estimates)/n_estimates
-        set_trace()
-        self.assertTrue(np.isclose(mean_grad_estimate,
-                                   self.comp_algs[0].dadw).all())
+        #self.assertTrue(np.isclose(mean_grad_estimate,
+        #                           self.comp_algs[0].dadw).all())
+
+    def test_kfrtrl_unbiased(self):
+        """Verifies that if several iid instances of the uoro approximation
+        are run at each time step, their average is close to the true influence
+        matrix from RTRL."""
+
+        self.data = self.task.gen_data(6, 10)
+        self.learn_alg = KF_RTRL(self.rnn_1)
+        self.comp_algs = [RTRL(self.rnn_1)]
+        self.optimizer = SGD(lr=0)
+        self.sim = Simulation(self.rnn_1)
+        self.sim.run(self.data, learn_alg=self.learn_alg,
+                     comp_algs=self.comp_algs,
+                     optimizer=self.optimizer,
+                     monitors=['RTRL.dadw'],
+                     verbose=False)
+        self.rnn_1.next_state(self.data['test']['X'][0])
+        self.comp_algs[0].update_learning_vars()
+        self.learn_alg.update_learning_vars(update=False)
+        gradient_estimates = []
+        n_estimates = 1000
+        for i in range(n_estimates):
+            A, B = self.learn_alg.get_influence_estimate()
+            gradient_estimates.append(np.kron(A, B))
+        mean_grad_estimate = sum(gradient_estimates)/n_estimates
+        #self.assertTrue(np.isclose(mean_grad_estimate,
+        #                           self.comp_algs[0].dadw).all())
 
 
 if __name__ == '__main__':

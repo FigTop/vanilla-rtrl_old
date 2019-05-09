@@ -115,6 +115,37 @@ def plot_eigenvalues(M, fig=None, return_fig=False):
 
     if return_fig:
         return fig
+    
+def plot_array_of_histograms(counts, ticks=None, return_fig=False,
+                             plot_zero_line=True, **kwargs):
+    """Plots count data in the shape (n_samples, n_row, n_col) as an array
+    of histograms with n_row rows and n_col cols."""
+    
+    fig, ax = plt.subplots(counts.shape[1], counts.shape[2])
+    
+    n_bins = 100
+    if 'n_bins' in kwargs.keys():
+        n_bins = kwargs['n_bins']
+    
+    for i in range(counts.shape[1]):
+        for j in range(counts.shape[2]):
+            if i < j:
+                fig.delaxes(ax[i, j])
+                continue
+            ax[i, j].hist(counts[:, i, j], bins=np.linspace(-1, 1, n_bins))
+            if plot_zero_line:
+                ax[i, j].axvline(x=0, color='k', linestyle='--')
+            ax[i, j].set_yticks([])
+            if ticks is not None:
+                if i == counts.shape[1] - 1:
+                    ax[i, j].set_xlabel(ticks[j])
+                else:
+                    ax[i, j].set_xticks([])
+                if j == 0:
+                    ax[i, j].set_ylabel(ticks[i])
+    
+    if return_fig:
+        return fig
 
 ### --- Programming tools --- ###
 
