@@ -510,6 +510,74 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
 
         self.A = np.random.normal(0, 1, self.m)
         self.B = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
+        
+class Inverse_KF_RTRL(Real_Time_Learning_Algorithm):
+    
+    def __init__(self, net, **kwargs):
+            
+        self.name = 'I-KF-RTRL'
+        allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        #Initialize A and B arrays
+        if self.A is None:
+            self.A = np.random.normal(0, 1, self.n_h)
+        if self.B is None:
+            self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
+                                      (self.n_h, self.m))
+            
+    def update_learning_vars(self, update=True):
+
+        #Get relevant values and derivatives from network
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        #Compact form of M_immediate
+        self.papw = np.multiply.outer(self.D, self.a_hat)
+        self.net.get_a_jacobian() #Get updated network Jacobian
+        self.B_forwards = self.net.a_J.dot(self.B)
+
+        A, B = self.get_influence_estimate()
+
+        if update:
+            self.A, self.B = A, B
+            
+    def get_influence_estimate(self):
+
+        #Sample nu from specified distribution
+        if self.nu_dist == 'discrete' or self.nu_dist is None:
+            self.nu = np.random.choice([-1, 1], self.n_h)
+        elif self.nu_dist == 'gaussian':
+            self.nu = np.random.normal(0, 1, self.n_h)
+        elif self.nu_dist == 'uniform':
+            self.nu = np.random.uniform(-1, 1, self.n_h)
+
+        #Calculate scaling factors
+        B_norm = norm(self.B_forwards)
+        A_norm = norm(self.A)
+        M_norm = norm((self.papw.T*self.nu).T)
+        self.p0 = np.sqrt(B_norm/A_norm)
+        self.p1 = np.sqrt(M_norm/np.sqrt(self.n_h))
+
+        #Override with fixed P0 and P1 if given
+        if self.P0 is not None:
+            self.p0 = np.copy(self.P0)
+        if self.P1 is not None:
+            self.p1 = np.copy(self.P1)
+
+        M_projection = (self.papw.T*self.nu).T
+
+        #Update "inverse" Kronecker product approximation
+        A = self.p0*self.A + self.p1*self.nu
+        B = (1/self.p0)*self.B_forwards + (1/self.p1)*M_projection
+
+        return A, B
+    
+    def get_rec_grads(self):
+
+        self.qB = self.q.dot(self.B) #Unit-specific learning signal
+        return np.multiply.outer(self.A, self.qB)
 
 class RFLO(Real_Time_Learning_Algorithm):
 
@@ -856,13 +924,17 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.i_t = 0
         self.sigma_noise = sigma_noise
         self.optimizer = optimizer
+        self.use_approx_kernel = use_approx_kernel
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
 
         #Initialize learning variables
         #self.beta = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
         self.beta = np.eye(self.n_h)
         #self.gamma = (1/10)**np.random.uniform(0, 2, self.n_h)
-        self.gamma = np.ones(self.n_h)
+        if use_approx_kernel:
+            self.gamma = np.ones(self.n_h)*0.8
+        else:
+            self.gamma = (1/10)**np.random.uniform(0, 2, self.n_h)
         self.eligibility = np.zeros((self.n_h, self.n_h + self.n_in + 1))
         self.Omega = np.zeros(self.n_h)
         self.Gamma = np.zeros(self.n_h)
@@ -910,8 +982,11 @@ class KeRNL(Real_Time_Learning_Algorithm):
 
         #Update learning varialbes
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
-        self.Gamma = self.kernel(1)*(self.Gamma - self.Omega)
-        self.Omega = self.kernel(1)*self.Omega + self.zeta
+        if self.use_approx_kernel:
+            self.Gamma = self.kernel(1)*self.Gamma - self.Omega
+        else:
+            self.Gamma = self.kernel(1)*(self.Gamma - self.Omega)
+        self.Omega = self.kernel(1)*self.Omega + (1 - self.kernel(1))*self.zeta
 
         #Update eligibility traces
         self.D = self.net.activation.f_prime(self.net.h)

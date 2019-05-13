@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 from scipy.stats import unitary_group
+from scipy.signal import decimate
 from functools import reduce
+from pdb import set_trace
 
 ### --- Mathematical tools --- ###
 
@@ -100,33 +102,34 @@ def generate_real_matrix_with_given_eigenvalues(evals):
 
     return np.real(M)
 
-def plot_eigenvalues(M, fig=None, return_fig=False):
+def plot_eigenvalues(*matrices, fig=None, return_fig=False):
     """Plots eigenvalues of a given matrix in the complex plane, as well
     as the unit circle for reference."""
 
-    eigs, _ = np.linalg.eig(M)
-
     if fig is None:
         fig = plt.figure()
-    plt.plot(np.real(eigs), np.imag(eigs), '.')
     theta = np.arange(0, 2*np.pi, 0.01)
-    plt.plot(np.cos(theta), np.sin(theta), 'k')
+    plt.plot(np.cos(theta), np.sin(theta), 'k', linestyle='--', linewidth=0.1)
     plt.axis('equal')
+
+    for M in matrices:
+        eigs, _ = np.linalg.eig(M)
+        plt.plot(np.real(eigs), np.imag(eigs), '.')
 
     if return_fig:
         return fig
-    
+
 def plot_array_of_histograms(counts, ticks=None, return_fig=False,
                              plot_zero_line=True, **kwargs):
     """Plots count data in the shape (n_samples, n_row, n_col) as an array
     of histograms with n_row rows and n_col cols."""
-    
+
     fig, ax = plt.subplots(counts.shape[1], counts.shape[2])
-    
+
     n_bins = 100
     if 'n_bins' in kwargs.keys():
         n_bins = kwargs['n_bins']
-    
+
     for i in range(counts.shape[1]):
         for j in range(counts.shape[2]):
             if i < j:
@@ -143,7 +146,49 @@ def plot_array_of_histograms(counts, ticks=None, return_fig=False,
                     ax[i, j].set_xticks([])
                 if j == 0:
                     ax[i, j].set_ylabel(ticks[i])
+
+    if return_fig:
+        return fig
+
+def plot_array_of_downsampled_signals(signals, ticks=None, return_fig=False,
+                                      plot_zero_line=True, **kwargs):
+    """Plots time series data in the shape (T, n_row, n_col) as an array
+    of filtered signals with n_row rows and n_col cols."""
     
+    fig, ax = plt.subplots(signals.shape[1], signals.shape[2],
+                           figsize=(30, 10))
+
+    n_bins = 100
+    if 'n_bins' in kwargs.keys():
+        n_bins = kwargs['n_bins']
+
+    for i in range(signals.shape[1]):
+        for j in range(signals.shape[2]):
+            if i < j:
+                fig.delaxes(ax[i, j])
+                continue
+            signal = decimate(decimate(decimate(signals[:, i, j], 10), 10), 10)
+            #time_ = np.arange(0, signals.shape[0], 1000)
+            #i_time_ticks = [len(time_)//5*i for i in range(5)]
+            #time_ticks = time_[np.array(i_time_ticks)]
+            ax[i, j].plot(signal)
+            ax[i, j].set_ylim([-1, 1])
+            if plot_zero_line:
+                ax[i, j].axhline(y=0, color='k', linestyle='--')
+            if ticks is not None:
+                if i == signals.shape[1] - 1:
+                    ax[i, j].set_xlabel(ticks[j])
+                    #labels = ['{}k'.format(int(time_tick/1000)) for time_tick in time_ticks]
+                    #ax[i, j].set_xticks(time_ticks, labels)
+                    #set_trace()
+                else:
+                    ax[i, j].set_xticks([])
+                if j == 0:
+                    ax[i, j].set_ylabel(ticks[i])
+                    ax[i, j].set_yticks([-1, 0, 1])
+                else:
+                    ax[i, j].set_yticks([])
+
     if return_fig:
         return fig
 

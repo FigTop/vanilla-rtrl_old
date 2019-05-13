@@ -124,7 +124,7 @@ class Coin_Task(Task):
         plt.axhline(y=0.45, color='g', linestyle='--')
 
 class Copy_Task(Task):
-    
+
     def __init__(self, n_symbols, T):
         
         super().__init__(n_symbols + 1, n_symbols + 1)
@@ -152,20 +152,27 @@ class Copy_Task(Task):
     
 class Mimic_RNN(Task):
     
-    def __init__(self, rnn, p_input):
+    def __init__(self, rnn, p_input, tau_task=1):
         
         super().__init__(rnn.n_in, rnn.n_out)
         
         self.rnn = rnn
         self.p_input = p_input
+        self.tau_task = tau_task
         
     def gen_dataset(self, N):
         
-        X = np.random.binomial(1, self.p_input, (N, self.n_in))
+        
+        N_tau = N // self.tau_task
+        X = []
+        for i in range(N_tau):
+            x = np.random.binomial(1, self.p_input, self.n_in)
+            X.append(x)
+        X = np.tile(X, self.tau_task).reshape((self.tau_task*N_tau, self.n_in))
         
         Y = []
         self.rnn.reset_network()
-        for i in range(N):
+        for i in range(len(X)):
             self.rnn.next_state(X[i])
             self.rnn.z_out()
             Y.append(self.rnn.output.f(self.rnn.z))

@@ -35,7 +35,11 @@ if os.environ['HOME']=='/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(algorithm=['DNI', 'RTRL'])
+    macro_configs = config_generator(algorithm=['Only_Output_Weights',
+                                                'RTRL', 'UORO', 'KF-RTRL', 'I-KF-RTRL',
+                                                'BPTT', 'DNI',
+                                                'RFLO', 'KeRNL'],
+                                     alpha=[1, 0.5])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
     
     params, i_seed = micro_configs[i_job]
@@ -47,19 +51,14 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'BPTT'}
+    params = {'algorithm': 'KeRNL', 'alpha': 0.5}
+    params = {'algorithm': 'RTRL', 'alpha': 1}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-task = Coin_Task(4, 7, one_hot=True, deterministic=True, tau_task=3)
-#time_steps_per_trial = 30
-#task = Sine_Wave(1/time_steps_per_trial, [1, 0.7, 0.3, 0.1], method='regular', never_off=True)
-#task = Sensorimotor_Mapping(t_report=7, t_stim=1, stim_duration=3, report_duration=3)
-#reset_sigma = 0.05
-
-np.random.seed(10)
-
-data = task.gen_data(50000, 5000)
+task = Coin_Task(6, 10, one_hot=True, deterministic=True,
+                 tau_task=int(1/params['alpha']))
+data = task.gen_data(200000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -75,7 +74,7 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 0.4
+alpha = params['alpha']
 
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
@@ -83,78 +82,73 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
-KeRNL_optimizer = SGD(lr=1)
+optimizer = SGD(lr=0.0001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
+KeRNL_optimizer = SGD(lr=10)
 SG_optimizer = SGD(lr=0.005)
 
-#learn_alg = Forward_BPTT(rnn, 12)
-#learn_alg = KeRNL(rnn, KeRNL_optimizer, T=10, sigma_noise=0.1)
-#learn_alg = RFLO(rnn, alpha=alpha)
-#learn_alg = DNI(rnn, SG_optimizer)
-learn_alg = RTRL(rnn)
-#learn_alg = Only_Output_Weights(rnn)
-#learn_alg = Forward_BPTT(rnn, 12)
-#learn_alg = UORO(rnn, nu_dist='discrete')
-#learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-#                  use_approx_kernel=False)
-#learn_alg = RFLO(rnn, alpha=alpha)
+if params['algorithm'] == 'Only_Output_Weights':
+    learn_alg = Only_Output_Weights(rnn)
+if params['algorithm'] == 'RTRL':
+    learn_alg = RTRL(rnn)
+if params['algorithm'] == 'UORO':
+    learn_alg = UORO(rnn)
+if params['algorithm'] == 'KF-RTRL':
+    learn_alg = KF_RTRL(rnn)
+if params['algorithm'] == 'I-KF-RTRL':
+    learn_alg = Inverse_KF_RTRL(rnn)
+if params['algorithm'] == 'BPTT':
+    learn_alg = Forward_BPTT(rnn, 20)
+if params['algorithm'] == 'DNI':
+    learn_alg = DNI(rnn, SG_optimizer)
+if params['algorithm'] == 'RFLO':
+    learn_alg = RFLO(rnn, alpha=alpha)
+if params['algorithm'] == 'KeRNL':
+    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
+                      use_approx_kernel=False)
+    
 #comp_algs = [UORO(rnn),
 #             KF_RTRL(rnn),
-#             KeRNL(rnn, KeRNL_optimizer, T=12, sigma_noise=0.1),
-#             RFLO(rnn, alpha=alpha),
 #             Forward_BPTT(rnn, 12),
-#             DNI(rnn, SG_optimizer)]
-comp_algs = [UORO(rnn),
-             KF_RTRL(rnn),
-             Forward_BPTT(rnn, 12),
-             DNI(rnn, SG_optimizer),
-             RFLO(rnn, alpha=alpha),
-             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.01)]
-#$comp_algs = [RTRL(rnn)]
-#comp_algs = [RFLO(rnn, alpha=alpha)]
-#comp_algs = [RTRL(rnn), RFLO(rnn, alpha=alpha)]
+#             DNI(rnn, SG_optimizer),
+#             RFLO(rnn, alpha=alpha),
+#             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001, use_approx_kernel=False)]
+#comp_algs = [UORO(rnn),
+#             KF_RTRL(rnn),
+#             Inverse_KF_RTRL(rnn)]
+comp_algs = []
 
 ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 
-monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']
-monitors = ['net.loss_', 'net.y_hat', 'net.a', 'alignment_matrix']
-#'lr', 'A-norm', 'B-norm']#, 'sg_loss', 'loss_a', 'sg', 'CA', 'W_rec_alignment']
+#monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']
+monitors = ['net.loss_']
+#            'learn_alg.beta', 'learn_alg.gamma']
 
 sim = Simulation(rnn)
-#                     time_steps_per_trial=task.time_steps_per_trial,
-#                     reset_sigma=reset_sigma
-#                     reset_at_trial_start=True,
-#                     i_job=i_job,
-#                     save_dir=save_dir)
-#                     SSA_PCs=3)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
-        check_accuracy=True)
+        check_accuracy=False,
+        check_loss=True)
 
-#sim = Simulation(rnn, learn_alg, optimizer, L2_reg=0.00001,
-#                 time_steps_per_trial=task.time_steps_per_trial,
-#                 reset_sigma=reset_sigma,
-#                 trial_lr_mask=np.sqrt(task.trial_lr_mask))
-#
-#sim.run(data,
-#        monitors=monitors,
-#        verbose=True)
+#figs_path = '/Users/omarschall/career-stuff/papers/online_learning_review/figs'
+#fig = plot_array_of_downsampled_signals(sim.mons['alignment_matrix'], ticks, return_fig=True)
+#fig.savefig(os.path.join(figs_path, 'alignment_array.eps'), format='eps')
 
 if os.environ['HOME']=='/Users/omarschall':
     
     #Test run
-#    n_test = 500
-#    data = task.gen_data(100, n_test)
-#    test_sim = copy(sim)
-#    test_sim.run(data,
-#                 mode='test',
-#                 monitors=['loss_', 'y_hat', 'a'],
-#                 verbose=False)
-#    plt.figure()
-#    plt.plot(test_sim.mons['y_hat'][:,0])
-#    plt.plot(data['test']['Y'][:,0])
+    np.random.seed(1)
+    n_test = 100
+    data = task.gen_data(100, n_test)
+    test_sim = copy(sim)
+    test_sim.run(data,
+                 mode='test',
+                 monitors=['net.loss_', 'net.y_hat', 'net.a'],
+                 verbose=False)
+    plt.figure()
+    plt.plot(test_sim.mons['net.y_hat'][:,0])
+    plt.plot(data['test']['Y'][:,0])
 #    plt.plot(data['test']['X'][:,0])
 #    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
 #    #plt.ylim([0, 1.2])
@@ -163,8 +157,17 @@ if os.environ['HOME']=='/Users/omarschall':
 #    plt.xlim([400, 500])
     
     plt.figure()
-    plot_filtered_signals([sim.mons['net.loss_']])
-    plt.ylim([0.3, 0.7])
+    x = test_sim.mons['net.y_hat'].flatten()
+    y = data['test']['Y'].flatten()
+    plt.plot(x, y, '.', alpha=0.5)
+    plt.plot([np.amin(x), np.amax(x)],
+              [np.amin(y), np.amax(y)], 'k', linestyle='--')
+    plt.axis('equal')
+    
+    plt.figure()
+    plot_filtered_signals([sim.mons['net.loss_']], filter_size=1000,
+                          plot_loss_benchmarks=True)
+    #plt.ylim([0.3, 0.7])
     plt.title(learn_alg.name)
 #                           sim.mons['a_tilde-norm'],
 #                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
@@ -189,9 +192,7 @@ if os.environ['HOME']=='/Users/omarschall':
         plt.xticks(list(range(len(ticks))), ticks)
         plt.yticks(list(range(len(ticks))), ticks)
     
-#    plt.figure()
-#    plt.plot(test_sim.mons['y_hat'][:,0],data['test']['Y'][:,0], '.', alpha=0.05)
-#    plt.plot([0, 1], [0, 1], 'k', linestyle='--')
+
 #    #plt.axis('equal')
 #    plt.ylim([0, 1.1])
 #    plt.xlim([0, 1.1])

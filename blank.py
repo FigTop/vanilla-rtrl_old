@@ -13,6 +13,32 @@ import os
 from utils import *
 
 
+#task = Coin_Task(4, 7, one_hot=True, deterministic=True, tau_task=3)
+
+#np.random.seed(10)
+
+#n_in = 32
+#n_hidden = 32
+#n_out = 32
+#
+#W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+#W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+##W_rec_target = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
+#W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+#b_rec_target = np.random.normal(0, 0.1, n_hidden)
+#b_out_target = np.random.normal(0, 0.1, n_out)
+#
+#alpha = 1
+#
+#rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
+#                 b_rec_target, b_out_target,
+#                 activation=tanh,
+#                 alpha=alpha,
+#                 output=identity,
+#                 loss=mean_squared_error)
+#
+#task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=1)
+
 ### --- Define Layer Normalization --- ###
 
 def layer_normalization_(z):
