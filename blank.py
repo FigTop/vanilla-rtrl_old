@@ -12,6 +12,14 @@ import pickle
 import os
 from utils import *
 
+#if params['alpha'] == 1:
+#    n_1, n_2 = 6, 10
+#    tau_task = 1
+#    optimizer = SGD(lr=0.0001)
+#if params['alpha'] == 0.5:
+#    n_1, n_2 = 4, 7
+#    tau_task = 2
+#    optimizer = SGD(lr=0.001)
 
 #task = Coin_Task(4, 7, one_hot=True, deterministic=True, tau_task=3)
 

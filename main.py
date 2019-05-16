@@ -44,21 +44,49 @@ if os.environ['HOME']=='/home/oem214':
     
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
-    np.random.seed(i_seed)
+    np.random.seed(i_job)
     
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'KeRNL', 'alpha': 0.5}
     params = {'algorithm': 'RTRL', 'alpha': 1}
+    #params = {'algorithm': 'BPTT', 'alpha': 0.5}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-task = Coin_Task(6, 10, one_hot=True, deterministic=True,
-                 tau_task=int(1/params['alpha']))
-data = task.gen_data(200000, 5000)
+n_in = 32
+n_hidden = 32
+n_out = 32
+
+if params['alpha'] == 1:
+    tau_task = 1
+    optimizer = SGD(lr=0.0001)
+if params['alpha'] == 0.5:
+    tau_task = 2
+    optimizer = SGD(lr=0.0001)
+
+W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+#W_rec_target = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
+W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+b_rec_target = np.random.normal(0, 0.1, n_hidden)
+b_out_target = np.random.normal(0, 0.1, n_out)
+
+alpha = params['alpha']
+
+rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
+                 b_rec_target, b_out_target,
+                 activation=tanh,
+                 alpha=alpha,
+                 output=identity,
+                 loss=mean_squared_error)
+
+task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
+#task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
+#                 tau_task=tau_task)
+data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -79,32 +107,39 @@ alpha = params['alpha']
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+          output=identity,
+          loss=mean_squared_error)
 
 optimizer = SGD(lr=0.0001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
-KeRNL_optimizer = SGD(lr=10)
+if params['alpha'] == 0.5:
+    KeRNL_optimizer = SGD(lr=10)
+if params['alpha'] == 1:
+    KeRNL_optimizer = SGD(lr=1)
 SG_optimizer = SGD(lr=0.005)
 
 if params['algorithm'] == 'Only_Output_Weights':
     learn_alg = Only_Output_Weights(rnn)
+    optimizer = SGD(lr=0.0001)
 if params['algorithm'] == 'RTRL':
     learn_alg = RTRL(rnn)
 if params['algorithm'] == 'UORO':
     learn_alg = UORO(rnn)
+    optimizer = SGD(lr=0.0001)
 if params['algorithm'] == 'KF-RTRL':
     learn_alg = KF_RTRL(rnn)
 if params['algorithm'] == 'I-KF-RTRL':
     learn_alg = Inverse_KF_RTRL(rnn)
+    optimizer = SGD(lr=0.0001)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Forward_BPTT(rnn, 20)
+    learn_alg = Forward_BPTT(rnn, 14)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
 if params['algorithm'] == 'KeRNL':
     learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                      use_approx_kernel=False)
+                      use_approx_kernel=True)
+    optimizer = SGD(lr=0.0001)
     
 #comp_algs = [UORO(rnn),
 #             KF_RTRL(rnn),

@@ -168,7 +168,7 @@ class RNN:
         Returns:
             Updates self.x, self.h, self.a, and self.*_prev, or returns the
             would-be update from given previous state a."""
-
+            
         if update: #Update network if update is True
             self.x = x
             self.h_prev = np.copy(self.h)
