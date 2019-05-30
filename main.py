@@ -28,18 +28,20 @@ from copy import copy
 from state_space import State_Space_Analysis
 from pdb import set_trace
 from scipy.stats import linregress
+from scipy.ndimage.filters import uniform_filter1d
 
 if os.environ['HOME']=='/home/oem214':
-    n_seeds = 10
+    n_seeds = 20
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
     macro_configs = config_generator(algorithm=['Only_Output_Weights',
                                                 'RTRL', 'UORO', 'KF-RTRL', 'I-KF-RTRL',
-                                                'BPTT', 'DNI',
+                                                'BPTT', 'DNI', 'DNIb',
                                                 'RFLO', 'KeRNL'],
-                                     alpha=[1, 0.5])
+                                     alpha=[1, 0.5],
+                                     task=['Coin', 'Mimic'])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
     
     params, i_seed = micro_configs[i_job]
@@ -51,41 +53,49 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'RTRL', 'alpha': 1}
-    #params = {'algorithm': 'BPTT', 'alpha': 0.5}
+    params = {'algorithm': 'UORO',
+              'alpha': 1,
+              'task': 'Mimic'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-n_in = 32
-n_hidden = 32
-n_out = 32
-
 if params['alpha'] == 1:
+    n_1, n_2 = 6, 10
     tau_task = 1
-    optimizer = SGD(lr=0.0001)
 if params['alpha'] == 0.5:
+    n_1, n_2 = 3, 5
     tau_task = 2
-    optimizer = SGD(lr=0.0001)
 
-W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-#W_rec_target = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
-W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-b_rec_target = np.random.normal(0, 0.1, n_hidden)
-b_out_target = np.random.normal(0, 0.1, n_out)
+if params['task'] == 'Mimic':
+    
+    n_in = 32
+    n_hidden = 32
+    n_out = 32
+    
+    
+    
+    W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+    W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+    W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+    b_rec_target = np.random.normal(0, 0.1, n_hidden)
+    b_out_target = np.random.normal(0, 0.1, n_out)
+    
+    alpha = params['alpha']
+    
+    rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
+                     b_rec_target, b_out_target,
+                     activation=tanh,
+                     alpha=alpha,
+                     output=identity,
+                     loss=mean_squared_error)
 
-alpha = params['alpha']
-
-rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
-                 b_rec_target, b_out_target,
-                 activation=tanh,
-                 alpha=alpha,
-                 output=identity,
-                 loss=mean_squared_error)
-
-task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-#task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
-#                 tau_task=tau_task)
+    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
+    
+elif params['task'] == 'Coin':
+    
+    task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
+                     tau_task=tau_task)
+    
 data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
@@ -93,70 +103,66 @@ n_hidden = 32
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-#W_rec = np.eye(n_hidden)
 W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-#W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
-
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
 alpha = params['alpha']
 
-rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-          activation=tanh,
-          alpha=alpha,
-          output=identity,
-          loss=mean_squared_error)
+if params['task'] == 'Coin':
+    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+              activation=tanh,
+              alpha=alpha,
+              output=softmax,
+              loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.0001)#, lr_decay_rate=0.999999, min_lr=0.00001)#, clipnorm=5)
-if params['alpha'] == 0.5:
-    KeRNL_optimizer = SGD(lr=10)
-if params['alpha'] == 1:
-    KeRNL_optimizer = SGD(lr=1)
-SG_optimizer = SGD(lr=0.005)
+if params['task'] == 'Mimic':
+    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+              activation=tanh,
+              alpha=alpha,
+              output=identity,
+              loss=mean_squared_error)
+
+optimizer = SGD(lr=0.0001)
+SG_optimizer = SGD(lr=0.001)
+if params['alpha'] == 1 and params['task'] == 'Coin':
+    SG_optimizer = SGD(lr=0.05)
+KeRNL_optimizer = SGD(lr=5)
+
 
 if params['algorithm'] == 'Only_Output_Weights':
     learn_alg = Only_Output_Weights(rnn)
-    optimizer = SGD(lr=0.0001)
 if params['algorithm'] == 'RTRL':
     learn_alg = RTRL(rnn)
 if params['algorithm'] == 'UORO':
     learn_alg = UORO(rnn)
-    optimizer = SGD(lr=0.0001)
 if params['algorithm'] == 'KF-RTRL':
     learn_alg = KF_RTRL(rnn)
 if params['algorithm'] == 'I-KF-RTRL':
     learn_alg = Inverse_KF_RTRL(rnn)
-    optimizer = SGD(lr=0.0001)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Forward_BPTT(rnn, 14)
+    learn_alg = Forward_BPTT(rnn, 10)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
+if params['algorithm'] == 'DNIb':
+    W_a_lr = 0.001
+    if params['alpha'] == 1 and params['task'] == 'Coin':
+        W_a_lr = 0.01
+    learn_alg = DNI(rnn, SG_optimizer, backprop_weights='approximate', W_a_lr=W_a_lr,
+                    SG_label_activation=tanh, W_FB=W_FB)
+    learn_alg.name = 'DNIb'
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
 if params['algorithm'] == 'KeRNL':
     learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                      use_approx_kernel=True)
-    optimizer = SGD(lr=0.0001)
-    
-#comp_algs = [UORO(rnn),
-#             KF_RTRL(rnn),
-#             Forward_BPTT(rnn, 12),
-#             DNI(rnn, SG_optimizer),
-#             RFLO(rnn, alpha=alpha),
-#             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001, use_approx_kernel=False)]
-#comp_algs = [UORO(rnn),
-#             KF_RTRL(rnn),
-#             Inverse_KF_RTRL(rnn)]
+                      use_approx_kernel=True, learned_alpha_e=False)
 comp_algs = []
 
 ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 
-#monitors = ['loss_', 'y_hat', 'beta', 'gamma', 'e_noise', 'Omega', 'Gamma', 'zeta', 'loss_noise']
 monitors = ['net.loss_']
-#            'learn_alg.beta', 'learn_alg.gamma']
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -166,9 +172,11 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         check_accuracy=False,
         check_loss=True)
 
-#figs_path = '/Users/omarschall/career-stuff/papers/online_learning_review/figs'
-#fig = plot_array_of_downsampled_signals(sim.mons['alignment_matrix'], ticks, return_fig=True)
-#fig.savefig(os.path.join(figs_path, 'alignment_array.eps'), format='eps')
+#Filter losses
+loss = sim.mons['net.loss_']
+downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
+filtered_loss = uniform_filter1d(downsampled_loss, 10)
+processed_data = {'filtered_loss': filtered_loss}
 
 if os.environ['HOME']=='/Users/omarschall':
     
@@ -235,7 +243,8 @@ if os.environ['HOME']=='/Users/omarschall':
 if os.environ['HOME']=='/home/oem214':
 
     result = {'sim': sim, 'i_seed': i_seed, 'task': task,
-              'config': params, 'i_config': i_config, 'i_job': i_job}
+              'config': params, 'i_config': i_config, 'i_job': i_job,
+              'processed_data': processed_data}
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)

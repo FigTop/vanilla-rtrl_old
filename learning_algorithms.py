@@ -844,6 +844,84 @@ class BPTT(Learning_Algorithm):
 
         return grads
 
+class BPTT_Triangles(Real_Time_Learning_Algorithm):
+    
+    def __init__(self, net, T_truncation, **kwargs):
+        
+        self.name = 'BPTT_Triangles'
+        allowed_kwargs_ = set()
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        self.T_truncation = T_truncation
+        
+        self.CA_hist = [np.zeros(self.n_h)]*T_truncation
+        self.a_hat_hist = [np.zeros(self.m)]*T_truncation
+        self.h_hist = [np.zeros(self.n_h)]*T_truncation
+        self.q_hist = [np.zeros(self.n_h)]*T_truncation
+        
+        self.i_t = 0
+        
+    def update_learning_vars(self):
+        
+
+        #Update history
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.propagate_feedback_to_hidden()
+        
+        self.a_hat_hist[self.i_t] = np.copy(self.a_hat)
+        self.h_hist[self.i_t] = np.copy(self.net.h)
+        self.q_hist[self.i_t] = np.copy(self.q)
+        
+        self.i_t += 1
+        if self.i_t == self.T_truncation:
+            self.i_t = 0
+            
+            
+
+        for i_CA in range(len(self.CA_hist)):
+
+            q = np.copy(self.q)
+            #J = np.eye(self.n_h)
+
+            for i_BP in range(i_CA):
+
+                J = self.net.get_a_jacobian(update=False,
+                                            h=self.h_hist[-(i_BP+1)])
+                q = q.dot(J)
+                #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
+
+            #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
+            self.CA_hist[-(i_CA + 1)] += q
+
+    def get_rec_grads(self):
+        
+        if self.i_t > 0:
+            
+            rec_grads = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+            
+        else:
+            
+            pass
+
+        if len(self.CA_hist)==self.T_truncation:
+
+            self.net.CA = np.copy(self.CA_hist[0])
+
+            self.D = self.net.activation.f_prime(self.h_hist[0])
+            rec_grads = np.multiply.outer(self.net.CA*self.D, self.a_hat_hist[0])
+
+            self.delete_history()
+
+        else:
+
+            pass
+
+        return rec_grads
+
+    def reset_learning(self):
+
+        pass
+
 class Forward_BPTT(Real_Time_Learning_Algorithm):
 
     def __init__(self, net, T_truncation, **kwargs):
@@ -870,20 +948,33 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
 
         self.propagate_feedback_to_hidden()
 
-        for i_CA in range(len(self.CA_hist)):
+#        for i_CA in range(len(self.CA_hist)):
+#
+#            q = np.copy(self.q)
+#            #J = np.eye(self.n_h)
+#
+#            for i_BP in range(i_CA):
+#
+#                J = self.net.get_a_jacobian(update=False,
+#                                            h=self.h_hist[-(i_BP+1)])
+#                q = q.dot(J)
+#                #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
+#
+#            #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
+#            self.CA_hist[-(i_CA + 1)] += q
 
-            q = np.copy(self.q)
-            #J = np.eye(self.n_h)
+        q = np.copy(self.q)
 
-            for i_BP in range(i_CA):
+        for i_BP in range(len(self.CA_hist)):
+            
+            self.CA_hist[-(i_BP + 1)] += q
+            J = self.net.get_a_jacobian(update=False,
+                                        h=self.h_hist[-(i_BP+1)])
+            q = q.dot(J)
+            #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
 
-                J = self.net.get_a_jacobian(update=False,
-                                            h=self.h_hist[-(i_BP+1)])
-                q = q.dot(J)
-                #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
-
-            #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
-            self.CA_hist[-(i_CA + 1)] += q
+        #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
+            
 
     def get_rec_grads(self):
 
@@ -916,7 +1007,8 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
 class KeRNL(Real_Time_Learning_Algorithm):
 
     def __init__(self, net, optimizer, sigma_noise=0.00001,
-                 use_approx_kernel=False, **kwargs):
+                 use_approx_kernel=False, learned_alpha_e=False,
+                 **kwargs):
 
         self.name = 'KeRNL'
         self.n_h = net.n_h
@@ -925,6 +1017,7 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.sigma_noise = sigma_noise
         self.optimizer = optimizer
         self.use_approx_kernel = use_approx_kernel
+        self.learned_alpha_e = learned_alpha_e
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
 
         #Initialize learning variables
@@ -991,7 +1084,10 @@ class KeRNL(Real_Time_Learning_Algorithm):
         #Update eligibility traces
         self.D = self.net.activation.f_prime(self.net.h)
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        self.papw = self.net.alpha*np.multiply.outer(self.D, self.a_hat)
+        if self.learned_alpha_e:
+            self.papw = np.multiply.outer((1 - self.kernel(1))*self.D, self.a_hat)
+        else:
+            self.papw = self.net.alpha*np.multiply.outer(self.D, self.a_hat)
         self.eligibility = (self.eligibility.T*self.kernel(1)).T + self.papw
 
         #Get error in predicting perturbations effect

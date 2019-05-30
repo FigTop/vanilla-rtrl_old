@@ -12,6 +12,19 @@ import pickle
 import os
 from utils import *
 
+A = np.random.normal(0, 1, (3000, 3000))
+B = np.random.normal(0, 1, (3000, 3000))
+x = np.random.normal(0, 1, 3000)
+
+t1 = time.time()
+
+#y = A.dot(B.dot(x))
+y = (A.dot(B)).dot(x)
+
+t2 = time.time()
+
+print(t2 - t1)
+
 #if params['alpha'] == 1:
 #    n_1, n_2 = 6, 10
 #    tau_task = 1

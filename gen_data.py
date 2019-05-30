@@ -47,7 +47,7 @@ class Task:
         data['train']['X'], data['train']['Y'] = self.gen_dataset(N_train)
         data['test']['X'], data['test']['Y'] = self.gen_dataset(N_test)
         
-        self.data = data
+        #self.data = data
         
         return data
          

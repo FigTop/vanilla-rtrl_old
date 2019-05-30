@@ -180,6 +180,10 @@ class Simulation:
 
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
+        
+        #Delete data to save space
+        del(self.x_inputs)
+        del(self.y_labels)
 
     def initialize_run(self):
         """Initializes a few variables before the time loop."""
