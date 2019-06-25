@@ -1046,16 +1046,16 @@ class KeRNL(Real_Time_Learning_Algorithm):
 
     def exact_kernel(self, delta_t):
 
-        return np.exp(-self.gamma*(delta_t))
+        return np.maximum(0, np.exp(-self.gamma*(delta_t)))
 
     def approx_kernel(self, delta_t):
 
-        return 1 - self.gamma*delta_t
+        return np.maximum(0, 1 - self.gamma*delta_t)
 
     def update_learning_vars(self):
 
-        if self.i_t > 0 and self.i_t%1000 == 0 and False:
-            set_trace()
+        #if self.i_t > 0 and self.i_t%1000 == 0 and False:
+        #    set_trace()
 
         #Observe Jacobian if desired:
         self.J = self.net.get_a_jacobian(update=False)
@@ -1091,8 +1091,12 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.eligibility = (self.eligibility.T*self.kernel(1)).T + self.papw
 
         #Get error in predicting perturbations effect
-        self.loss_noise = np.square((self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a))).sum()
-        self.e_noise = self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a)
+        self.error_prediction = self.beta.dot(self.Omega)
+        self.error_observed = (self.noisy_net.a - self.net.a)
+        self.loss_noise = np.square(self.error_prediction - self.error_observed).sum()
+        #self.loss_noise = np.square((self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a))).sum()
+        self.e_noise = self.error_prediction - self.error_observed
+        #self.e_noise = self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a)
 
         #Update beta and gamma
         self.beta_grads = np.multiply.outer(self.e_noise, self.Omega)

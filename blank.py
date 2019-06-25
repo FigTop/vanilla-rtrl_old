@@ -12,6 +12,14 @@ import pickle
 import os
 from utils import *
 
+
+x = [0, 1]
+for i in range(1, 6):
+    plt.plot(x, [alignment_means[0, i], alignment_means[-1, i]], color='C0')
+    plt.plot(x, [alignment_means[0, i], alignment_means[-1, i]], '.', color='C0')
+plt.plot(x, [alignment_means[0, 6], alignment_means[-1, 6]], color='C1')
+plt.plot(x, [alignment_means[0, 6], alignment_means[-1, 6]], '.', color='C1')
+
 A = np.random.normal(0, 1, (3000, 3000))
 B = np.random.normal(0, 1, (3000, 3000))
 x = np.random.normal(0, 1, 3000)

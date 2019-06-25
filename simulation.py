@@ -9,8 +9,8 @@ Created on Mon Nov  5 12:54:56 2018
 from copy import copy
 import time
 from utils import (norm, classification_accuracy,
-                   normalized_dot_product, get_spectral_radius,
-                   rgetattr)
+                   normalized_dot_product, half_normalized_dot_product,
+                   get_spectral_radius, rgetattr)
 import numpy as np
 
 class Simulation:
@@ -411,6 +411,7 @@ class Simulation:
         if 'alignment_matrix' in self.mons.keys():
             n_algs = len(self.algs)
             self.alignment_matrix = np.zeros((n_algs, n_algs))
+            self.alignment_weights = np.zeros((n_algs, n_algs))
             for i, key_i in enumerate(self.rec_grads_dict):
                 for j, key_j in enumerate(self.rec_grads_dict):
 
@@ -425,8 +426,10 @@ class Simulation:
                         
                     g_i = self.rec_grads_dict[key_i][i_index]
                     g_j = self.rec_grads_dict[key_j][j_index]
+                    #alignment = half_normalized_dot_product(g_i, g_j)
                     alignment = normalized_dot_product(g_i, g_j)
                     self.alignment_matrix[i, j] = alignment
+                    self.alignment_weights[i, j] = norm(g_i)*norm(g_j)
 
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:

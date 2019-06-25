@@ -53,17 +53,19 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'UORO',
+    params = {'algorithm': 'RTRL',
               'alpha': 1,
-              'task': 'Mimic'}
+              'task': 'Coin'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
+    np.random.seed()
+    
 if params['alpha'] == 1:
-    n_1, n_2 = 6, 10
+    n_1, n_2 = 10, 14
     tau_task = 1
 if params['alpha'] == 0.5:
-    n_1, n_2 = 3, 5
+    n_1, n_2 = 5, 7
     tau_task = 2
 
 if params['task'] == 'Mimic':
@@ -104,6 +106,9 @@ n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+#W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
+#W_rec = (W_rec + W_rec.T)/2
+#W_rec = 0.54*np.eye(n_hidden)
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
@@ -158,11 +163,24 @@ if params['algorithm'] == 'RFLO':
 if params['algorithm'] == 'KeRNL':
     learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
                       use_approx_kernel=True, learned_alpha_e=False)
+
+comp_algs = [UORO(rnn),
+             KF_RTRL(rnn),
+             Inverse_KF_RTRL(rnn),
+             RFLO(rnn, alpha=alpha),
+             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
+                   use_approx_kernel=True, learned_alpha_e=False),
+             DNI(rnn, SG_optimizer),
+             Forward_BPTT(rnn, 14)]
+comp_algs = [UORO(rnn)]
 comp_algs = []
 
 ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 
-monitors = ['net.loss_']
+monitors = ['net.loss_', 'net.y_hat']
+#monitors = ['net.loss_', 'alignment_matrix', 'net.a', 'learn_alg.noisy_net.a',
+#            'learn_alg.error_prediction', 'learn_alg.error_observed', 'learn_alg.loss_noise']
+#monitors = ['net.loss_', 'alignment_matrix', 'alignment_weights', 'learn_alg.rec_grads-norm']
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -216,10 +234,14 @@ if os.environ['HOME']=='/Users/omarschall':
 #                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
     
     if len(comp_algs) > 0:
-        plot_array_of_histograms(sim.mons['alignment_matrix'], ticks)
+        fig = plot_array_of_histograms(sim.mons['alignment_matrix'],
+                                       sim.mons['alignment_weights'],
+                                       ticks, n_bins=400,
+                                       return_fig=True,
+                                       fig_size=(12, 6))
         title = ('Histogram of gradient alignments \n' +
                  'over learning via {}').format(learn_alg.name)
-        plt.suptitle(title, fontsize=24)
+        #plt.suptitle(title, fontsize=24)
     if False:
         plt.figure()
         plt.imshow(sim.mons['alignment_matrix'].mean(0),
