@@ -98,7 +98,7 @@ elif params['task'] == 'Coin':
     task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
                      tau_task=tau_task)
     
-data = task.gen_data(100000, 5000)
+data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -130,7 +130,7 @@ if params['task'] == 'Mimic':
               output=identity,
               loss=mean_squared_error)
 
-optimizer = SGD(lr=0.001)
+optimizer = SGD(lr=0.0001)
 SG_optimizer = SGD(lr=0.001)
 if params['alpha'] == 1 and params['task'] == 'Coin':
     SG_optimizer = SGD(lr=0.05)
@@ -162,7 +162,7 @@ if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
 if params['algorithm'] == 'KeRNL':
     learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                      use_approx_kernel=True, learned_alpha_e=True)
+                      use_approx_kernel=True, learned_alpha_e=False)
 
 comp_algs = [UORO(rnn),
              KF_RTRL(rnn),
