@@ -1,0 +1,37 @@
+            ### --- Reset model if there is a trial structure --- ###
+            
+            if hasattr(self, 'time_steps_per_trial'):
+                self.i_t_trial = i_t%self.time_steps_per_trial
+                if self.i_t_trial==0:
+                    self.i_trial = i_t//self.time_steps_per_trial
+                    if self.reset_at_trial_start:
+                        self.net.reset_network(sigma=self.reset_sigma)
+                        try:
+                            self.learn_alg.reset_learning()
+                        except AttributeError:
+                            pass
+                    
+                    if hasattr(self, 'SSA_PCs') and self.mode=='train':
+                        
+                        with open(save_path, 'rb') as f:
+                            test_data = pickle.load(f)
+                        
+                        np.random.seed(0)
+                        test_sim = copy(self)
+                        test_sim.run(data, mode='test', monitors=['a'], verbose=False)
+                        
+                        test_data_trial = {}
+                        PCs = State_Space_Analysis(test_sim.mons['a'], add_fig=False).V[:,:self.SSA_PCs]
+                        A = test_sim.mons['a'].reshape((-1, self.time_steps_per_trial, self.net.n_hidden))
+                        PC_on_trajs = A[on_trials].dot(PCs)
+                        PC_off_trajs = A[off_trials].dot(PCs)
+                        test_data_trial['PCs'] = PCs
+                        test_data_trial['PC_on_trajs'] = PC_on_trajs
+                        test_data_trial['PC_off_trajs'] = PC_off_trajs
+                        
+                        test_data[self.i_trial] = test_data_trial
+                        with open(save_path, 'wb') as f:
+                            pickle.dump(test_data, f)            #Evaluate model and save if performance is best
+            if hasattr(self, 'save_model_interval') and mode=='train':
+                if (i_t%self.save_model_interval)==0:
+                    self.save_best_model(data)
