@@ -510,11 +510,11 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
 
         self.A = np.random.normal(0, 1, self.m)
         self.B = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
-        
+
 class Inverse_KF_RTRL(Real_Time_Learning_Algorithm):
-    
+
     def __init__(self, net, **kwargs):
-            
+
         self.name = 'I-KF-RTRL'
         allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
@@ -525,7 +525,7 @@ class Inverse_KF_RTRL(Real_Time_Learning_Algorithm):
         if self.B is None:
             self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
                                       (self.n_h, self.m))
-            
+
     def update_learning_vars(self, update=True):
 
         #Get relevant values and derivatives from network
@@ -542,7 +542,7 @@ class Inverse_KF_RTRL(Real_Time_Learning_Algorithm):
 
         if update:
             self.A, self.B = A, B
-            
+
     def get_influence_estimate(self):
 
         #Sample nu from specified distribution
@@ -573,7 +573,7 @@ class Inverse_KF_RTRL(Real_Time_Learning_Algorithm):
         B = (1/self.p0)*self.B_forwards + (1/self.p1)*M_projection
 
         return A, B
-    
+
     def get_rec_grads(self):
 
         self.qB = self.q.dot(self.B) #Unit-specific learning signal
@@ -681,7 +681,7 @@ class DNI(Real_Time_Learning_Algorithm):
             self.SG_grads[2] += self.l2_reg*self.C
 
         #Update SG parameters
-        self.SG_params = self.optimizer.get_update(self.SG_params, self.SG_grads)
+        self.SG_params = self.optimizer.get_updated_params(self.SG_params, self.SG_grads)
         self.A, self.B, self.C = self.SG_params
 
         if self.i_fix == self.fix_SG_interval - 1:
@@ -845,38 +845,38 @@ class BPTT(Learning_Algorithm):
         return grads
 
 class BPTT_Triangles(Real_Time_Learning_Algorithm):
-    
+
     def __init__(self, net, T_truncation, **kwargs):
-        
+
         self.name = 'BPTT_Triangles'
         allowed_kwargs_ = set()
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         self.T_truncation = T_truncation
-        
+
         self.CA_hist = [np.zeros(self.n_h)]*T_truncation
         self.a_hat_hist = [np.zeros(self.m)]*T_truncation
         self.h_hist = [np.zeros(self.n_h)]*T_truncation
         self.q_hist = [np.zeros(self.n_h)]*T_truncation
-        
+
         self.i_t = 0
-        
+
     def update_learning_vars(self):
-        
+
 
         #Update history
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.propagate_feedback_to_hidden()
-        
+
         self.a_hat_hist[self.i_t] = np.copy(self.a_hat)
         self.h_hist[self.i_t] = np.copy(self.net.h)
         self.q_hist[self.i_t] = np.copy(self.q)
-        
+
         self.i_t += 1
         if self.i_t == self.T_truncation:
             self.i_t = 0
-            
-            
+
+
 
         for i_CA in range(len(self.CA_hist)):
 
@@ -894,13 +894,13 @@ class BPTT_Triangles(Real_Time_Learning_Algorithm):
             self.CA_hist[-(i_CA + 1)] += q
 
     def get_rec_grads(self):
-        
+
         if self.i_t > 0:
-            
+
             rec_grads = np.zeros((self.n_h, self.n_h + self.n_in + 1))
-            
+
         else:
-            
+
             pass
 
         if len(self.CA_hist)==self.T_truncation:
@@ -966,7 +966,7 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
         q = np.copy(self.q)
 
         for i_BP in range(len(self.CA_hist)):
-            
+
             self.CA_hist[-(i_BP + 1)] += q
             J = self.net.get_a_jacobian(update=False,
                                         h=self.h_hist[-(i_BP+1)])
@@ -974,7 +974,7 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
             #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
 
         #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
-            
+
 
     def get_rec_grads(self):
 
@@ -1101,8 +1101,8 @@ class KeRNL(Real_Time_Learning_Algorithm):
         #Update beta and gamma
         self.beta_grads = np.multiply.outer(self.e_noise, self.Omega)
         self.gamma_grads = self.e_noise.dot(self.beta)*self.Gamma
-        self.beta, self.gamma = self.optimizer.get_update([self.beta, self.gamma],
-                                                          [self.beta_grads, self.gamma_grads])
+        self.beta, self.gamma = self.optimizer.get_updated_params([self.beta, self.gamma],
+                                                                  [self.beta_grads, self.gamma_grads])
 
         self.i_t += 1
 

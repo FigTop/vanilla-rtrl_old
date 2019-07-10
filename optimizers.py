@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from utils import *
 
 class Optimizer:
     """Parent class for gradient-based optimizers."""
@@ -13,24 +14,32 @@ class Optimizer:
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
-                                'passed to optimizer: ' + str(k))
+                                'passed to Optimizer: ' + str(k))
+
+        #Set all non-specified kwargs to None
+        for attr in allowed_kwargs:
+            if not hasattr(self, attr):
+                setattr(self, attr, None)
+
         self.__dict__.update(kwargs)
 
     def clip_gradient(self, grads):
         """Clips each gradient by the global gradient norm if it exceeds
         self.clip_norm.
 
-        Throws error if self.clip_norm attribute does not exist.
-
         Args:
             grads (list): List of original gradients
         Returns:
             clipped_grads (list): List of clipped gradients."""
 
-        
-        clipped_grads = []
-        for grad in grads:
-            clipped_grads.append(grad*self.clip_norm/)
+        grad_norm = np.sqrt(sum([np.square(grad).sum() for grad in grads]))
+        if grad_norm > self.clip_norm:
+            clipped_grads = []
+            for grad in grads:
+                clipped_grads.append(grad*(self.clip_norm/grad_norm))
+            return clipped_grads
+        else:
+            return grads
 
     def lr_decay(self):
 
@@ -63,8 +72,11 @@ class SGD(Optimizer):
         Returns:
             updated_params (list): List of newly updated parameters."""
 
-        if hasattr(self, 'lr_decay_rate'):
+        if self.lr_decay_rate is not None:
             self.lr = self.lr_decay()
+
+        if self.clip_norm is not None:
+            self.clip_gradient(grads)
 
         updated_params = []
         for param, grad in zip(params, grads):
