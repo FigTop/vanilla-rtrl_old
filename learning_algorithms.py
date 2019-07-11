@@ -128,7 +128,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         #Add to each grad the corresponding weight's current value, weighted
         #by the L2_reg hyperparameter.
         for i_L2, W in zip(self.net.L2_indices, L2_params):
-            grads[i_L2] += self.L2_reg*W
+            grads[i_L2] += self.L2_reg * W
         #Calculate L2 loss for monitoring purposes
         self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
         return grads
@@ -285,20 +285,21 @@ class UORO(Real_Time_Learning_Algorithm):
             P0 (float): Overrides calculation of p0, instead uses provided value
                 of P0. If not provided, p0 is calculated according to Eq. (3).
             P1 (float): Same for p1.
+            A (numpy array): Initial value for A.
+            B (numpy array): Initial value for B.
             nu_dist (string): Takes on the value of 'gaussian', 'discrete', or
                 'uniform' to indicate what type of distribution nu should sample
-                 from. Default is 'discrete'.
-            n_estimate (int): Number of times to sample nu (default is 1),
-                averages over samples."""
+                 from. Default is 'discrete'."""
 
         self.name = 'UORO' #Default algorithm name
-        allowed_kwargs_ = {'epsilon', 'P0', 'P1',
-                           'nu_dist'} #Special kwargs for UORO
+        allowed_kwargs_ = {'epsilon', 'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
-        #Initialize A and B vectors
-        self.A = np.random.normal(0, 1, net.n_h)
-        self.B = np.random.normal(0, 1, net.n_h_params)
+        #Initialize A and B arrays
+        if self.A is None:
+            self.A = np.random.normal(0, 1, net.n_h)
+        if self.B is None:
+            self.B = np.random.normal(0, 1, net.n_h_params)
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
@@ -332,8 +333,7 @@ class UORO(Real_Time_Learning_Algorithm):
 
         Returns:
             Updated A (numpy array of shape (n_h)) and B (numpy array of shape
-                (n_h_params)).
-        """
+                (n_h_params))."""
 
         #Sample nu from specified distribution
         if self.nu_dist == 'discrete' or self.nu_dist is None:
@@ -346,7 +346,7 @@ class UORO(Real_Time_Learning_Algorithm):
         if self.epsilon is not None: #Forward differentiation method
             eps = self.epsilon
             #Get perturbed state in direction of A
-            self.a_perturbed = self.net.a_prev + eps*self.A
+            self.a_perturbed = self.net.a_prev + eps * self.A
             #Get hypothetical next states from this perturbation
             self.a_perturbed_next = self.net.next_state(self.net.x,
                                                         self.a_perturbed,
@@ -356,7 +356,7 @@ class UORO(Real_Time_Learning_Algorithm):
             #Calculate scaling factors
             B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
-            M_norm = norm((self.papw.T*self.nu).T)
+            M_norm = norm((self.papw.T * self.nu).T)
             self.p0 = np.sqrt(B_norm/(A_norm + eps)) + eps
             self.p1 = np.sqrt(M_norm/(np.sqrt(self.n_h) + eps)) + eps
         else: #Backpropagation method
@@ -365,7 +365,7 @@ class UORO(Real_Time_Learning_Algorithm):
             #Calculate scaling factors
             B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
-            M_norm = norm((self.papw.T*self.nu).T)
+            M_norm = norm((self.papw.T * self.nu).T)
             self.p0 = np.sqrt(B_norm/A_norm)
             self.p1 = np.sqrt(M_norm/np.sqrt(self.n_h))
 
@@ -379,8 +379,8 @@ class UORO(Real_Time_Learning_Algorithm):
         M_projection = (self.papw.T*self.nu).T.reshape(-1, order='F')
 
         #Update outer product approximation
-        A = self.p0*self.A_forwards + self.p1*self.nu
-        B = (1/self.p0)*self.B + (1 / self.p1)*M_projection
+        A = self.p0 * self.A_forwards + self.p1 * self.nu
+        B = (1/self.p0) * self.B + (1 / self.p1) * M_projection
 
         return A, B
 
@@ -389,8 +389,8 @@ class UORO(Real_Time_Learning_Algorithm):
         estimate of the influence matrix.
 
         First associates q with A to calculate a "global learning signal"
-        Q, which multiplies by w_tilde to compute the recurrent gradient, which
-        is reshaped into origina matrix form.
+        Q, which multiplies by B to compute the recurrent gradient, which
+        is reshaped into original matrix form.
 
         Returns:
             An array of shape (n_h, m) representing the recurrent gradient."""
@@ -406,6 +406,8 @@ class UORO(Real_Time_Learning_Algorithm):
         self.B = np.random.normal(0, 1, self.net.n_h_params)
 
 class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
+    """Algorithm idea combining tensor structure of KeRNL with stochastic
+    update principles of KF-RTRL."""
 
     def __init__(self, net, rho_A=1, rho_B=1, gamma=0.5, **kwargs):
 
@@ -433,22 +435,53 @@ class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
 
         self.e_ij = np.multiply.outer(self.D**(1-self.gamma),
                                       self.a_hat)
-        self.e_ki = np.diag(self.D**self.gamma)
+        self.e_ki = np.diag(self.net.alpha * self.D**self.gamma)
 
-        self.A = self.A + (self.nu*(self.rho_A*self.e_ij).T).T
+        self.A = self.A + (self.nu * (self.rho_A * self.e_ij).T).T
         self.B = a_J.dot(self.B) + self.nu*self.rho_B*self.e_ki
 
     def get_rec_grads(self):
 
-        return (self.q.dot(self.B)*self.A.T).T
+        return (self.q.dot(self.B) * self.A.T).T
 
 class KF_RTRL(Real_Time_Learning_Algorithm):
     """Implements the Kronecker-Factored Real-Time Recurrent Learning Algorithm
     (KF-RTRL).
 
-    Details in review paper or original Mujika et al. 2018.
+    Details in review paper or original Mujika et al. 2018. Broadly, M is
+    approximated as a Kronecker product between a (row) vector A and a matrix
+    B, which updates as
+
+    A' = \nu_0 p0 A + \nu_1 p1 a_hat        (1)
+    B' = \nu_0 1/p0 JB + \nu_1 1/p1 \alpha diag(\phi'(h))      (2)
+
+    where \nu = (\nu_0, \nu_1) is a vector of zero-mean iid samples, a_hat is
+    the concatenation [a_prev, x, 1], and p0 and p1 are calculated by
+
+    p0 = \sqrt{norm(JB)/norm(A)}       (3)
+    p1 = \sqrt{norm(D)/norm(a_hat)}        (4)
+
+    Then the recurrent gradients are calculated by
+
+    dL/dw = qM = A (qB)    (5)
+
+    Eq. (5) is implemented in the get_rec_grads method.
     """
+
     def __init__(self, net, **kwargs):
+        """Inits a KF-RTRL instance by setting the initial values of A and B to
+        be iid samples from a gaussian distributions, to avoid dividing by
+        zero in Eqs. (3) and (4).
+
+        Keyword args:
+            P0 (float): Overrides calculation of p0, instead uses provided value
+                of P0. If not provided, p0 is calculated according to Eq. (3).
+            P1 (float): Same for p1.
+            A (numpy array): Initial value for A.
+            B (numpy array): Initial value for B.
+            nu_dist (string): Takes on the value of 'gaussian', 'discrete', or
+                'uniform' to indicate what type of distribution nu should sample
+                 from. Default is 'discrete'."""
 
         self.name = 'KF-RTRL'
         allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
@@ -462,6 +495,13 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
                                       (self.n_h, self.n_h))
 
     def update_learning_vars(self, update=True):
+        """Implements Eqs. (1), (2), (3), and (4) to update the Kron. product
+        approximation of the influence matrix by A and B.
+
+        Args:
+            update (bool): If True, updates the algorithm's current outer
+                product approximation B, A. If False, only prepares for calling
+                get_influence_estimate."""
 
         #Get relevant values and derivatives from network
         self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
@@ -475,6 +515,15 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
             self.A, self.B = A, B
 
     def get_influence_estimate(self):
+        """Generates one random Kron.-product estimate of the influence matrix.
+
+        Samples a random vector nu of iid samples with 0 mean from a
+        distribution given by nu_dist, and returns an updated estimate
+        of A and B from Eqs. (1)-(4).
+
+        Returns:
+            Updated A (numpy array of shape (m)) and B (numpy array of shape
+                (n_h, n_h))."""
 
         #Sample nu from specified distribution
         if self.nu_dist == 'discrete' or self.nu_dist is None:
@@ -502,20 +551,56 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
         return A, B
 
     def get_rec_grads(self):
+        """Calculates recurrent grads by taking matrix product of q with the
+        estimate of the influence matrix.
+
+        First associates q with B to calculate a vector qB, whose Kron. product
+        with A (effectively an outer product upon reshaping) gives the estimated
+        recurrent gradient.
+
+        Returns:
+            An array of shape (n_h, m) representing the recurrent gradient."""
 
         self.qB = self.q.dot(self.B) #Unit-specific learning signal
         return np.kron(self.A, self.qB).reshape((self.n_h, self.m), order='F')
 
     def reset_learning(self):
+        """Resets learning by re-randomizing the outer product approximation to
+        random gaussian samples."""
 
         self.A = np.random.normal(0, 1, self.m)
         self.B = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
 
-class Inverse_KF_RTRL(Real_Time_Learning_Algorithm):
+class Reverse_KF_RTRL(Real_Time_Learning_Algorithm):
+    """Implements the "Reverse" KF-RTRL (R-KF-RTRL) algorithm.
+
+    Full details in our review paper. Broadly, an approximation of M in the form
+    of a Kronecker product between a matrix B and a (row) vector A is maintained
+    by the update
+
+    A' = p0 A + p1 \nu        (1)
+    B' = 1/p0 JB + 1/p1 \nu M_immediate      (2)
+
+    where \nu is a vector of zero-mean iid samples. p0 and p1 are calculated by
+
+    p0 = \sqrt{norm(B)/norm(A)}       (3)
+    p1 = \sqrt{norm(\nu papw)/norm(\nu)}        (4)
+
+    These equations are implemented in update_learning_vars by two different
+    approaches. If 'epsilon' is provided as an argument, then the "forward
+    differentiation" method from the original paper is used, where the matrix-
+    vector product JA is estimated numerically by a perturbation of size
+    epsilon in the A direction.
+
+    Then the recurrent gradients are calculated by
+
+    dL/dw = qM = (q A) B    (5)
+
+    Eq. (5) is implemented in the get_rec_grads method."""
 
     def __init__(self, net, **kwargs):
 
-        self.name = 'I-KF-RTRL'
+        self.name = 'R-KF-RTRL'
         allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 

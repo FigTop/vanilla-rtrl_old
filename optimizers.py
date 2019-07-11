@@ -36,14 +36,16 @@ class Optimizer:
         if grad_norm > self.clip_norm:
             clipped_grads = []
             for grad in grads:
-                clipped_grads.append(grad*(self.clip_norm/grad_norm))
+                clipped_grads.append(grad * (self.clip_norm/grad_norm))
             return clipped_grads
         else:
             return grads
 
     def lr_decay(self):
+        """Multiplicatively decays the learning rate by a factor of
+        self.lr_decay_rate, with a floor learning rate of self.min_lr."""
 
-        self.lr_ = self.lr_*self.lr_decay_rate
+        self.lr_ = self.lr_ * self.lr_decay_rate
         try:
             return np.max([self.lr_, self.min_lr])
         except AttributeError:
@@ -53,7 +55,7 @@ class SGD(Optimizer):
     """Implements basic stochastic gradient descent optimizer.
 
     Attributes:
-        lr (float): learning rate. """
+        lr (float): learning rate."""
 
     def __init__(self, lr=0.001, **kwargs):
 

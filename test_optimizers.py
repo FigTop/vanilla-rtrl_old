@@ -38,6 +38,24 @@ class Test_SGD(unittest.TestCase):
         self.assertTrue(np.isclose(updated_params,
                                    correct_updated_params).all())
 
+    def test_lr_decay(self):
+
+        optimizer = SGD(lr=1, lr_decay_rate=0.9, min_lr=0.5)
+
+        params = []
+        grads = []
+
+        for _ in range(3):
+            params = optimizer.get_updated_params(params, grads)
+
+        correct_lr = 0.9**3
+        self.assertEqual(correct_lr, optimizer.lr)
+
+        for _ in range(4):
+            params = optimizer.get_updated_params(params, grads)
+
+        correct_lr = 0.5
+        self.assertEqual(correct_lr, optimizer.lr)
 
 if __name__ == '__main__':
     unittest.main()

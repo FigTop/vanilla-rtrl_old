@@ -180,7 +180,7 @@ class Simulation:
 
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
-        
+
         #Delete data to save space
         del(self.x_inputs)
         del(self.y_labels)
@@ -283,8 +283,8 @@ class Simulation:
         #Only update on schedule (default update_interval=1)
         if self.i_t%self.update_interval == 0:
             #Get updated parameters
-            net.params = self.optimizer.get_update(net.params,
-                                                   self.grads_list)
+            net.params = self.optimizer.get_updated_params(net.params,
+                                                           self.grads_list)
             net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
 
     def end_time_step(self, data):
@@ -423,7 +423,7 @@ class Simulation:
                         j_index = -1
                     else:
                         j_index = 0
-                        
+
                     g_i = self.rec_grads_dict[key_i][i_index]
                     g_j = self.rec_grads_dict[key_j][j_index]
                     #alignment = half_normalized_dot_product(g_i, g_j)
