@@ -297,9 +297,9 @@ class UORO(Real_Time_Learning_Algorithm):
 
         #Initialize A and B arrays
         if self.A is None:
-            self.A = np.random.normal(0, 1, net.n_h)
+            self.A = np.random.normal(0, 1, self.n_h)
         if self.B is None:
-            self.B = np.random.normal(0, 1, net.n_h_params)
+            self.B = np.random.normal(0, 1, (self.n_h, self.m))
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
@@ -333,7 +333,7 @@ class UORO(Real_Time_Learning_Algorithm):
 
         Returns:
             Updated A (numpy array of shape (n_h)) and B (numpy array of shape
-                (n_h_params))."""
+                (n_h, m))."""
 
         #Sample nu from specified distribution
         if self.nu_dist == 'discrete' or self.nu_dist is None:
@@ -376,7 +376,7 @@ class UORO(Real_Time_Learning_Algorithm):
             self.p1 = np.copy(self.P1)
 
         #Get random projection of M_immediate onto \nu
-        M_projection = (self.papw.T*self.nu).T.reshape(-1, order='F')
+        M_projection = (self.papw.T*self.nu).T
 
         #Update outer product approximation
         A = self.p0 * self.A_forwards + self.p1 * self.nu
@@ -396,7 +396,7 @@ class UORO(Real_Time_Learning_Algorithm):
             An array of shape (n_h, m) representing the recurrent gradient."""
 
         self.Q = self.q.dot(self.A) #"Global learning signal"
-        return (self.Q * self.B).reshape((self.n_h, self.m), order='F')
+        return (self.Q * self.B)
 
     def reset_learning(self):
         """Resets learning by re-randomizing the outer product approximation to
