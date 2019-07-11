@@ -37,7 +37,7 @@ if os.environ['HOME']=='/home/oem214':
     except KeyError:
         i_job = 0
     macro_configs = config_generator(algorithm=['Only_Output_Weights',
-                                                'RTRL', 'UORO', 'KF-RTRL', 'I-KF-RTRL',
+                                                'RTRL', 'UORO', 'KF-RTRL', 'R-KF-RTRL',
                                                 'BPTT', 'DNI', 'DNIb',
                                                 'RFLO', 'KeRNL'],
                                      alpha=[1, 0.5],
@@ -53,13 +53,13 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'KeRNL',
+    params = {'algorithm': 'R-KF-RTRL',
               'alpha': 1,
               'task': 'Coin'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-    np.random.seed()
+    np.random.seed(0)
     
 if params['alpha'] == 1:
     n_1, n_2 = 6, 10
@@ -98,7 +98,7 @@ elif params['task'] == 'Coin':
     task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
                      tau_task=tau_task)
     
-data = task.gen_data(1000000, 5000)
+data = task.gen_data(100000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -130,7 +130,7 @@ if params['task'] == 'Mimic':
               output=identity,
               loss=mean_squared_error)
 
-optimizer = SGD(lr=0.0001)
+optimizer = SGD(lr=0.0005)
 SG_optimizer = SGD(lr=0.001)
 if params['alpha'] == 1 and params['task'] == 'Coin':
     SG_optimizer = SGD(lr=0.05)
@@ -145,8 +145,8 @@ if params['algorithm'] == 'UORO':
     learn_alg = UORO(rnn)
 if params['algorithm'] == 'KF-RTRL':
     learn_alg = KF_RTRL(rnn)
-if params['algorithm'] == 'I-KF-RTRL':
-    learn_alg = Inverse_KF_RTRL(rnn)
+if params['algorithm'] == 'R-KF-RTRL':
+    learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
     learn_alg = Forward_BPTT(rnn, 10)
 if params['algorithm'] == 'DNI':
@@ -166,7 +166,7 @@ if params['algorithm'] == 'KeRNL':
 
 comp_algs = [UORO(rnn),
              KF_RTRL(rnn),
-             Inverse_KF_RTRL(rnn),
+             Reverse_KF_RTRL(rnn),
              RFLO(rnn, alpha=alpha),
              KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
                    use_approx_kernel=True, learned_alpha_e=False),
