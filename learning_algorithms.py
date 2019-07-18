@@ -671,33 +671,53 @@ class Reverse_KF_RTRL(Real_Time_Learning_Algorithm):
                                   (self.n_h, self.m))
 
 class RFLO(Real_Time_Learning_Algorithm):
+    """Implements the Random-Feedback Local Online learning algorithm (RFLO)
+    from Murray (2019).
 
-    def __init__(self, net, alpha, monitors=[], **kwargs):
+    Maintains an eligibility trace B that is updated by temporally filtering
+    the immediate influences \phi'(h_i) a_hat_j by the network's inverse time
+    constant \alpha:
+
+    B'_{ij} = (1 - \alpha) B_{ij} + \alpha \phi'(h_i) a_hat_j       (1)
+
+    Eq. (1) is implemented by update_learning_vars method. Gradients are then
+    calculated according to
+
+    q_i B_{ij}      (2)
+
+    which is implemented in get_rec_grads."""
+
+
+    def __init__(self, net, alpha, **kwargs):
 
         self.name = 'RFLO'
-        allowed_kwargs_ = {'P'}
+        allowed_kwargs_ = {'B'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         self.alpha = alpha
-        if self.P is None:
-            self.P = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+        if self.B is None:
+            self.B = np.zeros((self.n_h, self.n_h + self.n_in + 1))
 
     def update_learning_vars(self):
 
         #Get relevant values and derivatives from network
-        self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.a_hat   = np.concatenate([self.net.a_prev,
+                                       self.net.x,
+                                       np.array([1])])
         self.D = self.net.activation.f_prime(self.net.h)
+        self.M_immediate = self.alpha * np.multiply.outer(self.D,
+                                                          self.a_hat)
 
         #Update eligibility traces
-        self.P = (1 - self.alpha)*self.P + self.alpha*np.multiply.outer(self.D, self.a_hat)
+        self.B = (1 - self.alpha) * self.B + self.M_immediate
 
     def get_rec_grads(self):
 
-        return (self.q*self.P.T).T
+        return (self.q * self.B.T).T
 
     def reset_learning(self):
 
-        self.P *= 0
+        self.B *= 0
 
 class DNI(Real_Time_Learning_Algorithm):
 
