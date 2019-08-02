@@ -11,6 +11,20 @@ import numpy as np
 import pickle
 import os
 from utils import *
+from sklearn.cross_decomposition.cca_ import cca
+
+T = len(sim.singular_vectors)
+cca_matrix = np.zeros((T, T))
+for i in range(T):
+    for j in range(T):
+        cca = CCA()
+        cca.fit(sim.singular_vectors[i],
+                sim.singular_vectors[j])
+        cca_matrix[i,j] = 1 - cca.score(sim.singular_vectors[i],
+                                        sim.singular_vectors[j])
+mds = MDS()
+mds.dissimilarity = 'precomputed'
+mds.fit_transform(cca_matrix)
 
 
 x = [0, 1]

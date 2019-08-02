@@ -53,7 +53,7 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'R-KF-RTRL',
+    params = {'algorithm': 'RTRL',
               'alpha': 1,
               'task': 'Coin'}
     i_job = 0
@@ -98,7 +98,7 @@ elif params['task'] == 'Coin':
     task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
                      tau_task=tau_task)
     
-data = task.gen_data(100000, 5000)
+data = task.gen_data(50000, 500)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -130,7 +130,7 @@ if params['task'] == 'Mimic':
               output=identity,
               loss=mean_squared_error)
 
-optimizer = SGD(lr=0.0005)
+optimizer = SGD(lr=0.001)
 SG_optimizer = SGD(lr=0.001)
 if params['alpha'] == 1 and params['task'] == 'Coin':
     SG_optimizer = SGD(lr=0.05)
@@ -188,7 +188,8 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         monitors=monitors,
         verbose=True,
         check_accuracy=False,
-        check_loss=True)
+        check_loss=True,
+        save_model_interval=20)
 
 #Filter losses
 loss = sim.mons['net.loss_']
