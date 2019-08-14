@@ -20,6 +20,7 @@ import time
 from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
+from metalearning_algorithms import *
 from functions import *
 from itertools import product
 import os
@@ -53,7 +54,7 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'RTRL',
+    params = {'algorithm': 'DNI',
               'alpha': 1,
               'task': 'Coin'}
     i_job = 0
@@ -98,7 +99,7 @@ elif params['task'] == 'Coin':
     task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
                      tau_task=tau_task)
     
-data = task.gen_data(50000, 500)
+data = task.gen_data(100000, 1000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -164,6 +165,11 @@ if params['algorithm'] == 'KeRNL':
     learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
                       use_approx_kernel=True, learned_alpha_e=False)
 
+optimizer = SGD(lr=0.09)
+learn_alg = Forward_BPTT_LR_by_RTRL(rnn, optimizer, 10, meta_lr=0.0001)
+#learn_alg = Forward_BPTT(rnn, 10)
+#optimizer = SGD(lr=0.09)
+
 comp_algs = [UORO(rnn),
              KF_RTRL(rnn),
              Reverse_KF_RTRL(rnn),
@@ -177,7 +183,7 @@ comp_algs = []
 
 ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
 
-monitors = ['net.loss_', 'net.y_hat']
+monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr']
 #monitors = ['net.loss_', 'alignment_matrix', 'net.a', 'learn_alg.noisy_net.a',
 #            'learn_alg.error_prediction', 'learn_alg.error_observed', 'learn_alg.loss_noise']
 #monitors = ['net.loss_', 'alignment_matrix', 'alignment_weights', 'learn_alg.rec_grads-norm']
@@ -188,8 +194,7 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         monitors=monitors,
         verbose=True,
         check_accuracy=False,
-        check_loss=True,
-        save_model_interval=20)
+        check_loss=True)
 
 #Filter losses
 loss = sim.mons['net.loss_']
