@@ -26,7 +26,7 @@ class Learning_Algorithm:
         W_FB (numpy array or None): A fixed set of weights that may be provided
             for an approximate calculation of q in the manner of feedback
             alignment (Lillicrap et al. 2016).
-        L2_reg (float or None): Strength of L2 regularization parameter on the
+        SG_L2_reg (float or None): Strength of L2 regularization parameter on the
             network weights."""
 
     def __init__(self, net, allowed_kwargs_=set(), **kwargs):
@@ -37,9 +37,9 @@ class Learning_Algorithm:
             net (network.RNN): An instance of RNN to be trained by the network.
             allowed_kwargs_ (set): Set of allowed kwargs in addition to those
                 common to all child classes of Learning_Algorithm, 'W_FB' and
-                'L2_reg'."""
+                'SG_L2_reg'."""
 
-        allowed_kwargs = {'W_FB', 'L2_reg'}.union(allowed_kwargs_)
+        allowed_kwargs = {'W_FB', 'SG_L2_reg'}.union(allowed_kwargs_)
 
         for k in kwargs:
             if k not in allowed_kwargs:
@@ -114,7 +114,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         else:
             self.q = self.net.error.dot(self.W_FB)
 
-    def L2_regularization(self, grads):
+    def SG_L2_regularization(self, grads):
         """Adds L2 regularization to the gradient.
 
         Args:
@@ -126,9 +126,9 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         #Get parameters affected by L2 regularization
         L2_params = [self.net.params[i] for i in self.net.L2_indices]
         #Add to each grad the corresponding weight's current value, weighted
-        #by the L2_reg hyperparameter.
+        #by the SG_L2_reg hyperparameter.
         for i_L2, W in zip(self.net.L2_indices, L2_params):
-            grads[i_L2] += self.L2_reg * W
+            grads[i_L2] += self.SG_L2_reg * W
         #Calculate L2 loss for monitoring purposes
         self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
         return grads
@@ -145,7 +145,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         of W_rec, W_in, and b_rec as one numpy array with shape (n_h, m). Then
         these gradients are split along the column axis into a list of 5
         gradients for W_rec, W_in, b_rec, W_out, b_out. L2 regularization is
-        applied if L2_reg parameter is not None.
+        applied if SG_L2_reg parameter is not None.
 
         Returns:
             List of gradients for W_rec, W_in, b_rec, W_out, b_out."""
@@ -159,8 +159,8 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
                                                [self.n_h, 1])
         grads_list = rec_grads_list + outer_grads_list
 
-        if self.L2_reg is not None:
-            grads_list = self.L2_regularization(grads_list)
+        if self.SG_L2_reg is not None:
+            grads_list = self.SG_L2_regularization(grads_list)
 
         return grads_list
 
@@ -689,6 +689,16 @@ class RFLO(Real_Time_Learning_Algorithm):
 
 
     def __init__(self, net, alpha, **kwargs):
+        """Inits an RFLO instance by specifying the inverse time constant for
+        the eligibility trace.
+
+        Args:
+            alpha (float): Float between 0 and 1 specifying the inverse time
+                constant of the eligilibility trace, typically chosen to be
+                equal to alpha for the network.
+
+        Keyword args:
+            B (numpy array): Initial value for B (all 0s if unspecified)."""
 
         self.name = 'RFLO'
         allowed_kwargs_ = {'B'}
@@ -699,6 +709,8 @@ class RFLO(Real_Time_Learning_Algorithm):
             self.B = np.zeros((self.n_h, self.n_h + self.n_in + 1))
 
     def update_learning_vars(self):
+        """Updates B by one time step of temporal filtration via the invesre
+        time constant alpha (see Eq. 1)."""
 
         #Get relevant values and derivatives from network
         self.a_hat   = np.concatenate([self.net.a_prev,
@@ -712,58 +724,62 @@ class RFLO(Real_Time_Learning_Algorithm):
         self.B = (1 - self.alpha) * self.B + self.M_immediate
 
     def get_rec_grads(self):
+        """Implements Eq. (2) from above."""
 
         return (self.q * self.B.T).T
 
     def reset_learning(self):
+        """Reset eligibility trace to 0."""
 
         self.B *= 0
 
 class DNI(Real_Time_Learning_Algorithm):
+    """Implements the Decoupled Neural Interface (DNI) algorithm for an RNN.
 
+    Details are in Jaderberg et al. (2017). Briefly, we linearly approximate
+    the (future-facing) credit assignment vector c = dL/da using
+
+
+    """
     def __init__(self, net, optimizer, **kwargs):
 
         self.name = 'DNI'
-        allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
-                           'activation', 'SG_label_activation', 'backprop_weights',
-                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e',
-                           'train_SG_with_exact_CA'}
+        allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'J_lr',
+                           'activation', 'SG_label_activation', 'use_approx_J',
+                           'SG_L2_reg', 'fix_SG_interval'}
         #Default parameters
         self.optimizer = optimizer
-        self.l2_reg = 0
+        self.SG_L2_reg = 0
         self.fix_SG_interval = 5
         self.activation = identity
         self.SG_label_activation = identity
-        self.backprop_weights = 'exact'
-        self.sg_loss_thr = 0.05
-        self.train_SG_with_exact_CA = False
+        self.use_approx_J = False
         #Override defaults with kwargs
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         sigma = np.sqrt(1/self.n_h)
         self.SG_init(sigma)
-
+        self.J_approx = np.copy(self.net.W_rec)
+        self.m_out = self.n_h + self.n_out + 1
         self.i_fix = 0
-
-        self.W_a = np.copy(self.net.W_rec)
-        self.U = np.copy(self.A)
-        self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
-        self.SG_params = [self.A, self.B, self.C]
-        self.e_w = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+        self.A_= np.copy(self.A)
 
     def SG_init(self, sigma):
 
-        self.A = np.random.normal(0, sigma, (self.n_h, self.n_h))
-        self.B = np.random.normal(0, sigma, (self.n_h, self.n_out))
-        self.C = np.zeros(self.n_h)
+        self.A = np.random.normal(0, sigma, (self.n_h, self.m_out))
 
     def update_learning_vars(self):
+        """"""
+
 
         #Get network jacobian
         self.net.get_a_jacobian()
 
-        #Computer SG error term
-        self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
+        #Compute synthetic gradient estimate of credit assignment
+        self.a_tilde_prev = np.concatenate([self.net.a_prev,
+                                            self.net.y_prev,
+                                            np.array([1])])
+        self.sg = self.synthetic_grad(self.a_tilde_prev)
 
         if self.SG_clipnorm is not None:
             self.sg_norm = norm(self.sg)
@@ -786,55 +802,40 @@ class DNI(Real_Time_Learning_Algorithm):
                          np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
                          self.scaled_e_sg]
 
-        if self.l2_reg > 0:
-            self.SG_grads[0] += self.l2_reg*self.A
-            self.SG_grads[1] += self.l2_reg*self.B
-            self.SG_grads[2] += self.l2_reg*self.C
+        if self.SG_L2_reg > 0:
+            self.SG_grad += self.SG_L2_reg*self.A
 
         #Update SG parameters
-        self.SG_params = self.optimizer.get_updated_params(self.SG_params, self.SG_grads)
-        self.A, self.B, self.C = self.SG_params
+        self.A = self.optimizer.get_updated_params([self.A], [self.SG_grads])[0]
 
         if self.i_fix == self.fix_SG_interval - 1:
             self.i_fix = 0
-            self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
+            self.A_ = np.copy(self.A)
         else:
             self.i_fix += 1
 
-        if self.W_a_lr is not None:
-            self.update_W_a()
-
-        if self.U_lr is not None:
-            self.update_U()
+        if self.J_lr is not None:
+            self.update_J_approx()
 
     def get_sg_target(self):
 
         self.propagate_feedback_to_hidden()
 
-        if self.backprop_weights=='exact':
-            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
-        elif self.backprop_weights=='approximate':
-            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
-        elif self.backprop_weights=='composite':
-            sg_target = self.q_prev + self.U.dot(self.net.a)
+        self.a_tilde = np.concatenate([self.net.a, self.net.y, np.array([1])])
 
-        if self.train_SG_with_exact_CA:
-            sg_target = self.net.CA
+        if self.use_approx_J:
+            sg_target = self.q_prev + self.synthetic_grad_(self.a_tilde).dot(self.J_approx)
+        else:
+            sg_target = self.q_prev + self.synthetic_grad_(self.a_tilde).dot(self.net.a_J)
 
         return sg_target
 
-    def update_W_a(self):
+    def update_J_approx(self):
 
-        self.loss_a = np.square(self.W_a.dot(self.net.a_prev) - self.net.a).mean()
-        self.e_a = self.W_a.dot(self.net.a_prev) - self.net.a
+        self.loss_a = np.square(self.J_approx.dot(self.net.a_prev) - self.net.a).mean()
+        self.e_a = self.J_approx.dot(self.net.a_prev) - self.net.a
 
-        self.W_a -= self.W_a_lr*np.multiply.outer(self.e_a, self.net.a_prev)
-
-    def update_U(self):
-
-        self.loss_u = np.square(self.U.dot(self.net.a_prev) - self.sg).mean()
-        self.e_u = self.U.dot(self.net.a_prev) - self.sg
-        self.U -= self.U_lr*np.multiply.outer(self.e_u, self.net.a_prev)
+        self.J_approx -= self.J_lr*np.multiply.outer(self.e_a, self.net.a_prev)
 
     def synthetic_grad(self, a, y):
         self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
@@ -856,17 +857,7 @@ class DNI(Real_Time_Learning_Algorithm):
 
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
 
-        if self.alpha_e is not None:
-            self.update_synaptic_eligibility_trace()
-            return (self.e_w.T*self.sg).T
-        else:
-            return np.multiply.outer(self.sg_scaled, self.a_hat)
-
-    def update_synaptic_eligibility_trace(self):
-
-        self.D = self.net.activation.f_prime(self.net.h)
-        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
+        return np.multiply.outer(self.sg_scaled, self.a_hat)
 
 class BPTT(Learning_Algorithm):
 

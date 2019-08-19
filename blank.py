@@ -85,83 +85,83 @@ print(t2 - t1)
 ### --- Define Layer Normalization --- ###
 
 def layer_normalization_(z):
-    
+
     return (z - np.mean(z))/np.std(z)
 
 def layer_normalization_derivative(z):
-    
+
     return "don't care"
 
 layer_normalization = function(layer_normalization_, layer_normalization_derivative)
-            
+
 if hasattr(self, 't_stop_SG_train'):
     if self.t_stop_SG_train==i_t:
         self.learn_alg.optimizer.lr = 0
 
 def forward_estimate_credit_assignment(self, i_t, data, t_steps=14, delta_a=0.0001):
-    
+
     try:
         truncated_data = {'test': {'X': data['train']['X'][i_t:i_t+t_steps,:],
                                    'Y': data['train']['Y'][i_t:i_t+t_steps,:]}}
     except IndexError:
         return
-    
+
     fiducial_rnn = copy(self.net)
     fiducial_sim = copy(self)
     perturbed_rnn = copy(self.net)
     perturbed_sim = copy(self)
-    
+
     direction = np.random.normal(0, 1, self.net.n_hidden)
     perturbation = delta_a*direction/norm(direction)
     a_fiducial = self.net.a - perturbation
     a_perturbed = self.net.a + perturbation
-    
+
     fiducial_sim.run(truncated_data,
                      mode='test',
                      monitors=['loss_'],
                      a_initial=a_fiducial,
                      verbose=False)
-    
+
     perturbed_sim.run(truncated_data,
                       mode='test',
                       monitors=['loss_'],
                       a_initial=a_perturbed,
                       verbose=False)
-    
+
     delta_loss = perturbed_sim.mons['loss_'].sum() - fiducial_sim.mons['loss_'].sum()
     self.CA_forward_est = delta_loss/(2*delta_a)
     self.CA_SG_est = self.learn_alg.sg.dot(direction)
 
 if False:
     data_dir = '/scratch/oem214/vanilla-rtrl/library/ssa_2_run'
-    
+
     i_file = i_job
     file_name = 'rnn_{}'.format(i_file)
     test_file_name = 'rnn_{}_test_data'.format(i_file)
-    
+
     data_path = os.path.join(data_dir, test_file_name)
     rnn_path = os.path.join(data_dir, file_name)
     with open(data_path, 'rb') as f:
         test_data = pickle.load(f)
     with open(rnn_path, 'rb') as f:
         result = pickle.load(f)
-        
+
     n_trials = len(test_data.keys())
     alignments = np.zeros((n_trials, n_trials))
     for i in range(n_trials):
         for j in range(n_trials):
             alignments[i,j] = np.square(test_data[i]['PCs'].T.dot(test_data[j]['PCs'])).sum()/3
-    
+
     result = {}
     result[file_name+'_alignments'] = alignments
-    
+
     if os.environ['HOME']=='/home/oem214':
-    
+
         save_dir = os.environ['SAVEPATH']
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         save_path = os.path.join(save_dir, 'rnn_{}_analysis'.format(i_file))
-        
+
         with open(save_path, 'wb') as f:
             pickle.dump(result, f)
 
@@ -177,7 +177,7 @@ with open(data_path, 'rb') as f:
     test_data = pickle.load(f)
 with open(rnn_path, 'rb') as f:
     result = pickle.load(f)
-    
+
 n_trials = len(test_data.keys())
 alignments = np.zeros((n_trials, n_trials))
 for i in range(n_trials):
@@ -193,7 +193,7 @@ if os.environ['HOME']=='/home/oem214':
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     save_path = os.path.join(save_dir, 'rnn_{}_analysis'.format(i_file))
-    
+
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
 
@@ -212,12 +212,12 @@ for i in range(test_data['PC_on_trajs'].shape[0]):
     plt.plot(test_data['PC_on_trajs'][i,:,0],test_data['PC_on_trajs'][i,:,1], color='b', alpha=0.2)
 for i in range(test_data['PC_off_trajs'].shape[0]):
     plt.plot(test_data['PC_off_trajs'][i,:,0],test_data['PC_off_trajs'][i,:,1], color='g', alpha=0.2)
-    
+
 if hasattr(self, 'time_steps_per_trial'):
     X_reshaped = data['test']['X'].reshape((-1, self.time_steps_per_trial, self.net.n_in))
     on_trials = np.where(X_reshaped[:,1,0]>0)[0]
     off_trials = np.where(X_reshaped[:,1,0]<0)[0]
-    
+
 #Initialize test data
 if hasattr(self, 'SSA_PCs') and mode=='train':
     test_data = {}
@@ -225,16 +225,16 @@ if hasattr(self, 'SSA_PCs') and mode=='train':
     save_path = os.path.join(self.save_dir, file_name)
     with open(save_path, 'wb') as f:
         pickle.dump(test_data, f)
-        
+
 if hasattr(self, 'SSA_PCs') and self.mode=='train':
-    
+
     with open(save_path, 'rb') as f:
         test_data = pickle.load(f)
-    
+
     np.random.seed(0)
     test_sim = copy(self)
     test_sim.run(data, mode='test', monitors=['a'], verbose=False)
-    
+
     test_data_trial = {}
     PCs = State_Space_Analysis(test_sim.mons['a'], add_fig=False).V[:,:self.SSA_PCs]
     A = test_sim.mons['a'].reshape((-1, self.time_steps_per_trial, self.net.n_hidden))
@@ -243,7 +243,7 @@ if hasattr(self, 'SSA_PCs') and self.mode=='train':
     test_data_trial['PCs'] = PCs
     test_data_trial['PC_on_trajs'] = PC_on_trajs
     test_data_trial['PC_off_trajs'] = PC_off_trajs
-    
+
     test_data[self.i_trial] = test_data_trial
     with open(save_path, 'wb') as f:
         pickle.dump(test_data, f)
@@ -256,7 +256,7 @@ if hasattr(self, 'SSA_PCs') and self.mode=='train':
 #for i in range(n_trials):
 #    for j in range(n_trials):
 #        alignments[i,j] = (norm(sim.SSAs[i][:,:n_PCs].T.dot(sim.SSAs[j][:,:n_PCs]))**2)/n_PCs
-#        
+#
 #plt.imshow(alignments)
 
 
@@ -269,9 +269,9 @@ if hasattr(self, 'SSA_PCs') and self.mode=='train':
 #    autocov = np.zeros((a.shape[1], n_tau))
 #    for i in range(a_t.shape[1]):
 #        for tau in range(1, 1+n_tau):
-#        
+#
 #            autocov[i, tau-1] = np.corrcoef(a_t[:,i], np.roll(a_t[:,i], tau, axis=0))[0,1]
-#        
+#
 #        #plt.plot(autocov[i, :], 'b', alpha=0.2)
 #    Y.append(autocov.mean())
 #
@@ -330,29 +330,29 @@ val_losses = {}
 
 #for file_name in os.listdir(data_dir):
 for i_file in [29]:
-    
+
     file_name = 'rnn_'+str(i_file)
-    
+
     if 'code' in file_name or '.' in file_name:
         continue
-    
+
     file_no = int(file_name.split('_')[-1])
-    
+
     with open(os.path.join(data_dir, file_name), 'rb') as f:
         try:
             result = pickle.load(f)
         except EOFError:
             n_errors += 1
-    
+
     #plt.figure(figsize=(10, 20))
     for i in range(9):
         i_x = i%n_row
         i_y = i//n_row
         np.random.seed(i+100)
         data = result['task'].gen_data(1000, 5000)
-        
 
-    
+
+
         test_sim = Simulation(result['sim'].best_net, learn_alg=None, optimizer=None)
         test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
         axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
@@ -364,10 +364,10 @@ for i_file in [29]:
         #axarr[i_x, i_y].set_title(title)
         axarr[i_x, i_y].set_xticks([])
         axarr[i_x, i_y].set_yticks([])
-    
-    continue 
+
+    continue
 #    config = [result['sim'].net.alpha, result['task'].tau_task]
-#    
+#
 #    if config not in configs:
 #        configs.append(config)
 #        i_conf = len(configs) - 1
@@ -375,21 +375,21 @@ for i_file in [29]:
 #    else:
 #        i_conf = configs.index(config)
 #        first = False
-#    
+#
 #    if config==[0.3, 4]:
 #        i_seed = result['i_seed']
 #        if i_seed==17:
 #            break
 #    else:
 #        continue
-    
+
     np.random.seed(100)
     data = result['task'].gen_data(1000, 5000)
-        
+
     i_seed = result['i_seed']
     i_x = i_seed%n_row
     i_y = i_seed//n_row
-    
+
     test_sim = Simulation(result['sim'].best_net, learn_alg=None, optimizer=None)
     test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
     axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
@@ -401,34 +401,34 @@ for i_file in [29]:
     #axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
     axarr[i_x, i_y].set_yticks([])
-        
+
     val_losses[file_name] = result['sim'].best_val_loss
-    
+
     continue
-        
+
     i_x = i_conf%n_row
     i_y = i_conf//n_row
-    
+
     #np.random.seed(result['i_seed'])
     #data = result['task'].gen_data(1000, 10000)
-    
+
     #sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
     #sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
     #axarr[i_x, i_y].plot(sim.mons['y_hat'][:,0])
     #axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
-    
+
     loss_1 = rectangular_filter(result['sim'].mons['loss_'], filter_size=1000)
     #loss_2 = rectangular_filter(result['sim'].mons['sg_loss'], filter_size=1000)
     #loss_3 = rectangular_filter(result['sim'].mons['loss_a'], filter_size=1000)
-    
+
     loss_avg_1[i_conf] += loss_1
     #loss_avg_2[i_conf] += loss_2
     #loss_avg_3[i_conf] += loss_3
-    
+
     axarr[i_x, i_y].plot(loss_1, color='b', alpha=0.05)
     #axarr[i_x, i_y].plot(loss_2, color='y', alpha=0.05)
     #axarr[i_x, i_y].plot(loss_3, color='r', alpha=0.05)
-    
+
     if first:
         axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
         axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
@@ -445,13 +445,13 @@ for i_file in [29]:
 
 n_seeds = 20
 for i_conf in range(len(configs)):
-    
+
     i_x = i_conf%n_row
     i_y = i_conf//n_row
-    
+
     axarr[i_x, i_y].plot(loss_avg_1[i_conf]/n_seeds, color='b')
     #axarr[i_x, i_y].plot(loss_avg_2[i_conf]/n_seeds, color='y')
-    #axarr[i_x, i_y].plot(loss_avg_3[i_conf]/n_seeds, color='r')    
+    #axarr[i_x, i_y].plot(loss_avg_3[i_conf]/n_seeds, color='r')
 
 ### STATE SPACE STUFF ###
 #State space
@@ -466,15 +466,15 @@ for i_conf in range(len(configs)):
 #        cond = np.logical_and(cond, cond_)
 #    print(cond.sum())
 #    ssa.plot_in_state_space(test_sim.mons['a'][5:-1][cond], '.', alpha=0.1, color=col)
-#    
+#
 ##    for past in [[0,0], [0, 1], [1, 0], [1, 1]]:
 ##        cond = np.where(np.logical_and(data['test']['X'][2:-2,0]==past[0], data['test']['X'][4:,0]==past[1]))
 ##        ssa.plot_in_state_space(test_sim.mons['a'][:-4,][cond], '.', alpha=0.3)
-#    
+#
 #for y in [0.25, 0.5, 0.75, 1]:
 #    cond = np.where(data['test']['Y'][:,0]==y)
 #    ssa.plot_in_state_space(test_sim.mons['a'][cond], '.', alpha=0.3)
-    
+
 #ssa.plot_in_state_space(test_sim.mons['a'])
 
 
@@ -484,9 +484,9 @@ for i_conf in range(len(configs)):
 #                                      mode='valid')
 #        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
 #        signals[i_conf][key].append(smoothed_signal)
-#        
+#
 #    for key, col in zip(['sg_loss', 'loss_a'], ['y', 'g']):
-#        
+#
 #        smoothed_signal = np.convolve(result['rnn'].learn_alg.mons[key],
 #                                      np.ones(filter_size)/filter_size,
 #                                      mode='valid')
@@ -497,24 +497,24 @@ for i_conf in range(len(configs)):
 #
 #    i_x = i_conf%n_row
 #    i_y = i_conf//n_row
-#    
+#
 #    for key, col in zip(['loss_', 'acc', 'sg_loss', 'loss_a'], ['b', 'k', 'y', 'g']):
-#        
+#
 #        signals[i_conf][key] = np.array(signals[i_conf][key])
-#        
+#
 #        axarr[i_x, i_y].plot(np.nanmean(signals[i_conf][key], axis=0), col)
-#    
+#
 #    if True:
 #        axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
 #        axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
-#        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')    
-#        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')   
-#        
+#        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')
+#        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')
+#
 #    axarr[i_x, i_y].set_ylim([0, 1])
 #    axarr[i_x, i_y].set_xlim([0, 10000])
 #    axarr[i_x, i_y].set_xticks([])
 #    axarr[i_x, i_y].set_title('{}, {}, {}'.format(conf[0], conf[1], conf[2]), fontsize=8)
-#    
+#
 #print(n_errors)
 #### ------------- #####
 
@@ -548,11 +548,11 @@ for i_conf in range(len(configs)):
 #avg_eval_mod = []
 #spectral_radii = []
 #for W_rec in rnn.mons['W_rec']:
-#    
+#
 #    eigs, vecs = np.linalg.eig(W_rec)
 #    avg_eval_mod.append(np.absolute(eigs).mean())
 #    spectral_radii.append(np.amax(np.absolute(eigs)))
-#    
+#
 #plt.plot(avg_eval_mod)
 #plt.plot(spectral_radii)
 #plt.legend(['Avg eigenvalue modulus', 'Spectral radius'])
@@ -579,21 +579,21 @@ for i_conf in range(len(configs)):
 #n_roll = 14
 #
 #def d_prime(A, B):
-#    
+#
 #    return (np.mean(A) - np.mean(B))/np.sqrt(0.5*(np.var(A) + np.var(B)))
 #
 #for i_pc in range(n_pc):
 #    PC = traj[:,i_pc]
 #    d_primes = []
 #    for i_roll in range(n_roll):
-#    
+#
 #        A = PC[np.where(np.roll(x,i_roll)==0)]
 #        B = PC[np.where(np.roll(x,i_roll)==1)]
-#        
+#
 #        d_primes.append(d_prime(A,B))
-#        
+#
 #    plt.plot(d_primes)
-#    
+#
 #plt.legend(['PC{}'.format(i) for i in range(n_pc)])
 #plt.xticks(range(n_roll))
 #plt.xlabel('Time Lag')
@@ -613,11 +613,11 @@ for i_conf in range(len(configs)):
 #input_data = np.zeros((n_train, 84))
 #output_data = np.zeros((n_train, 84))
 #for i in range(1, n_train):
-#    
+#
 #    k = char_to_ix[text[i]]
 #    input_data[i,k] = 1
 #    output_data[i-1, k] = 1
-#    
+#
 #data = {}
 #data['train'] = {'X': input_data, 'Y': output_data}
 #
@@ -625,7 +625,7 @@ for i_conf in range(len(configs)):
 #output_data = np.zeros((n_test, 84))
 #
 #for i in range(n_train, n_train+n_test):
-#    
+#
 #    k = char_to_ix[text[i]]
 #    input_data[i-n_train,k] = 1
 #    output_data[i-1-n_train, k] = 1
@@ -635,3 +635,152 @@ for i_conf in range(len(configs)):
 #data['test'] = {'X': np.zeros((1000, 84)), 'Y': np.zeros((1000, 84))}
 #
 #rnn.run(data, mode='test', monitors=['y_hat'])
+
+class DNI(Real_Time_Learning_Algorithm):
+
+    def __init__(self, net, optimizer, **kwargs):
+
+        self.name = 'DNI'
+        allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
+                           'activation', 'SG_label_activation', 'backprop_weights',
+                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e',
+                           'train_SG_with_exact_CA'}
+        #Default parameters
+        self.optimizer = optimizer
+        self.l2_reg = 0
+        self.fix_SG_interval = 5
+        self.activation = identity
+        self.SG_label_activation = identity
+        self.backprop_weights = 'exact'
+        self.sg_loss_thr = 0.05
+        self.train_SG_with_exact_CA = False
+        #Override defaults with kwargs
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        sigma = np.sqrt(1/self.n_h)
+        self.SG_init(sigma)
+
+        self.i_fix = 0
+
+        self.W_a = np.copy(self.net.W_rec)
+        self.U = np.copy(self.A)
+        self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
+        self.SG_params = [self.A, self.B, self.C]
+        self.e_w = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+
+    def SG_init(self, sigma):
+
+        self.A = np.random.normal(0, sigma, (self.n_h, self.n_h))
+        self.B = np.random.normal(0, sigma, (self.n_h, self.n_out))
+        self.C = np.zeros(self.n_h)
+
+    def update_learning_vars(self):
+
+        #Get network jacobian
+        self.net.get_a_jacobian()
+
+        #Computer SG error term
+        self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
+
+        if self.SG_clipnorm is not None:
+            self.sg_norm = norm(self.sg)
+            if self.sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / self.sg_norm
+
+        self.sg_target = self.get_sg_target()
+
+        if self.SG_target_clipnorm is not None:
+            self.sg_target_norm = norm(self.sg_target)
+            if self.sg_target_norm > self.SG_target_clipnorm:
+                self.sg_target = self.sg_target / self.sg_target_norm
+
+        self.e_sg = self.sg - self.sg_target
+        self.sg_loss = np.mean((self.sg - self.sg_target)**2)
+        self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
+
+        #Get SG grads
+        self.SG_grads = [np.multiply.outer(self.scaled_e_sg, self.net.a_prev),
+                         np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
+                         self.scaled_e_sg]
+
+        if self.l2_reg > 0:
+            self.SG_grads[0] += self.l2_reg*self.A
+            self.SG_grads[1] += self.l2_reg*self.B
+            self.SG_grads[2] += self.l2_reg*self.C
+
+        #Update SG parameters
+        self.SG_params = self.optimizer.get_updated_params(self.SG_params, self.SG_grads)
+        self.A, self.B, self.C = self.SG_params
+
+        if self.i_fix == self.fix_SG_interval - 1:
+            self.i_fix = 0
+            self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
+        else:
+            self.i_fix += 1
+
+        if self.W_a_lr is not None:
+            self.update_W_a()
+
+        if self.U_lr is not None:
+            self.update_U()
+
+    def get_sg_target(self):
+
+        self.propagate_feedback_to_hidden()
+
+        if self.backprop_weights=='exact':
+            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
+        elif self.backprop_weights=='approximate':
+            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
+        elif self.backprop_weights=='composite':
+            sg_target = self.q_prev + self.U.dot(self.net.a)
+
+        if self.train_SG_with_exact_CA:
+            sg_target = self.net.CA
+
+        return sg_target
+
+    def update_W_a(self):
+
+        self.loss_a = np.square(self.W_a.dot(self.net.a_prev) - self.net.a).mean()
+        self.e_a = self.W_a.dot(self.net.a_prev) - self.net.a
+
+        self.W_a -= self.W_a_lr*np.multiply.outer(self.e_a, self.net.a_prev)
+
+    def update_U(self):
+
+        self.loss_u = np.square(self.U.dot(self.net.a_prev) - self.sg).mean()
+        self.e_u = self.U.dot(self.net.a_prev) - self.sg
+        self.U -= self.U_lr*np.multiply.outer(self.e_u, self.net.a_prev)
+
+    def synthetic_grad(self, a, y):
+        self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
+        return self.activation.f(self.sg_h)
+
+    def synthetic_grad_(self, a, y):
+        self.sg_h_ = self.A_.dot(a) + self.B_.dot(y) + self.C_
+        return self.SG_label_activation.f((self.activation.f(self.sg_h_)))
+
+    def get_rec_grads(self):
+
+        self.sg = self.synthetic_grad(self.net.a, self.net.y)
+        self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
+
+        if self.SG_clipnorm is not None:
+            sg_norm = norm(self.sg)
+            if sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / sg_norm
+
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+
+        if self.alpha_e is not None:
+            self.update_synaptic_eligibility_trace()
+            return (self.e_w.T*self.sg).T
+        else:
+            return np.multiply.outer(self.sg_scaled, self.a_hat)
+
+    def update_synaptic_eligibility_trace(self):
+
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
