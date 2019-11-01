@@ -54,52 +54,16 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'DNI',
-              'alpha': 1,
-              'task': 'Coin'}
+    params = {'algorithm': 'RTRL'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-    np.random.seed(0)
+    np.random.seed()
     
-if params['alpha'] == 1:
-    n_1, n_2 = 6, 10
-    tau_task = 1
-if params['alpha'] == 0.5:
-    n_1, n_2 = 5, 7
-    tau_task = 2
 
-if params['task'] == 'Mimic':
+task = Sensorimotor_Mapping(t_report=25, report_duration=5)
     
-    n_in = 32
-    n_hidden = 32
-    n_out = 32
-    
-    
-    
-    W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-    W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-    W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-    b_rec_target = np.random.normal(0, 0.1, n_hidden)
-    b_out_target = np.random.normal(0, 0.1, n_out)
-    
-    alpha = params['alpha']
-    
-    rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
-                     b_rec_target, b_out_target,
-                     activation=tanh,
-                     alpha=alpha,
-                     output=identity,
-                     loss=mean_squared_error)
-
-    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-    
-elif params['task'] == 'Coin':
-    
-    task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
-                     tau_task=tau_task)
-    
-data = task.gen_data(100000, 1000)
+data = task.gen_data(50000, 1000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -115,80 +79,44 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = params['alpha']
+alpha = 0.3
+rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=softmax,
+          loss=softmax_cross_entropy)
 
-if params['task'] == 'Coin':
-    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-              activation=tanh,
-              alpha=alpha,
-              output=softmax,
-              loss=softmax_cross_entropy)
-
-if params['task'] == 'Mimic':
-    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-              activation=tanh,
-              alpha=alpha,
-              output=identity,
-              loss=mean_squared_error)
-
-optimizer = SGD(lr=0.001)
+optimizer = SGD(lr=0.01)
 SG_optimizer = SGD(lr=0.001)
-if params['alpha'] == 1 and params['task'] == 'Coin':
-    SG_optimizer = SGD(lr=0.05)
-KeRNL_optimizer = SGD(lr=5)
 
 
 if params['algorithm'] == 'Only_Output_Weights':
     learn_alg = Only_Output_Weights(rnn)
 if params['algorithm'] == 'RTRL':
     learn_alg = RTRL(rnn)
-if params['algorithm'] == 'UORO':
-    learn_alg = UORO(rnn)
-if params['algorithm'] == 'KF-RTRL':
-    learn_alg = KF_RTRL(rnn)
-if params['algorithm'] == 'R-KF-RTRL':
-    learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
     learn_alg = Forward_BPTT(rnn, 10)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
     W_a_lr = 0.001
-    if params['alpha'] == 1 and params['task'] == 'Coin':
-        W_a_lr = 0.01
     learn_alg = DNI(rnn, SG_optimizer, backprop_weights='approximate', W_a_lr=W_a_lr,
                     SG_label_activation=tanh, W_FB=W_FB)
     learn_alg.name = 'DNIb'
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
-if params['algorithm'] == 'KeRNL':
-    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                      use_approx_kernel=True, learned_alpha_e=False)
-
-optimizer = SGD(lr=0.09)
-learn_alg = Forward_BPTT_LR_by_RTRL(rnn, optimizer, 10, meta_lr=0.0001)
-#learn_alg = Forward_BPTT(rnn, 10)
-#optimizer = SGD(lr=0.07)
-
-comp_algs = [UORO(rnn),
-             KF_RTRL(rnn),
-             Reverse_KF_RTRL(rnn),
-             RFLO(rnn, alpha=alpha),
-             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                   use_approx_kernel=True, learned_alpha_e=False),
-             DNI(rnn, SG_optimizer),
-             Forward_BPTT(rnn, 14)]
-comp_algs = [UORO(rnn)]
+    
+    
+learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task)
 comp_algs = []
 
-ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
+monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
+            'learn_alg.running_loss_avg', 'net.W_rec']
 
-monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr']
-#monitors = ['net.loss_', 'alignment_matrix', 'net.a', 'learn_alg.noisy_net.a',
-#            'learn_alg.error_prediction', 'learn_alg.error_observed', 'learn_alg.loss_noise']
-#monitors = ['net.loss_', 'alignment_matrix', 'alignment_weights', 'learn_alg.rec_grads-norm']
-
-sim = Simulation(rnn)
+sim = Simulation(rnn,
+                 time_steps_per_trial=task.time_steps_per_trial,
+                 reset_sigma=0.1,
+                 trial_lr_mask=task.trial_lr_mask)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
@@ -196,26 +124,11 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         check_accuracy=False,
         check_loss=True)
 
-#loss_fixed_low_LR = sim.mons['net.loss_']
-#LR_fixed_low_LR = sim.mons['optimizer.lr']
-#loss_fixed_high_LR = sim.mons['net.loss_']
-#LR_fixed_high_LR = sim.mons['optimizer.lr']
-#loss_init_low_LR = sim.mons['net.loss_']
-#LR_init_low_LR = sim.mons['optimizer.lr']
-loss_init_high_LR = sim.mons['net.loss_'] 
-LR_init_high_LR = sim.mons['optimizer.lr']
-
-#Filter losses
-loss = sim.mons['net.loss_']
-downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
-filtered_loss = uniform_filter1d(downsampled_loss, 10)
-processed_data = {'filtered_loss': filtered_loss}
-
 if os.environ['HOME']=='/Users/omarschall':
     
     #Test run
     np.random.seed(1)
-    n_test = 100
+    n_test = 1000
     data = task.gen_data(100, n_test)
     test_sim = copy(sim)
     test_sim.run(data,
@@ -225,57 +138,20 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.figure()
     plt.plot(test_sim.mons['net.y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
-#    plt.plot(data['test']['X'][:,0])
-#    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
-#    #plt.ylim([0, 1.2])
-#    #for i in range(n_test//task.time_steps_per_trial):
-#    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
-#    plt.xlim([400, 500])
+    #plt.plot(data['test']['X'][:,0])
+    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
+    plt.ylim([-0.2, 1.2])
+    for i in range(n_test//task.time_steps_per_trial):
+        plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
+    plt.xlim([200, 700])
     
     plt.figure()
     x = test_sim.mons['net.y_hat'].flatten()
     y = data['test']['Y'].flatten()
-    plt.plot(x, y, '.', alpha=0.5)
+    plt.plot(x, y, '.', alpha=0.05)
     plt.plot([np.amin(x), np.amax(x)],
               [np.amin(y), np.amax(y)], 'k', linestyle='--')
     plt.axis('equal')
-    
-    plt.figure()
-    plot_filtered_signals([sim.mons['net.loss_']], filter_size=1000,
-                          plot_loss_benchmarks=True)
-    #plt.ylim([0.3, 0.7])
-    plt.title(learn_alg.name)
-#                           sim.mons['a_tilde-norm'],
-#                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
-    
-    if len(comp_algs) > 0:
-        fig = plot_array_of_histograms(sim.mons['alignment_matrix'],
-                                       sim.mons['alignment_weights'],
-                                       ticks, n_bins=400,
-                                       return_fig=True,
-                                       fig_size=(12, 6))
-        title = ('Histogram of gradient alignments \n' +
-                 'over learning via {}').format(learn_alg.name)
-        #plt.suptitle(title, fontsize=24)
-    if False:
-        plt.figure()
-        plt.imshow(sim.mons['alignment_matrix'].mean(0),
-                   cmap='RdBu_r', vmin=-1, vmax=1)
-        plt.colorbar()
-        plt.xticks(list(range(len(ticks))), ticks)
-        plt.yticks(list(range(len(ticks))), ticks)
-        
-        plt.figure()
-        plt.imshow(sim.mons['alignment_matrix'].std(0),
-                   cmap='RdBu_r', vmin=-1, vmax=1)
-        plt.colorbar()
-        plt.xticks(list(range(len(ticks))), ticks)
-        plt.yticks(list(range(len(ticks))), ticks)
-    
-
-#    #plt.axis('equal')
-#    plt.ylim([0, 1.1])
-#    plt.xlim([0, 1.1])
 
 if os.environ['HOME']=='/home/oem214':
 

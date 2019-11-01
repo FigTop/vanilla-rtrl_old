@@ -706,16 +706,16 @@ class RFLO(Real_Time_Learning_Algorithm):
 
         self.alpha = alpha
         if self.B is None:
-            self.B = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+            self.B = np.zeros((self.n_h, self.m))
 
     def update_learning_vars(self):
         """Updates B by one time step of temporal filtration via the invesre
         time constant alpha (see Eq. 1)."""
 
         #Get relevant values and derivatives from network
-        self.a_hat   = np.concatenate([self.net.a_prev,
-                                       self.net.x,
-                                       np.array([1])])
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
         self.D = self.net.activation.f_prime(self.net.h)
         self.M_immediate = self.alpha * np.multiply.outer(self.D,
                                                           self.a_hat)
@@ -758,9 +758,9 @@ class DNI(Real_Time_Learning_Algorithm):
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         sigma = np.sqrt(1/self.n_h)
+        self.m_out = self.n_h + self.n_out + 1
         self.SG_init(sigma)
         self.J_approx = np.copy(self.net.W_rec)
-        self.m_out = self.n_h + self.n_out + 1
         self.i_fix = 0
         self.A_= np.copy(self.A)
 
@@ -1256,3 +1256,103 @@ class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
     def get_rec_grads(self):
 
         return (self.q.dot(self.B) * self.A.T).T
+    
+class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
+    """Implements a reward-modulated Hebbian plasticity rule for *trial-
+    structured* tasks only (for now)."""
+    
+    def __init__(self, net, alpha, task, **kwargs):
+        
+        self.name = 'RM-Hebb'
+        allowed_kwargs_ = {'B'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        self.alpha = alpha
+        if self.B is None:
+            self.B = np.zeros((self.n_h, self.m))
+            
+        self.task = task
+            
+        self.running_loss_avg = 0
+        self.i_t = 0
+
+    def update_learning_vars(self):
+        """Updates B by one time step of temporal filtration via the invesre
+        time constant alpha (see RFLO)."""
+
+        self.i_trial = self.i_t % self.task.time_steps_per_trial
+
+        #Get relevant values and derivatives from network
+        self.a_hat   = np.concatenate([self.net.a_prev,
+                                       self.net.x,
+                                       np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.M_immediate = self.alpha * np.multiply.outer(self.D,
+                                                          self.a_hat)
+
+        #Update eligibility traces
+        #self.B = (1 - self.alpha) * self.B + self.M_immediate
+        self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
+                                                                            self.a_hat)
+
+        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+            #Update running loss average
+            self.running_loss_avg = 0.99 * self.running_loss_avg + 0.01 * self.net.loss_
+
+        self.i_t += 1
+
+    def get_rec_grads(self):
+        """Scales Hebbian plasticity rule by loss running average."""
+        
+        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+            scale = 1
+        else:
+            scale = 0
+        return scale * (self.net.loss_ - self.running_loss_avg) * self.B
+
+    def reset_learning(self):
+        """Reset eligibility trace to 0."""
+
+        self.B *= 0
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    

@@ -241,7 +241,10 @@ class Simulation:
             self.i_trial = self.i_t//self.time_steps_per_trial
             if self.reset_sigma is not None:
                 self.net.reset_network(sigma=self.reset_sigma)
-            self.learn_alg.reset_learning()
+                try:
+                    self.learn_alg.reset_learning()
+                except AttributeError:
+                    pass
 
     def forward_pass(self, x, y):
         """Runs network forward, computes immediate losses and errors."""
@@ -264,8 +267,8 @@ class Simulation:
 
         #Re-scale losses and errors if trial structure is provided
         if self.trial_lr_mask is not None:
-            self.loss_ *= self.trial_lr_mask[self.i_t_trial]
-            self.error *= self.trial_lr_mask[self.i_t_trial]
+            net.loss_ *= self.trial_lr_mask[self.i_t_trial]
+            net.error *= self.trial_lr_mask[self.i_t_trial]
 
     def train_step(self):
         """Uses self.learn_alg to calculate gradients and self.optimizer to

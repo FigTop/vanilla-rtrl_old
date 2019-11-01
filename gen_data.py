@@ -289,6 +289,12 @@ class Sensorimotor_Mapping(Task):
         
         return X, Y
         
+class Repeat_Sequence(Task):
+    
+    def __init__(self, n_symbols, T_sequence, T_delay):
+        
+        super().__init__(n_symbols, n_symbols)
+        
         
         
         
