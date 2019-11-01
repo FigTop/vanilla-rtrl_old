@@ -769,7 +769,6 @@ class DNI(Real_Time_Learning_Algorithm):
         self.A = np.random.normal(0, sigma, (self.n_h, self.m_out))
 
     def update_learning_vars(self):
-        """"""
 
 
         #Get network jacobian

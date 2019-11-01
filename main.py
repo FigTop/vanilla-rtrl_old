@@ -168,7 +168,7 @@ if params['algorithm'] == 'KeRNL':
 optimizer = SGD(lr=0.09)
 learn_alg = Forward_BPTT_LR_by_RTRL(rnn, optimizer, 10, meta_lr=0.0001)
 #learn_alg = Forward_BPTT(rnn, 10)
-#optimizer = SGD(lr=0.09)
+#optimizer = SGD(lr=0.07)
 
 comp_algs = [UORO(rnn),
              KF_RTRL(rnn),
@@ -195,6 +195,15 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         verbose=True,
         check_accuracy=False,
         check_loss=True)
+
+#loss_fixed_low_LR = sim.mons['net.loss_']
+#LR_fixed_low_LR = sim.mons['optimizer.lr']
+#loss_fixed_high_LR = sim.mons['net.loss_']
+#LR_fixed_high_LR = sim.mons['optimizer.lr']
+#loss_init_low_LR = sim.mons['net.loss_']
+#LR_init_low_LR = sim.mons['optimizer.lr']
+loss_init_high_LR = sim.mons['net.loss_'] 
+LR_init_high_LR = sim.mons['optimizer.lr']
 
 #Filter losses
 loss = sim.mons['net.loss_']
