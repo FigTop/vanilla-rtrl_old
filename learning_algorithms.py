@@ -1264,7 +1264,7 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
     def __init__(self, net, alpha, task, **kwargs):
         
         self.name = 'RM-Hebb'
-        allowed_kwargs_ = {'B'}
+        allowed_kwargs_ = {'B', 'fixed_modulation'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         self.alpha = alpha
@@ -1291,9 +1291,9 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
                                                           self.a_hat)
 
         #Update eligibility traces
-        #self.B = (1 - self.alpha) * self.B + self.M_immediate
-        self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
-                                                                            self.a_hat)
+        self.B = (1 - self.alpha) * self.B + self.M_immediate
+        #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
+        #                                                                    self.a_hat)
 
         if self.task.trial_lr_mask[self.i_trial] > 0.3:
             #Update running loss average
@@ -1308,7 +1308,12 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
             scale = 1
         else:
             scale = 0
-        return scale * (self.net.loss_ - self.running_loss_avg) * self.B
+            
+        if self.fixed_modulation is not None:
+            self.modulation = self.fixed_modulation
+        else:
+            self.modulation = scale * (self.net.loss_ - self.running_loss_avg)
+        return self.modulation * self.B
 
     def reset_learning(self):
         """Reset eligibility trace to 0."""

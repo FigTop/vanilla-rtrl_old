@@ -62,11 +62,16 @@ if os.environ['HOME']=='/Users/omarschall':
     
 
 task = Sensorimotor_Mapping(t_report=25, report_duration=5)
+task = Coin_Task(4, 6, deterministic=True, tau_task=4)
+task.time_steps_per_trial = 24
+task.trial_lr_mask = np.ones(task.time_steps_per_trial)
+task = Sine_Wave(p_transition=0.05, frequencies=[0.03, 0.1, 0.01], method='regular',
+                 never_off=False)
     
-data = task.gen_data(50000, 1000)
+data = task.gen_data(100000, 1000)
 
 n_in     = task.n_in
-n_hidden = 32
+n_hidden = 64
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -79,14 +84,14 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 0.3
+alpha = 1
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-          activation=tanh,
+          activation=relu,
           alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+          output=identity,
+          loss=mean_squared_error)
 
-optimizer = SGD(lr=0.01)
+optimizer = SGD(lr=0.001)
 SG_optimizer = SGD(lr=0.001)
 
 
@@ -95,7 +100,7 @@ if params['algorithm'] == 'Only_Output_Weights':
 if params['algorithm'] == 'RTRL':
     learn_alg = RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Forward_BPTT(rnn, 10)
+    learn_alg = Forward_BPTT(rnn, 20)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
@@ -107,11 +112,13 @@ if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
     
     
-learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task)
+#learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task,
+#                                                fixed_modulation=None)
 comp_algs = []
 
 monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
-            'learn_alg.running_loss_avg', 'net.W_rec']
+            'learn_alg.running_loss_avg', 'net.W_rec',
+            'learn_alg.modulation']
 
 sim = Simulation(rnn,
                  time_steps_per_trial=task.time_steps_per_trial,
@@ -122,9 +129,13 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         monitors=monitors,
         verbose=True,
         check_accuracy=False,
-        check_loss=True)
+        check_loss=True,
+        sigma=0.03)
 
 if os.environ['HOME']=='/Users/omarschall':
+    
+    
+    plot_filtered_signals([sim.mons['net.loss_']])
     
     #Test run
     np.random.seed(1)
@@ -138,9 +149,9 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.figure()
     plt.plot(test_sim.mons['net.y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
-    #plt.plot(data['test']['X'][:,0])
+    plt.plot(data['test']['X'][:,0])
     plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
-    plt.ylim([-0.2, 1.2])
+    plt.ylim([-0.2, 0.2])
     for i in range(n_test//task.time_steps_per_trial):
         plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
     plt.xlim([200, 700])

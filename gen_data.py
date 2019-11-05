@@ -198,6 +198,9 @@ class Sine_Wave(Task):
         self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
         self.never_off = never_off
         self.__dict__.update(kwargs)
+        if self.method == 'regular':
+            self.time_steps_per_trial = int(1/self.p_transition)
+            self.trial_lr_mask = np.ones(self.time_steps_per_trial)
                  
     def gen_dataset(self, N):
         
@@ -212,7 +215,7 @@ class Sine_Wave(Task):
         for i in range(1, N):
             
             if self.method=='regular':
-                if i%int(1/self.p_transition)==0:
+                if i%self.time_steps_per_trial==0:
                     self.switch_cond = True
             elif self.method=='random':
                 if np.random.rand()<self.p_transition:
