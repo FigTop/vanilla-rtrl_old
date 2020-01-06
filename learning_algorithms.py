@@ -114,7 +114,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         else:
             self.q = self.net.error.dot(self.W_FB)
 
-    def SG_L2_regularization(self, grads):
+    def L2_regularization(self, grads):
         """Adds L2 regularization to the gradient.
 
         Args:
@@ -126,9 +126,9 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         #Get parameters affected by L2 regularization
         L2_params = [self.net.params[i] for i in self.net.L2_indices]
         #Add to each grad the corresponding weight's current value, weighted
-        #by the SG_L2_reg hyperparameter.
+        #by the L2_reg hyperparameter.
         for i_L2, W in zip(self.net.L2_indices, L2_params):
-            grads[i_L2] += self.SG_L2_reg * W
+            grads[i_L2] += self.L2_reg * W
         #Calculate L2 loss for monitoring purposes
         self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
         return grads
@@ -145,7 +145,7 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
         of W_rec, W_in, and b_rec as one numpy array with shape (n_h, m). Then
         these gradients are split along the column axis into a list of 5
         gradients for W_rec, W_in, b_rec, W_out, b_out. L2 regularization is
-        applied if SG_L2_reg parameter is not None.
+        applied if L2_reg parameter is not None.
 
         Returns:
             List of gradients for W_rec, W_in, b_rec, W_out, b_out."""
@@ -159,8 +159,8 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
                                                [self.n_h, 1])
         grads_list = rec_grads_list + outer_grads_list
 
-        if self.SG_L2_reg is not None:
-            grads_list = self.SG_L2_regularization(grads_list)
+        if self.L2_reg is not None:
+            grads_list = self.L2_regularization(grads_list)
 
         return grads_list
 
