@@ -37,9 +37,9 @@ class Learning_Algorithm:
             net (network.RNN): An instance of RNN to be trained by the network.
             allowed_kwargs_ (set): Set of allowed kwargs in addition to those
                 common to all child classes of Learning_Algorithm, 'W_FB' and
-                'SG_L2_reg'."""
+                'L2_reg'."""
 
-        allowed_kwargs = {'W_FB', 'SG_L2_reg'}.union(allowed_kwargs_)
+        allowed_kwargs = {'W_FB', 'L2_reg'}.union(allowed_kwargs_)
 
         for k in kwargs:
             if k not in allowed_kwargs:
@@ -1260,13 +1260,13 @@ class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
     def get_rec_grads(self):
 
         return (self.q.dot(self.B) * self.A.T).T
-    
+
 class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
     """Implements a reward-modulated Hebbian plasticity rule for *trial-
     structured* tasks only (for now)."""
-    
+
     def __init__(self, net, alpha, task, **kwargs):
-        
+
         self.name = 'RM-Hebb'
         allowed_kwargs_ = {'B', 'fixed_modulation'}
         super().__init__(net, allowed_kwargs_, **kwargs)
@@ -1274,9 +1274,9 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
         self.alpha = alpha
         if self.B is None:
             self.B = np.zeros((self.n_h, self.m))
-            
+
         self.task = task
-            
+
         self.running_loss_avg = 0
         self.i_t = 0
 
@@ -1307,12 +1307,12 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
 
     def get_rec_grads(self):
         """Scales Hebbian plasticity rule by loss running average."""
-        
+
         if self.task.trial_lr_mask[self.i_trial] > 0.3:
             scale = 1
         else:
             scale = 0
-            
+
         if self.fixed_modulation is not None:
             self.modulation = self.fixed_modulation
         else:
@@ -1323,12 +1323,12 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
         """Reset eligibility trace to 0."""
 
         self.B *= 0
-        
+
 class COLIN(Real_Time_Learning_Algorithm):
     """Implements Cholinergic Operant Learning In Neurons"""
-    
+
     def __init__(self, net, decay, sigma, task, **kwargs):
-        
+
         self.name = 'COLIN'
         allowed_kwargs_ = {'B', 'fixed_modulation'}
         super().__init__(net, allowed_kwargs_, **kwargs)
@@ -1336,7 +1336,7 @@ class COLIN(Real_Time_Learning_Algorithm):
         self.decay = decay
         if self.B is None:
             self.B = np.zeros((self.n_h, self.m))
-            
+
         self.task = task
         self.sigma = sigma
         self.alpha_loss = 0.99
@@ -1375,12 +1375,12 @@ class COLIN(Real_Time_Learning_Algorithm):
 
     def get_rec_grads(self):
         """Scales Hebbian plasticity rule by loss running average."""
-        
+
         if self.task.trial_lr_mask[self.i_trial] > 0.3:
             scale = 1
         else:
             scale = 0
-            
+
         if self.fixed_modulation is not None:
             self.modulation = self.fixed_modulation
         else:
@@ -1391,44 +1391,44 @@ class COLIN(Real_Time_Learning_Algorithm):
         """Reset eligibility trace to 0."""
 
         self.B *= 0
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
