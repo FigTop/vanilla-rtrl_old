@@ -7,9 +7,6 @@ Created on Mon Sep 10 16:30:03 2018
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-from copy import copy
-from pdb import set_trace
 
 class Task:
     """Parent class for all tasks."""
@@ -17,7 +14,7 @@ class Task:
     def __init__(self, n_in, n_out):
         """Initializes a Task with the number of input and output dimensions
 
-        Arguments:
+        Args:
             n_in (int): Number of input dimensions.
             n_out (int): Number of output dimensions."""
 
@@ -27,7 +24,7 @@ class Task:
     def gen_data(self, N_train, N_test):
         """Generates a data dict with a given number of train and test examples.
 
-        Arguments:
+        Args:
             N_train (int): number of training examples
             N_test (int): number of testing examples
         Returns:
@@ -46,7 +43,7 @@ class Task:
         """Function specific to each class, randomly generates a dictionary of
         inputs and labels.
 
-        Arguments:
+        Args:
             N (int): number of examples
         Returns:
             dataset (dict): Dictionary with keys 'X' and 'Y' pointing to inputs
@@ -79,9 +76,10 @@ class Add_Task(Task):
             deterministic (bool): Indicates whether to take the labels as
                 the exact numbers in Eq. (1) OR to use those numbers as
                 probabilities in Bernoulli outcomes.
-            tau_task (int): Factor by which we temporally 'stretch' the task. For
-                example, if tau_task = 3, each input (and label) is repeated for
-                3 time steps before being replaced by a new random sample."""
+            tau_task (int): Factor by which we temporally 'stretch' the task.
+                For example, if tau_task = 3, each input (and label) is repeated
+                for 3 time steps before being replaced by a new random
+                sample."""
 
         #Initialize a parent Task object with 2 input and 2 output dimensions.
         super().__init__(2, 2)
@@ -113,9 +111,21 @@ class Add_Task(Task):
         return X, Y
 
 class Mimic_RNN(Task):
+    """Class for the 'Mimic Task,' where the inputs are random i.i.d. Bernoulli
+    and the labels are the outputs of a fixed 'target' RNN that is fed these
+    inputs."""
 
     def __init__(self, rnn, p_input, tau_task=1):
+        """Initializes the task with a target RNN (instance of network.RNN),
+        the probability of the Bernoulli inputs, and a time constant of change.
 
+        Args:
+            rnn (network.RNN instance): The target RNN
+            p_input (float): The probability of any input having value 1
+            tau_task (int): The temporal stretching factor for the inputs, see
+                tau_task in Add_Task."""
+
+        #Initialize as Task object with dims inherited from the target RNN.
         super().__init__(rnn.n_in, rnn.n_out)
 
         self.rnn = rnn
@@ -123,95 +133,27 @@ class Mimic_RNN(Task):
         self.tau_task = tau_task
 
     def gen_dataset(self, N):
+        """Generates a dataset by first generating inputs randomly by the
+        binomial distribution and temporally stretching them by tau_task,
+        then feeding these inputs to the target RNN."""
 
-
-        N_tau = N // self.tau_task
+        #Generate inputs
+        N = N // self.tau_task
         X = []
-        for i in range(N_tau):
+        for i in range(N):
             x = np.random.binomial(1, self.p_input, self.n_in)
             X.append(x)
-        X = np.tile(X, self.tau_task).reshape((self.tau_task*N_tau, self.n_in))
+        X = np.tile(X, self.tau_task).reshape((self.tau_task*N, self.n_in))
 
+        #Get RNN responses
         Y = []
-        self.rnn.reset_network()
+        self.rnn.reset_network(h=np.zeros(self.rnn.n_h))
         for i in range(len(X)):
             self.rnn.next_state(X[i])
             self.rnn.z_out()
             Y.append(self.rnn.output.f(self.rnn.z))
 
         return X, np.array(Y)
-
-class Sine_Wave(Task):
-
-    def __init__(self, p_transition, frequencies, never_off=False, **kwargs):
-
-        allowed_kwargs = {'p_frequencies', 'amplitude', 'method'}
-        for k in kwargs:
-            if k not in allowed_kwargs:
-                raise TypeError('Unexpected keyword argument '
-                                'passed to Sine_Wave.__init__: ' + str(k))
-
-        super().__init__(2, 2)
-
-        self.p_transition = p_transition
-        self.method = 'random'
-        self.amplitude = 0.1
-        self.frequencies = frequencies
-        self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
-        self.never_off = never_off
-        self.__dict__.update(kwargs)
-        if self.method == 'regular':
-            self.time_steps_per_trial = int(1/self.p_transition)
-            self.trial_lr_mask = np.ones(self.time_steps_per_trial)
-
-    def gen_dataset(self, N):
-
-        X = np.zeros((N, 2))
-        Y = np.zeros((N, 2))
-
-        self.switch_cond = False
-
-        active = False
-        t = 0
-        X[0,0] = 1
-        for i in range(1, N):
-
-            if self.method=='regular':
-                if i%self.time_steps_per_trial==0:
-                    self.switch_cond = True
-            elif self.method=='random':
-                if np.random.rand()<self.p_transition:
-                    self.switch_cond = True
-
-            if self.switch_cond:
-
-                t = 0
-
-                if active and not self.never_off:
-                    X[i,0] = 1
-                    X[i,1] = 0
-                    Y[i,:] = 0
-
-                if not active or self.never_off:
-                    X[i,0] = np.random.choice(self.frequencies, p=self.p_frequencies)
-                    X[i,1] = 1
-                    Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)
-                    Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)
-
-                active = not active
-
-            else:
-
-                t+=1
-                X[i,:] = X[i-1,:]
-                Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*(active or self.never_off)
-                Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*(active or self.never_off)
-
-            self.switch_cond = False
-
-        X[:,0] = -np.log(X[:,0])
-
-        return X, Y
 
 class Sensorimotor_Mapping(Task):
 
@@ -253,12 +195,6 @@ class Sensorimotor_Mapping(Task):
         Y = np.concatenate(Y, axis=0)
 
         return X, Y
-
-class Repeat_Sequence(Task):
-
-    def __init__(self, n_symbols, T_sequence, T_delay):
-
-        super().__init__(n_symbols, n_symbols)
 
 class Flip_Flop_Task(Task):
     """Generates data for the N-bit flip-flop task."""

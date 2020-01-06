@@ -9,6 +9,7 @@ Created on Mon May 13 14:19:07 2019
 import numpy as np
 import unittest
 from gen_data import *
+from pdb import set_trace
 
 class Test_Network(unittest.TestCase):
     """Tests methods from the network.py module."""
@@ -20,9 +21,12 @@ class Test_Network(unittest.TestCase):
         pass
 
     def test_add_task(self):
+        """Creates datasets for tau_task = 1 and tau_task > 1 cases and ensures
+        that the defining equation holds for input-outputs sufficiently far
+        away from the beginning."""
 
         task = Add_Task(6, 10, deterministic=True, tau_task=1)
-        data = task.gen_data(50, 0)
+        data = task.gen_data(40, 0)
 
         for i in range(12, 25):
             y = (0.5 +
@@ -33,7 +37,7 @@ class Test_Network(unittest.TestCase):
         task = Add_Task(6, 10, deterministic=True, tau_task=2)
         data = task.gen_data(50, 0)
 
-        for i in range(25, 35):
+        for i in range(25, 40):
             if i%2 == 1:
                 x1 = data['train']['X'][i, 0]
                 x2 = data['train']['X'][i-1, 0]
@@ -51,13 +55,40 @@ class Test_Network(unittest.TestCase):
                      0.25*data['train']['X'][i-19, 0])
                 self.assertEqual(data['train']['Y'][i, 0], y)
 
-    def test_copy_task(self):
+    def test_mimic_task(self):
+        """Verifies that the proper RNN output is returned as label in a simple
+        case where the RNN simply counts the number of time steps."""
 
-        task = Copy_Task(3, 10)
+        from network import RNN
+        from functions import identity, mean_squared_error
+
+        n_in = 2
+        n_h = 2
+        n_out = 2
+
+        W_in_target = np.eye(n_in)
+        W_rec_target = np.eye(n_h)
+        W_out_target = np.eye(n_out)
+        b_rec_target = np.zeros(n_h)
+        b_out_target = np.zeros(n_out)
+
+        alpha = 1
+
+        rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
+                         b_rec_target, b_out_target,
+                         activation=identity,
+                         alpha=alpha,
+                         output=identity,
+                         loss=mean_squared_error)
+
+        task = Mimic_RNN(rnn_target, p_input=1, tau_task=1)
         data = task.gen_data(100, 0)
 
-        data['train']['X']
+        y = np.arange(1, 101)
+        y_correct = np.array([y, y]).T
 
+        self.assertTrue(np.isclose(data['train']['Y'],
+                                   y_correct).all())
 
 if __name__=='__main__':
     unittest.main()
