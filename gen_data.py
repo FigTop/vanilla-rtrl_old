@@ -238,26 +238,10 @@ class Sensorimotor_Mapping(Task):
             X.append(x_trials[trial_type])
             Y.append(y_trials[trial_type])
 
-        # for i in range(N//self.time_steps_per_trial):
-        #
-        #     x = np.zeros((self.time_steps_per_trial, 2))
-        #     y = np.ones_like(x)*0.5
-        #
-        #     LR = 2*np.random.binomial(1, 0.5) - 1
-        #     x[self.t_stim:self.t_stim+self.stim_duration, 0] = LR
-        #     x[self.t_report:self.t_report+self.report_duration, 1] = 1
-        #     y[self.t_report:self.t_report+self.report_duration, 0] = 0.5*(LR + 1)
-        #     y[self.t_report:self.t_report+self.report_duration, 1] = 1 - 0.5*(LR + 1)
-        #
-        #     X.append(x)
-        #     Y.append(y)
-
-        try:
+        if N_trials > 0:
             X = np.concatenate(X, axis=0)
             Y = np.concatenate(Y, axis=0)
-        except ValueError:
-            pass
-
+            
         return X, Y
 
 class Flip_Flop_Task(Task):
