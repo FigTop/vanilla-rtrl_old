@@ -60,11 +60,11 @@ if os.environ['HOME']=='/home/oem214':
                                      alpha=[1, 0.5],
                                      task=['Coin', 'Mimic'])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
-    
+
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
     np.random.seed(i_job)
-    
+
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -77,7 +77,7 @@ if os.environ['HOME']=='/Users/omarschall':
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
     np.random.seed(0)
-    
+
 if params['alpha'] == 1:
     n_1, n_2 = 6, 10
     tau_task = 1
@@ -86,21 +86,21 @@ if params['alpha'] == 0.5:
     tau_task = 2
 
 if params['task'] == 'Mimic':
-    
+
     n_in = 32
     n_hidden = 32
     n_out = 32
-    
-    
-    
+
+
+
     W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
     W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
     W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
     b_rec_target = np.random.normal(0, 0.1, n_hidden)
     b_out_target = np.random.normal(0, 0.1, n_out)
-    
+
     alpha = params['alpha']
-    
+
     rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
                      b_rec_target, b_out_target,
                      activation=tanh,
@@ -109,12 +109,12 @@ if params['task'] == 'Mimic':
                      loss=mean_squared_error)
 
     task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-    
+
 elif params['task'] == 'Coin':
-    
-    task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
-                     tau_task=tau_task)
-    
+
+    task = Add_Task(n_1, n_2, one_hot=True, deterministic=True,
+                    tau_task=tau_task)
+
 data = task.gen_data(100000, 1000)
 
 n_in     = task.n_in
@@ -218,7 +218,7 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 #LR_fixed_high_LR = sim.mons['optimizer.lr']
 #loss_init_low_LR = sim.mons['net.loss_']
 #LR_init_low_LR = sim.mons['optimizer.lr']
-loss_init_high_LR = sim.mons['net.loss_'] 
+loss_init_high_LR = sim.mons['net.loss_']
 LR_init_high_LR = sim.mons['optimizer.lr']
 
 #Filter losses
@@ -228,7 +228,7 @@ filtered_loss = uniform_filter1d(downsampled_loss, 10)
 processed_data = {'filtered_loss': filtered_loss}
 
 if os.environ['HOME']=='/Users/omarschall':
-    
+
     #Test run
     np.random.seed(1)
     n_test = 100
@@ -247,7 +247,7 @@ if os.environ['HOME']=='/Users/omarschall':
 #    #for i in range(n_test//task.time_steps_per_trial):
 #    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
 #    plt.xlim([400, 500])
-    
+
     plt.figure()
     x = test_sim.mons['net.y_hat'].flatten()
     y = data['test']['Y'].flatten()
@@ -255,7 +255,7 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.plot([np.amin(x), np.amax(x)],
               [np.amin(y), np.amax(y)], 'k', linestyle='--')
     plt.axis('equal')
-    
+
     plt.figure()
     plot_filtered_signals([sim.mons['net.loss_']], filter_size=1000,
                           plot_loss_benchmarks=True)
@@ -263,7 +263,7 @@ if os.environ['HOME']=='/Users/omarschall':
     plt.title(learn_alg.name)
 #                           sim.mons['a_tilde-norm'],
 #                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
-    
+
     if len(comp_algs) > 0:
         fig = plot_array_of_histograms(sim.mons['alignment_matrix'],
                                        sim.mons['alignment_weights'],
@@ -280,14 +280,14 @@ if os.environ['HOME']=='/Users/omarschall':
         plt.colorbar()
         plt.xticks(list(range(len(ticks))), ticks)
         plt.yticks(list(range(len(ticks))), ticks)
-        
+
         plt.figure()
         plt.imshow(sim.mons['alignment_matrix'].std(0),
                    cmap='RdBu_r', vmin=-1, vmax=1)
         plt.colorbar()
         plt.xticks(list(range(len(ticks))), ticks)
         plt.yticks(list(range(len(ticks))), ticks)
-    
+
 
 #    #plt.axis('equal')
 #    plt.ylim([0, 1.1])
@@ -302,7 +302,7 @@ if os.environ['HOME']=='/home/oem214':
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     save_path = os.path.join(save_dir, 'rnn_'+str(i_job))
-    
+
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
 
@@ -1080,3 +1080,30 @@ class DNI(Real_Time_Learning_Algorithm):
         self.D = self.net.activation.f_prime(self.net.h)
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
+
+class Copy_Task(Task):
+
+    def __init__(self, n_symbols, T):
+
+        super().__init__(n_symbols + 1, n_symbols + 1)
+
+        self.n_symbols = n_symbols
+        self.T = T
+
+    def gen_dataset(self, N):
+
+        n_sequences = N//(2*self.T)
+
+        I = np.eye(self.n_in)
+
+        X = np.zeros((1, self.n_in))
+        Y = np.zeros((1, self.n_in))
+
+        for i in range(n_sequences):
+
+            seq = I[np.random.randint(0, self.n_symbols, size=self.T)]
+            cue = np.tile(I[-1], (self.T, 1))
+            X = np.concatenate([X, seq, cue])
+            Y = np.concatenate([Y, cue, seq])
+
+        return X, Y

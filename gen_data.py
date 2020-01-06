@@ -112,33 +112,6 @@ class Add_Task(Task):
 
         return X, Y
 
-class Copy_Task(Task):
-
-    def __init__(self, n_symbols, T):
-
-        super().__init__(n_symbols + 1, n_symbols + 1)
-
-        self.n_symbols = n_symbols
-        self.T = T
-
-    def gen_dataset(self, N):
-
-        n_sequences = N//(2*self.T)
-
-        I = np.eye(self.n_in)
-
-        X = np.zeros((1, self.n_in))
-        Y = np.zeros((1, self.n_in))
-
-        for i in range(n_sequences):
-
-            seq = I[np.random.randint(0, self.n_symbols, size=self.T)]
-            cue = np.tile(I[-1], (self.T, 1))
-            X = np.concatenate([X, seq, cue])
-            Y = np.concatenate([Y, cue, seq])
-
-        return X, Y
-
 class Mimic_RNN(Task):
 
     def __init__(self, rnn, p_input, tau_task=1):
