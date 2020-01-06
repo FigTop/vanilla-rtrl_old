@@ -9,7 +9,14 @@ Created on Mon Sep 10 16:30:03 2018
 import numpy as np
 
 class Task:
-    """Parent class for all tasks."""
+    """Parent class for all tasks. A Task is a class whose instances generate
+    datasets to be used for training RNNs.
+
+    A dataset is a dict of dicts with
+    keys 'train' and 'test', which point to dicts with keys 'X' and 'Y' for
+    inputs and labels, respectively. The values for 'X' and 'Y' are numpy
+    arrays with shapes (time_steps, n_in) and (time_steps, n_out),
+    respectively."""
 
     def __init__(self, n_in, n_out):
         """Initializes a Task with the number of input and output dimensions
@@ -156,9 +163,33 @@ class Mimic_RNN(Task):
         return X, np.array(Y)
 
 class Sensorimotor_Mapping(Task):
+    """Class for a simple working memory task, where a binary input is given
+    to the network, which it must report back some number of time steps later.
+
+    In more detail, on a given trial, the input channel are 0 except during the
+    stimulus (a user-defined time window), when it is either 1 or -1; or during
+    the report period (another user-defined time window), when it is 1. The
+    label channel is always 0 except during the
+
+    Unlike other tasks, this task has a *trial* structure where the user has
+    the option of resetting the network and/or learning algorithm states between
+    trials."""
 
     def __init__(self, t_stim=1, stim_duration=3,
-                       t_report=20, report_duration=3):
+                 t_report=20, report_duration=3,
+                 off_report_loss_factor=0.1):
+        """Initializes an instance by specifying, within a trial, the time step
+        where the stimulus occurs, the stimulus duration, the time of the
+        report, the report duration, and the factor by which the loss is scaled
+        for on- vs. off-report time steps.
+
+        Args:
+            t_stim (int): The time step when the stimulus starts
+            stim_duration (int): The duration of the stimulus in time steps
+            t_report (int): The time step when the report period starts
+            report_duration (int): The report duration in time steps.
+            off_report_loss_factor (float): A number between 0 and 1 that scales
+                the loss function on time steps outside the report period."""
 
         super().__init__(2, 2)
 
@@ -167,32 +198,65 @@ class Sensorimotor_Mapping(Task):
         self.t_report = t_report
         self.report_duration = report_duration
         self.time_steps_per_trial = t_report + report_duration
+        self.off_report_loss_factor = off_report_loss_factor
 
         #Make mask for preferential learning within task
-        self.trial_lr_mask = np.ones(self.time_steps_per_trial)*0.1
-        self.trial_lr_mask[self.t_report:self.t_report+self.report_duration] = 1
+        self.trial_mask = np.ones(self.time_steps_per_trial)
+        self.trial_mask *= self.off_report_loss_factor
+        self.trial_mask[self.t_report:self.t_report + self.report_duration] = 1
 
     def gen_dataset(self, N):
+        """Generates a dataset by hardcoding in the two trial types, randomly
+        generating a sequence of choices, and concatenating them at the end."""
 
         X = []
         Y = []
 
-        for i in range(N//self.time_steps_per_trial):
+        #Trial type 1
+        x_1 = np.zeros((self.time_steps_per_trial, 2))
+        y_1 = np.ones_like(x_1)*0.5
+        x_1[self.t_stim:self.t_stim + self.stim_duration, 0] = 1
+        x_1[self.t_report:self.t_report + self.report_duration, 1] = 1
+        y_1[self.t_report:self.t_report + self.report_duration, 0] = 1
+        y_1[self.t_report:self.t_report + self.report_duration, 1] = 0
 
-            x = np.zeros((self.time_steps_per_trial, 2))
-            y = np.ones_like(x)*0.5
+        #Trial type 2
+        x_2 = np.zeros((self.time_steps_per_trial, 2))
+        y_2 = np.ones_like(x_2)*0.5
+        x_2[self.t_stim:self.t_stim + self.stim_duration, 0] = -1
+        x_2[self.t_report:self.t_report + self.report_duration, 1] = 1
+        y_2[self.t_report:self.t_report + self.report_duration, 0] = 0
+        y_2[self.t_report:self.t_report + self.report_duration, 1] = 1
 
-            LR = 2*np.random.binomial(1, 0.5) - 1
-            x[self.t_stim:self.t_stim+self.stim_duration, 0] = LR
-            x[self.t_report:self.t_report+self.report_duration, 1] = 1
-            y[self.t_report:self.t_report+self.report_duration, 0] = 0.5*(LR + 1)
-            y[self.t_report:self.t_report+self.report_duration, 1] = 1 - 0.5*(LR + 1)
+        x_trials = [x_1, x_2]
+        y_trials = [y_1, y_2]
 
-            X.append(x)
-            Y.append(y)
+        N_trials = N // self.time_steps_per_trial
+        for i in range(N_trials):
 
-        X = np.concatenate(X, axis=0)
-        Y = np.concatenate(Y, axis=0)
+            trial_type = np.random.choice([0, 1])
+            X.append(x_trials[trial_type])
+            Y.append(y_trials[trial_type])
+
+        # for i in range(N//self.time_steps_per_trial):
+        #
+        #     x = np.zeros((self.time_steps_per_trial, 2))
+        #     y = np.ones_like(x)*0.5
+        #
+        #     LR = 2*np.random.binomial(1, 0.5) - 1
+        #     x[self.t_stim:self.t_stim+self.stim_duration, 0] = LR
+        #     x[self.t_report:self.t_report+self.report_duration, 1] = 1
+        #     y[self.t_report:self.t_report+self.report_duration, 0] = 0.5*(LR + 1)
+        #     y[self.t_report:self.t_report+self.report_duration, 1] = 1 - 0.5*(LR + 1)
+        #
+        #     X.append(x)
+        #     Y.append(y)
+
+        try:
+            X = np.concatenate(X, axis=0)
+            Y = np.concatenate(Y, axis=0)
+        except ValueError:
+            pass
 
         return X, Y
 
@@ -206,7 +270,7 @@ class Flip_Flop_Task(Task):
         self.p_flip = p_flip
 
     def gen_dataset(self, N):
-
+        #TODO: FILL IN THIS METHOD
         pass
 
 

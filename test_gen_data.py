@@ -90,5 +90,29 @@ class Test_Network(unittest.TestCase):
         self.assertTrue(np.isclose(data['train']['Y'],
                                    y_correct).all())
 
+    def test_sensorimotor_mapping(self):
+        """Verifies that trials all look like one of the template trials."""
+
+        task = Sensorimotor_Mapping(1, 1, 2, 1)
+        data = task.gen_data(12, 0)
+
+        x_1 = np.array([[0, 1, 0], [0, 0, 1]]).T
+        x_2 = np.array([[0, -1, 0], [0, 0, 1]]).T
+        y_1 = np.array([[0.5, 0.5, 1], [0.5, 0.5, 0]]).T
+        y_2 = np.array([[0.5, 0.5, 0], [0.5, 0.5, 1]]).T
+
+        x_trials = [x_1, x_2]
+        y_trials = [y_1, y_2]
+
+        for i in range(4):
+            x = data['train']['X'][3 * i : 3 * (i + 1)]
+            y = data['train']['Y'][3 * i : 3 * (i + 1)]
+
+            self.assertTrue(np.isclose(x, x_1).all() or
+                            np.isclose(x, x_2).all())
+
+            self.assertTrue(np.isclose(y, y_1).all() or
+                            np.isclose(y, y_2).all())
+
 if __name__=='__main__':
     unittest.main()
