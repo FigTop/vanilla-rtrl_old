@@ -23,8 +23,7 @@ class Test_Learning_Algorithm(unittest.TestCase):
     def setUpClass(cls):
         """Initializes task data and RNNs so that simulations can be run."""
 
-        cls.task = Coin_Task(4, 6, one_hot=True,
-                             deterministic=True, tau_task=4)
+        cls.task = Add_Task(4, 6, deterministic=True, tau_task=4)
         cls.data = cls.task.gen_data(50, 50)
 
         n_in = cls.task.n_in

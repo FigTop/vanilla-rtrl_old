@@ -61,17 +61,17 @@ if os.environ['HOME']=='/Users/omarschall':
     np.random.seed()
     
 
-task = Sensorimotor_Mapping(t_report=25, report_duration=5)
-task = Coin_Task(4, 6, deterministic=True, tau_task=4)
-task.time_steps_per_trial = 24
+task = Sensorimotor_Mapping(t_report=15, report_duration=4)
+task = Coin_Task(3, 5, deterministic=True, tau_task=4)
+task.time_steps_per_trial = 60
 task.trial_lr_mask = np.ones(task.time_steps_per_trial)
-task = Sine_Wave(p_transition=0.05, frequencies=[0.03, 0.1, 0.01], method='regular',
-                 never_off=False)
+#task = Sine_Wave(p_transition=0.05, frequencies=[0.03, 0.1, 0.01], method='regular',
+#                 never_off=False)
     
-data = task.gen_data(100000, 1000)
+data = task.gen_data(80000, 1000)
 
 n_in     = task.n_in
-n_hidden = 64
+n_hidden = 32
 n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -84,15 +84,15 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 1
+alpha = 0.5
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-          activation=relu,
+          activation=tanh,
           alpha=alpha,
-          output=identity,
-          loss=mean_squared_error)
+          output=softmax,
+          loss=softmax_cross_entropy)
 
 optimizer = SGD(lr=0.001)
-SG_optimizer = SGD(lr=0.001)
+SG_optimizer = SGD(lr=0.01)
 
 
 if params['algorithm'] == 'Only_Output_Weights':
@@ -105,24 +105,32 @@ if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
     W_a_lr = 0.001
-    learn_alg = DNI(rnn, SG_optimizer, backprop_weights='approximate', W_a_lr=W_a_lr,
+    learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, W_a_lr=W_a_lr,
                     SG_label_activation=tanh, W_FB=W_FB)
     learn_alg.name = 'DNIb'
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
     
     
-#learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task,
-#                                                fixed_modulation=None)
+learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task,
+                                                fixed_modulation=None)
+#learn_alg = RTRL(rnn)
+J_lr = 0.01
+learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
+                SG_label_activation=tanh, W_FB=W_FB)
+#learn_alg.name = 'DNIb'
+#learn_alg = COLIN(rnn, decay=0.2, sigma=0.1, task=task)
+learn_alg = Only_Output_Weights(rnn)
 comp_algs = []
 
 monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
             'learn_alg.running_loss_avg', 'net.W_rec',
             'learn_alg.modulation']
+#monitors = ['net.loss_', 'net.y_hat', 'learn_alg.B']
 
 sim = Simulation(rnn,
                  time_steps_per_trial=task.time_steps_per_trial,
-                 reset_sigma=0.1,
+                 reset_sigma=None,
                  trial_lr_mask=task.trial_lr_mask)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
@@ -138,7 +146,7 @@ if os.environ['HOME']=='/Users/omarschall':
     plot_filtered_signals([sim.mons['net.loss_']])
     
     #Test run
-    np.random.seed(1)
+    np.random.seed(2)
     n_test = 1000
     data = task.gen_data(100, n_test)
     test_sim = copy(sim)
@@ -146,15 +154,17 @@ if os.environ['HOME']=='/Users/omarschall':
                  mode='test',
                  monitors=['net.loss_', 'net.y_hat', 'net.a'],
                  verbose=False)
-    plt.figure()
+    fig = plt.figure()
     plt.plot(test_sim.mons['net.y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
-    plt.plot(data['test']['X'][:,0])
-    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
-    plt.ylim([-0.2, 0.2])
+    plt.plot(data['test']['X'][:,0]*0.1)
+    #plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
+    #plt.ylim([-0.2, 0.2])
     for i in range(n_test//task.time_steps_per_trial):
+        continue
         plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
-    plt.xlim([200, 700])
+    plt.xlim([0, 200])
+    #fig.savefig()
     
     plt.figure()
     x = test_sim.mons['net.y_hat'].flatten()

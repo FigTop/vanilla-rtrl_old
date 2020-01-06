@@ -797,9 +797,11 @@ class DNI(Real_Time_Learning_Algorithm):
         self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
 
         #Get SG grads
-        self.SG_grads = [np.multiply.outer(self.scaled_e_sg, self.net.a_prev),
-                         np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
-                         self.scaled_e_sg]
+        #self.SG_grads = [np.multiply.outer(self.scaled_e_sg, self.net.a_prev),
+        #                 np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
+        #                 self.scaled_e_sg]
+
+        self.SG_grads = np.multiply.outer(self.scaled_e_sg, self.a_tilde_prev)
 
         if self.SG_L2_reg > 0:
             self.SG_grad += self.SG_L2_reg*self.A
@@ -836,17 +838,19 @@ class DNI(Real_Time_Learning_Algorithm):
 
         self.J_approx -= self.J_lr*np.multiply.outer(self.e_a, self.net.a_prev)
 
-    def synthetic_grad(self, a, y):
-        self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
+    def synthetic_grad(self, a_tilde):
+        #self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
+        self.sg_h = self.A.dot(a_tilde)
         return self.activation.f(self.sg_h)
 
-    def synthetic_grad_(self, a, y):
-        self.sg_h_ = self.A_.dot(a) + self.B_.dot(y) + self.C_
+    def synthetic_grad_(self, a_tilde):
+        self.sg_h_ = self.A_.dot(a_tilde)
         return self.SG_label_activation.f((self.activation.f(self.sg_h_)))
 
     def get_rec_grads(self):
 
-        self.sg = self.synthetic_grad(self.net.a, self.net.y)
+        #self.sg = self.synthetic_grad(self.net.a, self.net.y)
+        self.sg = self.synthetic_grad(self.a_tilde)
         self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
 
         if self.SG_clipnorm is not None:
@@ -1320,6 +1324,73 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
 
         self.B *= 0
         
+class COLIN(Real_Time_Learning_Algorithm):
+    """Implements Cholinergic Operant Learning In Neurons"""
+    
+    def __init__(self, net, decay, sigma, task, **kwargs):
+        
+        self.name = 'COLIN'
+        allowed_kwargs_ = {'B', 'fixed_modulation'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        self.decay = decay
+        if self.B is None:
+            self.B = np.zeros((self.n_h, self.m))
+            
+        self.task = task
+        self.sigma = sigma
+        self.alpha_loss = 0.99
+        self.running_loss_avg = 0
+        self.i_t = 0
+
+    def update_learning_vars(self):
+        """Updates B by one time step of temporal filtration via the invesre
+        time constant alpha (see RFLO)."""
+
+        self.i_trial = self.i_t % self.task.time_steps_per_trial
+
+        #Get relevant values and derivatives from network
+        self.a_hat   = np.concatenate([self.net.a_prev,
+                                       self.net.x,
+                                       np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.D_noise = self.D * (self.net.noise/self.sigma**2)
+        #self.D_noise = self.D *(1/self.sigma**2)
+        #self.D_noise = self.D * (self.sigma*self.net.alpha/self.sigma**2)
+        self.M_immediate = self.net.alpha * np.multiply.outer(self.D_noise,
+                                                              self.a_hat)
+
+        #Update eligibility traces
+        #np.multiply.outer(self.net.noise/self.net.sigma, self.net.a_prev)
+        self.B = (1 - self.decay) * self.B + self.M_immediate
+        #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
+        #                                                                    self.a_hat)
+
+        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+            #Update running loss average
+            self.running_loss_avg = ((1 - self.alpha_loss) * self.running_loss_avg +
+                                     self.alpha_loss * self.net.loss_)
+
+        self.i_t += 1
+
+    def get_rec_grads(self):
+        """Scales Hebbian plasticity rule by loss running average."""
+        
+        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+            scale = 1
+        else:
+            scale = 0
+            
+        if self.fixed_modulation is not None:
+            self.modulation = self.fixed_modulation
+        else:
+            self.modulation = scale * (self.net.loss_ - self.running_loss_avg)
+        return self.modulation * self.B
+
+    def reset_learning(self):
+        """Reset eligibility trace to 0."""
+
+        self.B *= 0
         
         
         
