@@ -241,7 +241,7 @@ class Sensorimotor_Mapping(Task):
         if N_trials > 0:
             X = np.concatenate(X, axis=0)
             Y = np.concatenate(Y, axis=0)
-            
+
         return X, Y
 
 class Flip_Flop_Task(Task):

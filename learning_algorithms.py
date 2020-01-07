@@ -26,7 +26,7 @@ class Learning_Algorithm:
         W_FB (numpy array or None): A fixed set of weights that may be provided
             for an approximate calculation of q in the manner of feedback
             alignment (Lillicrap et al. 2016).
-        SG_L2_reg (float or None): Strength of L2 regularization parameter on the
+        L2_reg (float or None): Strength of L2 regularization parameter on the
             network weights."""
 
     def __init__(self, net, allowed_kwargs_=set(), **kwargs):
@@ -465,8 +465,10 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
                 get_influence_estimate."""
 
         #Get relevant values and derivatives from network
-        self.a_hat   = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        self.D       = np.diag(self.net.activation.f_prime(self.net.h))
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        self.D = np.diag(self.net.activation.f_prime(self.net.h))
         self.net.get_a_jacobian()
         self.B_forwards = self.net.a_J.dot(self.B)
 
@@ -1299,7 +1301,7 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
         #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
         #                                                                    self.a_hat)
 
-        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+        if self.task.trial_mask[self.i_trial] > 0.3:
             #Update running loss average
             self.running_loss_avg = 0.99 * self.running_loss_avg + 0.01 * self.net.loss_
 
@@ -1308,7 +1310,7 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
     def get_rec_grads(self):
         """Scales Hebbian plasticity rule by loss running average."""
 
-        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+        if self.task.trial_mask[self.i_trial] > 0.3:
             scale = 1
         else:
             scale = 0
@@ -1366,7 +1368,7 @@ class COLIN(Real_Time_Learning_Algorithm):
         #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
         #                                                                    self.a_hat)
 
-        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+        if self.task.trial_mask[self.i_trial] > 0.3:
             #Update running loss average
             self.running_loss_avg = ((1 - self.alpha_loss) * self.running_loss_avg +
                                      self.alpha_loss * self.net.loss_)
@@ -1376,7 +1378,7 @@ class COLIN(Real_Time_Learning_Algorithm):
     def get_rec_grads(self):
         """Scales Hebbian plasticity rule by loss running average."""
 
-        if self.task.trial_lr_mask[self.i_trial] > 0.3:
+        if self.task.trial_mask[self.i_trial] > 0.3:
             scale = 1
         else:
             scale = 0

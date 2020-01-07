@@ -9,7 +9,6 @@ Created on Mon May 13 14:19:07 2019
 import numpy as np
 import unittest
 from gen_data import *
-from pdb import set_trace
 
 class Test_Network(unittest.TestCase):
     """Tests methods from the network.py module."""

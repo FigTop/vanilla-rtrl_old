@@ -36,7 +36,7 @@ class Simulation:
             time_steps_per_trial (int): Number of time steps in a trial, if
                 task has a trial structure. Leave empty if task runs
                 continuously.
-            trial_lr_mask (numpy array): Array of shape (time_steps_per_trial)
+            trial_mask (numpy array): Array of shape (time_steps_per_trial)
                 that scales the loss at each time step within a trial.
             reset_sigma (float): Standard deviation of RNN initial state at
                 start of each trial. Leave empty if RNN state should carry over
@@ -47,7 +47,7 @@ class Simulation:
                 results, if desired."""
 
         allowed_kwargs = {'time_steps_per_trial',
-                          'reset_sigma', 'trial_lr_mask',
+                          'reset_sigma', 'trial_mask',
                           'i_job', 'save_dir'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
@@ -266,9 +266,9 @@ class Simulation:
         net.error = net.loss.f_prime(net.z, net.y)
 
         #Re-scale losses and errors if trial structure is provided
-        if self.trial_lr_mask is not None:
-            net.loss_ *= self.trial_lr_mask[self.i_t_trial]
-            net.error *= self.trial_lr_mask[self.i_t_trial]
+        if self.trial_mask is not None:
+            net.loss_ *= self.trial_mask[self.i_t_trial]
+            net.error *= self.trial_mask[self.i_t_trial]
 
     def train_step(self):
         """Uses self.learn_alg to calculate gradients and self.optimizer to
@@ -314,7 +314,7 @@ class Simulation:
         #Test model at specified interval and save results for analysis
         if self.save_model_interval is not None and self.mode == 'train':
             if self.i_t % self.save_model_interval == 0:
-                self.get_test_singular_vectors(data)                
+                self.get_test_singular_vectors(data)
 
         #Evaluate model and save if performance is best
         if self.best_model_interval is not None and self.mode == 'train':
@@ -404,7 +404,7 @@ class Simulation:
         if val_loss < self.best_val_loss:
             self.best_net = val_sim.net
             self.best_val_loss = val_loss
-            
+
     def get_test_singular_vectors(self, data):
         """Runs a test simulation and saves resulting top singular vectors
         of net.a in self.singular_vectors."""
@@ -413,7 +413,7 @@ class Simulation:
         test_sim.run(data, mode='test',
                      monitors=['net.a'],
                      verbose=False)
-        
+
         U, S, V = np.linalg.svd(test_sim.mons['net.a'])
         self.singular_vectors.append(V[:,:self.n_singular_vectors])
 

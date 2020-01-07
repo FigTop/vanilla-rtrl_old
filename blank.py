@@ -1136,7 +1136,7 @@ class Sine_Wave(Task):
         self.__dict__.update(kwargs)
         if self.method == 'regular':
             self.time_steps_per_trial = int(1/self.p_transition)
-            self.trial_lr_mask = np.ones(self.time_steps_per_trial)
+            self.trial_mask = np.ones(self.time_steps_per_trial)
 
     def gen_dataset(self, N):
 
