@@ -13,7 +13,7 @@ from functions import *
 from copy import copy
 
 class Learning_Algorithm:
-    """Parent class for all types of learning algorithms.
+    """Parent class for all learning algorithms.
 
     Attributes:
         net (network.RNN): An instance of RNN to be trained by the network.
@@ -27,7 +27,11 @@ class Learning_Algorithm:
             for an approximate calculation of q in the manner of feedback
             alignment (Lillicrap et al. 2016).
         L2_reg (float or None): Strength of L2 regularization parameter on the
-            network weights."""
+            network weights.
+        a_ (numpy array): Array of shape (n_h + 1) that is the concatenation of
+            the network's state and the constant 1, used to calculate the output
+            errors.
+        q_prev (numpy array): The q value from the previous time step."""
 
     def __init__(self, net, allowed_kwargs_=set(), **kwargs):
         """Initializes an instance of learning algorithm by specifying the
@@ -61,22 +65,6 @@ class Learning_Algorithm:
         self.n_out = self.net.n_out
         self.m = self.n_h + self.n_in + 1
         self.q = np.zeros(self.n_h)
-
-    def reset_learning(self):
-        """Resets internal variables of the learning algorithm (relevant if
-        simulation includes a trial structure). Default is to do nothing."""
-
-        pass
-
-class Real_Time_Learning_Algorithm(Learning_Algorithm):
-    """Parent class for all learning algorithms that run "in real time," i.e.
-    collect and apply errors from the task as they occur.
-
-    Attributes:
-        a_ (numpy array): Array of shape (n_h + 1) that is the concatenation of
-            the network's state and the constant 1, used to calculate the output
-            errors.
-        q_prev (numpy array): The q value from the previous time step."""
 
     def get_outer_grads(self):
         """Calculates the derivative of the loss with respect to the output
@@ -164,7 +152,13 @@ class Real_Time_Learning_Algorithm(Learning_Algorithm):
 
         return grads_list
 
-class Only_Output_Weights(Real_Time_Learning_Algorithm):
+    def reset_learning(self):
+        """Resets internal variables of the learning algorithm (relevant if
+        simulation includes a trial structure). Default is to do nothing."""
+
+        pass
+
+class Only_Output_Weights(Learning_Algorithm):
     """Updates only the output weights W_out and b_out"""
 
     def __init__(self, net, **kwargs):
@@ -183,7 +177,7 @@ class Only_Output_Weights(Real_Time_Learning_Algorithm):
 
         return np.zeros((self.n_h, self.m))
 
-class RTRL(Real_Time_Learning_Algorithm):
+class RTRL(Learning_Algorithm):
     """Implements the Real-Time Recurrent Learning (RTRL) algorithm.
 
     RTRL maintains a long-term "influence matrix" dadw that represents the
@@ -246,7 +240,7 @@ class RTRL(Real_Time_Learning_Algorithm):
 
         self.dadw *= 0
 
-class UORO(Real_Time_Learning_Algorithm):
+class UORO(Learning_Algorithm):
     """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm.
 
     Full details in our review paper or in original Tallec et al. 2017. Broadly,
@@ -405,7 +399,7 @@ class UORO(Real_Time_Learning_Algorithm):
         self.A = np.random.normal(0, 1, self.n_h)
         self.B = np.random.normal(0, 1, (self.n_h, self.m))
 
-class KF_RTRL(Real_Time_Learning_Algorithm):
+class KF_RTRL(Learning_Algorithm):
     """Implements the Kronecker-Factored Real-Time Recurrent Learning Algorithm
     (KF-RTRL).
 
@@ -535,7 +529,7 @@ class KF_RTRL(Real_Time_Learning_Algorithm):
         self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
                                   (self.n_h, self.n_h))
 
-class Reverse_KF_RTRL(Real_Time_Learning_Algorithm):
+class Reverse_KF_RTRL(Learning_Algorithm):
     """Implements the "Reverse" KF-RTRL (R-KF-RTRL) algorithm.
 
     Full details in our review paper. Broadly, an approximation of M in the form
@@ -672,7 +666,7 @@ class Reverse_KF_RTRL(Real_Time_Learning_Algorithm):
         self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
                                   (self.n_h, self.m))
 
-class RFLO(Real_Time_Learning_Algorithm):
+class RFLO(Learning_Algorithm):
     """Implements the Random-Feedback Local Online learning algorithm (RFLO)
     from Murray (2019).
 
@@ -735,7 +729,7 @@ class RFLO(Real_Time_Learning_Algorithm):
 
         self.B *= 0
 
-class DNI(Real_Time_Learning_Algorithm):
+class DNI(Learning_Algorithm):
     """Implements the Decoupled Neural Interface (DNI) algorithm for an RNN.
 
     Details are in Jaderberg et al. (2017). Briefly, we linearly approximate
@@ -951,7 +945,7 @@ class BPTT(Learning_Algorithm):
 
         return grads
 
-class BPTT_Triangles(Real_Time_Learning_Algorithm):
+class BPTT_Triangles(Learning_Algorithm):
 
     def __init__(self, net, T_truncation, **kwargs):
 
@@ -1029,7 +1023,7 @@ class BPTT_Triangles(Real_Time_Learning_Algorithm):
 
         pass
 
-class Forward_BPTT(Real_Time_Learning_Algorithm):
+class Forward_BPTT(Learning_Algorithm):
 
     def __init__(self, net, T_truncation, **kwargs):
 
@@ -1111,7 +1105,7 @@ class Forward_BPTT(Real_Time_Learning_Algorithm):
         for attr in ['CA', 'a_hat', 'h']:
             del(self.__dict__[attr+'_hist'][0])
 
-class KeRNL(Real_Time_Learning_Algorithm):
+class KeRNL(Learning_Algorithm):
 
     def __init__(self, net, optimizer, sigma_noise=0.00001,
                  use_approx_kernel=False, learned_alpha_e=False,
@@ -1224,7 +1218,7 @@ class KeRNL(Real_Time_Learning_Algorithm):
         self.Gamma = np.zeros_like(self.Gamma)
         self.eligibility = np.zeros_like(self.eligibility)
 
-class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
+class Random_Walk_RTRL(Learning_Algorithm):
     """Algorithm idea combining tensor structure of KeRNL with stochastic
     update principles of KF-RTRL."""
 
@@ -1263,7 +1257,7 @@ class Random_Walk_RTRL(Real_Time_Learning_Algorithm):
 
         return (self.q.dot(self.B) * self.A.T).T
 
-class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
+class Reward_Modulated_Hebbian_Plasticity(Learning_Algorithm):
     """Implements a reward-modulated Hebbian plasticity rule for *trial-
     structured* tasks only (for now)."""
 
@@ -1326,7 +1320,7 @@ class Reward_Modulated_Hebbian_Plasticity(Real_Time_Learning_Algorithm):
 
         self.B *= 0
 
-class COLIN(Real_Time_Learning_Algorithm):
+class COLIN(Learning_Algorithm):
     """Implements Cholinergic Operant Learning In Neurons"""
 
     def __init__(self, net, decay, sigma, task, **kwargs):

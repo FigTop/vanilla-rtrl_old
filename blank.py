@@ -932,7 +932,7 @@ for i_conf in range(len(configs)):
 #
 #rnn.run(data, mode='test', monitors=['y_hat'])
 
-class DNI(Real_Time_Learning_Algorithm):
+class DNI(Learning_Algorithm):
 
     def __init__(self, net, optimizer, **kwargs):
 

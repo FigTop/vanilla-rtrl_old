@@ -11,9 +11,9 @@ from pdb import set_trace
 from utils import *
 from functions import *
 from copy import copy
-from learning_algorithms import Real_Time_Learning_Algorithm
+from learning_algorithms import Learning_Algorithm
 
-class Forward_BPTT_LR_by_RTRL(Real_Time_Learning_Algorithm):
+class Forward_BPTT_LR_by_RTRL(Learning_Algorithm):
 
     def __init__(self, net, optimizer, T_truncation,
                  meta_lr=0.01, H_epsilon=0.001, **kwargs):
