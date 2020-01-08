@@ -7,6 +7,7 @@ Created on Tue Feb 12 12:32:35 2019
 """
 
 import numpy as np
+from numpy.testing import assert_allclose
 import unittest
 from unittest.mock import MagicMock
 from network import RNN
@@ -44,8 +45,7 @@ class Test_Learning_Algorithm(unittest.TestCase):
         self.learn_alg = Learning_Algorithm(self.rnn)
         outer_grads = self.learn_alg.get_outer_grads()
         correct_outer_grads = np.ones((2, 3)) * 0.5
-        self.assertTrue(np.isclose(outer_grads,
-                                   correct_outer_grads).all())
+        assert_allclose(outer_grads, correct_outer_grads)
 
     def test_propagate_feedback_to_hidden(self):
 
@@ -53,15 +53,13 @@ class Test_Learning_Algorithm(unittest.TestCase):
         self.learn_alg = Learning_Algorithm(self.rnn)
         self.learn_alg.propagate_feedback_to_hidden()
         correct_q = np.ones(2) * 0.5
-        self.assertTrue(np.isclose(self.learn_alg.q,
-                                   correct_q).all())
+        assert_allclose(self.learn_alg.q, correct_q)
 
         #Case with random feedback
         self.learn_alg = Learning_Algorithm(self.rnn, W_FB=self.W_FB)
         self.learn_alg.propagate_feedback_to_hidden()
         correct_q = -np.ones(2) * 0.5
-        self.assertTrue(np.isclose(self.learn_alg.q,
-                                   correct_q).all())
+        assert_allclose(self.learn_alg.q, correct_q)
 
     def test_L2_regularization(self):
 
@@ -71,12 +69,12 @@ class Test_Learning_Algorithm(unittest.TestCase):
         correct_reg_grads = [np.eye(2) * 0.1, np.eye(2) * 0.1,
                                      np.zeros(2), np.eye(2) * 0.1, np.zeros(2)]
         for grad, correct_grad in zip(reg_grads, correct_reg_grads):
-            self.assertTrue(np.isclose(grad, correct_grad).all())
+            assert_allclose(grad, correct_grad)
 
     def test_call(self):
 
         self.learn_alg = Learning_Algorithm(self.rnn)
-        self.learn_alg.get_rec_grads = MagicMock(name='get_rec_grads')
+        self.learn_alg.get_rec_grads = MagicMock()
         self.learn_alg.get_rec_grads.return_value = np.ones((2, 5))
         grads = self.learn_alg()
 
@@ -84,7 +82,7 @@ class Test_Learning_Algorithm(unittest.TestCase):
                          np.ones((2, 2)) * 0.5, np.ones(2) * 0.5]
 
         for grad, correct_grad in zip(grads, correct_grads):
-            self.assertTrue(np.isclose(grad, correct_grad).all())
+            assert_allclose(grad, correct_grad)
 
 class Test_RTRL(unittest.TestCase):
 
@@ -118,19 +116,228 @@ class Test_RTRL(unittest.TestCase):
         papw = np.concatenate([np.eye(2), np.eye(2),
                                np.eye(2) * 2, np.eye(2) * 2, np.eye(2)], axis=1)
         correct_dadw = np.ones((2, 10)) + papw
-        self.assertTrue(np.isclose(self.learn_alg.dadw,
-                                   correct_dadw).all())
+        assert_allclose(self.learn_alg.dadw, correct_dadw)
 
     def test_get_rec_grads(self):
 
         self.learn_alg = RTRL(self.rnn)
         self.learn_alg.q = np.ones(2)
-        self.learn_alg.dadw = np.concatenate([np.eye(2) * i for i in range(5)], axis=1)
+        self.learn_alg.dadw = np.concatenate([np.eye(2) * i for i in range(5)],
+                                             axis=1)
         rec_grads = self.learn_alg.get_rec_grads()
         correct_rec_grads = np.array([list(range(5)) for _ in [0, 1]])
-        self.assertTrue(np.isclose(rec_grads,
-                                   correct_rec_grads).all())
-        
+        assert_allclose(rec_grads, correct_rec_grads)
+
+class Test_UORO(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+
+    def test_update_learning_vars(self):
+
+        self.learn_alg = UORO(self.rnn)
+        self.learn_alg.get_influence_estimate = MagicMock()
+        A, B = np.ones(2), np.ones((2, 5))
+        self.learn_alg.get_influence_estimate.return_value = [A, B]
+        self.learn_alg.update_learning_vars()
+
+        correct_a_J = np.eye(2)
+        correct_papw = np.array([[1, 1, 2, 2, 1],
+                                 [1, 1, 2, 2, 1]])
+
+        assert_allclose(self.rnn.a_J, correct_a_J)
+        assert_allclose(self.learn_alg.papw, correct_papw)
+
+    def test_get_influence_estimate(self):
+
+        #Backpropagation method case
+        A, B = np.ones(2), np.ones((2, 5))
+        self.learn_alg = UORO(self.rnn, A=A, B=B)
+        self.learn_alg.a_hat = np.array([1, 1, 2, 2, 1])
+        self.learn_alg.papw = np.array([[1, 1, 2, 2, 1],
+                                        [1, 1, 2, 2, 1]])
+        self.rnn.a_J = np.eye(2)
+        self.learn_alg.sample_nu = MagicMock()
+        self.learn_alg.sample_nu.return_value = np.array([1, -1])
+        A, B = self.learn_alg.get_influence_estimate()
+
+        p0, p1 = np.sqrt(np.sqrt(5)), np.sqrt(np.sqrt(11))
+        M_proj = np.array([[1, 1, 2, 2, 1],
+                           [-1, -1, -2, -2, -1]])
+        A_correct = p0 * np.array([1, 1]) + p1 * np.array([1, -1])
+        B_correct = (1 / p0) * np.ones((2, 5)) + (1 / p1) * M_proj
+
+        assert_allclose(A, A_correct)
+        assert_allclose(B, B_correct)
+
+    def test_get_rec_grads(self):
+
+        A, B = np.ones(2), np.ones((2, 5))
+        self.learn_alg = UORO(self.rnn, A=A, B=B)
+        self.learn_alg.q = np.ones(2) * 0.5
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_rec_grads = np.ones((2, 5))
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+class Test_KF_RTRL(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+
+    def test_update_learning_vars(self):
+
+        A, B = np.ones(5), np.ones((2, 2))
+        self.learn_alg = KF_RTRL(self.rnn, A=A, B=B)
+        self.learn_alg.get_influence_estimate = MagicMock()
+        self.learn_alg.get_influence_estimate.return_value = [A, B]
+        self.learn_alg.update_learning_vars()
+
+        correct_B_forwards = np.ones((2, 2))
+        correct_D = np.eye(2)
+
+        assert_allclose(self.learn_alg.B_forwards, correct_B_forwards)
+        assert_allclose(self.learn_alg.D, correct_D)
+
+    def test_get_influence_estimate(self):
+
+        A, B = np.ones(5), np.ones((2, 2))
+        self.learn_alg = KF_RTRL(self.rnn, A=A, B=B)
+        self.learn_alg.a_hat = np.array([1, 1, 2, 2, 1])
+        self.rnn.a_J = np.eye(2)
+        self.learn_alg.D = np.eye(2)
+        self.learn_alg.B_forwards = np.ones((2, 2))
+        self.learn_alg.sample_nu = MagicMock()
+        self.learn_alg.sample_nu.return_value = np.array([1, -1])
+        A, B = self.learn_alg.get_influence_estimate()
+
+        p0, p1 = np.sqrt(2/np.sqrt(5)), np.sqrt(np.sqrt(2/11))
+        A_correct = p0 * np.ones(5) - p1 * np.array([1, 1, 2, 2, 1])
+        B_correct = (1 / p0) * np.ones((2, 2)) - (1 / p1) * np.eye(2)
+        assert_allclose(A, A_correct)
+        assert_allclose(B, B_correct)
+
+    def test_get_rec_grads(self):
+
+        A, B = list(range(5)), np.ones((2, 2))
+        self.learn_alg = KF_RTRL(self.rnn, A=A, B=B)
+        self.learn_alg.q = np.ones(2) * 0.5
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_rec_grads = np.array([list(range(5)) for _ in [0, 1]])
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+class Test_Reverse_KF_RTRL(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+
+    def test_update_learning_vars(self):
+
+        A, B = np.ones(2), np.ones((2, 5))
+        self.learn_alg = Reverse_KF_RTRL(self.rnn, A=A, B=B)
+        self.learn_alg.get_influence_estimate = MagicMock()
+        self.learn_alg.get_influence_estimate.return_value = [A, B]
+        self.learn_alg.update_learning_vars()
+
+        correct_B_forwards = np.ones((2, 5))
+        correct_papw = np.array([[1, 1, 2, 2, 1],
+                                 [1, 1, 2, 2, 1]])
+
+        assert_allclose(self.learn_alg.B_forwards, correct_B_forwards)
+        assert_allclose(self.learn_alg.papw, correct_papw)
+
+    def test_get_influence_estimate(self):
+
+        A, B = np.ones(2), np.ones((2, 5))
+        self.learn_alg = Reverse_KF_RTRL(self.rnn, A=A, B=B)
+        self.learn_alg.a_hat = np.array([1, 1, 2, 2, 1])
+        self.rnn.a_J = np.eye(2)
+        self.learn_alg.papw = np.array([[1, 1, 2, 2, 1],
+                                        [1, 1, 2, 2, 1]])
+        self.learn_alg.B_forwards = np.ones((2, 5))
+        self.learn_alg.sample_nu = MagicMock()
+        self.learn_alg.sample_nu.return_value = np.array([1, -1])
+        A, B = self.learn_alg.get_influence_estimate()
+
+        p0, p1 = np.sqrt(np.sqrt(5)), np.sqrt(np.sqrt(11))
+        M_proj = np.array([[1, 1, 2, 2, 1],
+                           [-1, -1, -2, -2, -1]])
+
+        A_correct = p0 * np.ones(2) + p1 * np.array([1, -1])
+        B_correct = (1 / p0) * np.ones((2, 5)) + (1 / p1) * M_proj
+        assert_allclose(A, A_correct)
+        assert_allclose(B, B_correct)
+
+    def test_get_rec_grads(self):
+
+        A, B = np.ones(2), np.ones((2, 5))
+        self.learn_alg = Reverse_KF_RTRL(self.rnn, A=A, B=B)
+        self.learn_alg.q = np.ones(2) * 0.5
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_rec_grads = np.ones((2, 5))
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+
+
 # class Test_Learning_Algorithm(unittest.TestCase):
 #
 #     @classmethod
@@ -203,12 +410,12 @@ class Test_RTRL(unittest.TestCase):
 #         #print(self.W_rec[0, 0], '/n', self.rnn_1.W_rec[0, 0], '/n', self.rnn_2.W_rec[0, 0])
 #
 #         #Assert networks learned similar weights with a small tolerance.
-#         #self.assertTrue(np.isclose(self.rnn_1.W_rec,
-#         #                           self.rnn_2.W_rec, atol=1e-5).all())
+#         #assert_allclose(self.rnn_1.W_rec,
+#         #                           self.rnn_2.W_rec, atol=1e-5))
 #         #Assert networks' parameters changed appreciably, despite a large
 #         #tolerance for closeness.
-#         #self.assertFalse(np.isclose(self.W_rec,
-#         #                            self.rnn_2.W_rec, atol=1e-4).all())
+#         #self.assertFalse(assert_allclose(self.W_rec,
+#         #                            self.rnn_2.W_rec, atol=1e-4))
 #
 #
 #
@@ -270,12 +477,12 @@ class Test_RTRL(unittest.TestCase):
 #                        verbose=False)
 #
 #         #Assert networks learned similar weights with a small tolerance.
-#         self.assertTrue(np.isclose(self.rnn_1.W_rec,
-#                                    self.rnn_2.W_rec, atol=1e-5).all())
+#         assert_allclose(self.rnn_1.W_rec,
+#                                    self.rnn_2.W_rec, atol=1e-5))
 #         #Assert networks' parameters changed appreciably, despite a large
 #         #tolerance for closeness.
-#         self.assertFalse(np.isclose(self.W_rec,
-#                                     self.rnn_2.W_rec, atol=1e-3).all())
+#         self.assertFalse(assert_allclose(self.W_rec,
+#                                     self.rnn_2.W_rec, atol=1e-3))
 
 if __name__ == '__main__':
     unittest.main()
