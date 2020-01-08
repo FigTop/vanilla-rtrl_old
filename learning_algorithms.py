@@ -240,7 +240,21 @@ class RTRL(Learning_Algorithm):
 
         self.dadw *= 0
 
-class UORO(Learning_Algorithm):
+class Stochastic_Algorithm(Learning_Algorithm):
+
+    def sample_nu(self):
+        """Sample nu from specified distribution."""
+
+        if self.nu_dist == 'discrete' or self.nu_dist is None:
+            nu = np.random.choice([-1, 1], self.n_nu)
+        elif self.nu_dist == 'gaussian':
+            nu = np.random.normal(0, 1, self.n_nu)
+        elif self.nu_dist == 'uniform':
+            nu = np.random.uniform(-1, 1, self.n_nu)
+
+        return nu
+
+class UORO(Stochastic_Algorithm):
     """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm.
 
     Full details in our review paper or in original Tallec et al. 2017. Broadly,
@@ -288,6 +302,7 @@ class UORO(Learning_Algorithm):
         self.name = 'UORO' #Default algorithm name
         allowed_kwargs_ = {'epsilon', 'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
+        self.n_nu = self.n_h
 
         #Initialize A and B arrays
         if self.A is None:
@@ -329,13 +344,8 @@ class UORO(Learning_Algorithm):
             Updated A (numpy array of shape (n_h)) and B (numpy array of shape
                 (n_h, m))."""
 
-        #Sample nu from specified distribution
-        if self.nu_dist == 'discrete' or self.nu_dist is None:
-            self.nu = np.random.choice([-1, 1], self.n_h)
-        elif self.nu_dist == 'gaussian':
-            self.nu = np.random.normal(0, 1, self.n_h)
-        elif self.nu_dist == 'uniform':
-            self.nu = np.random.uniform(-1, 1, self.n_h)
+        #Sample random vector
+        self.nu = self.sample_nu()
 
         #Get random projection of M_immediate onto \nu
         M_projection = (self.papw.T*self.nu).T
@@ -399,7 +409,7 @@ class UORO(Learning_Algorithm):
         self.A = np.random.normal(0, 1, self.n_h)
         self.B = np.random.normal(0, 1, (self.n_h, self.m))
 
-class KF_RTRL(Learning_Algorithm):
+class KF_RTRL(Stochastic_Algorithm):
     """Implements the Kronecker-Factored Real-Time Recurrent Learning Algorithm
     (KF-RTRL).
 
@@ -441,13 +451,13 @@ class KF_RTRL(Learning_Algorithm):
         self.name = 'KF-RTRL'
         allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
+        self.n_nu = 2
 
         #Initialize A and B arrays
         if self.A is None:
             self.A = np.random.normal(0, 1, self.m)
         if self.B is None:
-            self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
-                                      (self.n_h, self.n_h))
+            self.B = np.random.normal(0, 1, (self.n_h, self.n_h))
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the Kron. product
@@ -482,13 +492,8 @@ class KF_RTRL(Learning_Algorithm):
             Updated A (numpy array of shape (m)) and B (numpy array of shape
                 (n_h, n_h))."""
 
-        #Sample nu from specified distribution
-        if self.nu_dist == 'discrete' or self.nu_dist is None:
-            self.nu = np.random.choice([-1, 1], 2)
-        elif self.nu_dist == 'gaussian':
-            self.nu = np.random.normal(0, 1, 2)
-        elif self.nu_dist == 'uniform':
-            self.nu = np.random.uniform(-1, 1, 2)
+        #Sample random vector (shape (2) in KF-RTRL)
+        self.nu = self.sample_nu()
 
         #Calculate p0, p1 or override with fixed P0, P1 if given
         if self.P0 is None:
@@ -526,10 +531,9 @@ class KF_RTRL(Learning_Algorithm):
         random gaussian samples."""
 
         self.A = np.random.normal(0, 1, self.m)
-        self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
-                                  (self.n_h, self.n_h))
+        self.B = np.random.normal(0, 1, (self.n_h, self.n_h))
 
-class Reverse_KF_RTRL(Learning_Algorithm):
+class Reverse_KF_RTRL(Stochastic_Algorithm):
     """Implements the "Reverse" KF-RTRL (R-KF-RTRL) algorithm.
 
     Full details in our review paper. Broadly, an approximation of M in the form
@@ -572,13 +576,13 @@ class Reverse_KF_RTRL(Learning_Algorithm):
         self.name = 'R-KF-RTRL'
         allowed_kwargs_ = {'P0', 'P1', 'A', 'B', 'nu_dist'}
         super().__init__(net, allowed_kwargs_, **kwargs)
+        self.n_nu = self.n_h
 
         #Initialize A and B arrays
         if self.A is None:
             self.A = np.random.normal(0, 1, self.n_h)
         if self.B is None:
-            self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
-                                      (self.n_h, self.m))
+            self.B = np.random.normal(0, 1, (self.n_h, self.m))
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the Kron. product
@@ -615,13 +619,8 @@ class Reverse_KF_RTRL(Learning_Algorithm):
             Updated A (numpy array of shape (n_h)) and B (numpy array of shape
                 (n_h, n_m))."""
 
-        #Sample nu from specified distribution
-        if self.nu_dist == 'discrete' or self.nu_dist is None:
-            self.nu = np.random.choice([-1, 1], self.n_h)
-        elif self.nu_dist == 'gaussian':
-            self.nu = np.random.normal(0, 1, self.n_h)
-        elif self.nu_dist == 'uniform':
-            self.nu = np.random.uniform(-1, 1, self.n_h)
+        #Sample random vector
+        self.nu = self.sample_nu()
 
         # Get random projection of M_immediate onto \nu
         M_projection = (self.papw.T * self.nu).T
@@ -663,8 +662,7 @@ class Reverse_KF_RTRL(Learning_Algorithm):
         random gaussian samples."""
 
         self.A = np.random.normal(0, 1, self.n_h)
-        self.B = np.random.normal(0, 1/np.sqrt(self.n_h),
-                                  (self.n_h, self.m))
+        self.B = np.random.normal(0, 1, (self.n_h, self.m))
 
 class RFLO(Learning_Algorithm):
     """Implements the Random-Feedback Local Online learning algorithm (RFLO)
