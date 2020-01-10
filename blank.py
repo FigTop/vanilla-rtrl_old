@@ -1186,3 +1186,20 @@ class Sine_Wave(Task):
         X[:,0] = -np.log(X[:,0])
 
         return X, Y
+
+
+
+        if self.SG_clipnorm is not None:
+            self.sg_norm = norm(self.sg)
+            if self.sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / self.sg_norm
+
+        if self.SG_target_clipnorm is not None:
+            self.sg_target_norm = norm(self.sg_target)
+            if self.sg_target_norm > self.SG_target_clipnorm:
+                self.sg_target = self.sg_target / self.sg_target_norm
+
+        if self.SG_clipnorm is not None:
+            sg_norm = norm(self.sg)
+            if sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / sg_norm

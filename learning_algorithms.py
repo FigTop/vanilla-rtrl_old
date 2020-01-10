@@ -31,6 +31,8 @@ class Learning_Algorithm:
         a_ (numpy array): Array of shape (n_h + 1) that is the concatenation of
             the network's state and the constant 1, used to calculate the output
             errors.
+        q (numpy array): The immediate loss derivative of the network state
+            dL/da, calculated by propagate_feedback_to_hidden.
         q_prev (numpy array): The q value from the previous time step."""
 
     def __init__(self, net, allowed_kwargs_=set(), **kwargs):
@@ -730,16 +732,39 @@ class DNI(Learning_Algorithm):
     """Implements the Decoupled Neural Interface (DNI) algorithm for an RNN.
 
     Details are in Jaderberg et al. (2017). Briefly, we linearly approximate
-    the (future-facing) credit assignment vector c = dL/da using
+    the (future-facing) credit assignment vector c = dL/da by the variable
+    'sg' for 'synthetic gradient' (of shape (n_h)) using
+
+    c ~ sg = A a_tilde                                      (1)
+
+    where a_tilde = [a; y*; 1] is the network state concatenated with the label
+    y* and a constant 1 (for bias), of shape (m_out = n_h + n_in + 1). Then the
+    gradient is calculated by combining this estimate with the immediate
+    parameter influence \phi'(h) a_hat
+
+    dL/dW_{ij} = sg_i * \phi'(h_i) a_hat_j.                 (2)
+
+    The matrix A must be updated as well to make sure Eq. (1) is a good
+    estimate. Details are in our paper or the original; briefly, a bootstrapped
+    credit assignment estimate is formed via
+
+    c* = q_prev + sg J = q_prev + (A a_tilde_prev) J
+
+    where J is the network Jacobian, either calculated exactly or linearly
+    approximated (see update_J_approx method). The arrays q_prev and
+    a_tilde_prev are q and a_tilde from the previous time step;
+    this is because the update requires reference to the "future" (by one time
+    step) network state, so we simply wait a time step, such that q and a_tilde
+    are now q_prev and a_tilde_prev, respectively. This target for credit
+    assignment is then
 
 
     """
     def __init__(self, net, optimizer, **kwargs):
 
         self.name = 'DNI'
-        allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'J_lr',
-                           'activation', 'SG_label_activation', 'use_approx_J',
-                           'SG_L2_reg', 'fix_SG_interval'}
+        allowed_kwargs_ = {'A', 'J_lr', 'activation', 'SG_label_activation',
+                           'use_approx_J', 'SG_L2_reg', 'fix_SG_interval'}
         #Default parameters
         self.optimizer = optimizer
         self.SG_L2_reg = 0
@@ -750,16 +775,12 @@ class DNI(Learning_Algorithm):
         #Override defaults with kwargs
         super().__init__(net, allowed_kwargs_, **kwargs)
 
-        sigma = np.sqrt(1/self.n_h)
         self.m_out = self.n_h + self.n_out + 1
-        self.SG_init(sigma)
         self.J_approx = np.copy(self.net.W_rec)
         self.i_fix = 0
-        self.A_= np.copy(self.A)
-
-    def SG_init(self, sigma):
-
-        self.A = np.random.normal(0, sigma, (self.n_h, self.m_out))
+        if self.A is None:
+            self.A = np.random.normal(0, np.sqrt(1/self.n_h),
+                                      (self.n_h, self.m_out))
 
     def update_learning_vars(self):
 
@@ -772,27 +793,10 @@ class DNI(Learning_Algorithm):
                                             self.net.y_prev,
                                             np.array([1])])
         self.sg = self.synthetic_grad(self.a_tilde_prev)
-
-        if self.SG_clipnorm is not None:
-            self.sg_norm = norm(self.sg)
-            if self.sg_norm > self.SG_clipnorm:
-                self.sg = self.sg / self.sg_norm
-
         self.sg_target = self.get_sg_target()
-
-        if self.SG_target_clipnorm is not None:
-            self.sg_target_norm = norm(self.sg_target)
-            if self.sg_target_norm > self.SG_target_clipnorm:
-                self.sg_target = self.sg_target / self.sg_target_norm
-
         self.e_sg = self.sg - self.sg_target
         self.sg_loss = np.mean((self.sg - self.sg_target)**2)
         self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
-
-        #Get SG grads
-        #self.SG_grads = [np.multiply.outer(self.scaled_e_sg, self.net.a_prev),
-        #                 np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
-        #                 self.scaled_e_sg]
 
         self.SG_grads = np.multiply.outer(self.scaled_e_sg, self.a_tilde_prev)
 
@@ -842,14 +846,8 @@ class DNI(Learning_Algorithm):
 
     def get_rec_grads(self):
 
-        #self.sg = self.synthetic_grad(self.net.a, self.net.y)
         self.sg = self.synthetic_grad(self.a_tilde)
         self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
-
-        if self.SG_clipnorm is not None:
-            sg_norm = norm(self.sg)
-            if sg_norm > self.SG_clipnorm:
-                self.sg = self.sg / sg_norm
 
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
 
