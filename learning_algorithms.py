@@ -735,40 +735,67 @@ class DNI(Learning_Algorithm):
     the (future-facing) credit assignment vector c = dL/da by the variable
     'sg' for 'synthetic gradient' (of shape (n_h)) using
 
-    c ~ sg = A a_tilde                                      (1)
+    c ~ sg = A a_tilde                                                     (1)
 
-    where a_tilde = [a; y*; 1] is the network state concatenated with the label
-    y* and a constant 1 (for bias), of shape (m_out = n_h + n_in + 1). Then the
+    where a_tilde = [a; y^*; 1] is the network state concatenated with the label
+    y^* and a constant 1 (for bias), of shape (m_out = n_h + n_in + 1). Then the
     gradient is calculated by combining this estimate with the immediate
     parameter influence \phi'(h) a_hat
 
-    dL/dW_{ij} = sg_i * \phi'(h_i) a_hat_j.                 (2)
+    dL/dW_{ij} = sg_i * \phi'(h_i) a_hat_j.                                (2)
 
     The matrix A must be updated as well to make sure Eq. (1) is a good
     estimate. Details are in our paper or the original; briefly, a bootstrapped
     credit assignment estimate is formed via
 
-    c* = q_prev + sg J = q_prev + (A a_tilde_prev) J
+    c^* = q_prev + sg J = q_prev + (A a_tilde_prev) J                      (3)
 
-    where J is the network Jacobian, either calculated exactly or linearly
-    approximated (see update_J_approx method). The arrays q_prev and
+    where J = da^t/da^{t-1} is the network Jacobian, either calculated exactly
+    or approximated (see update_J_approx method). The arrays q_prev and
     a_tilde_prev are q and a_tilde from the previous time step;
     this is because the update requires reference to the "future" (by one time
     step) network state, so we simply wait a time step, such that q and a_tilde
     are now q_prev and a_tilde_prev, respectively. This target for credit
-    assignment is then
+    assignment is then used to calculate a prediction loss gradient for A:
 
+    d/dA_{ij} 0.5 * ||A a_tilde - c^*||^2 = (A a_tilde - c^*)_i a_tilde_j  (4)
 
-    """
+    This gradient is used to update A by a given optimizer."""
+
     def __init__(self, net, optimizer, **kwargs):
+        """Inits an instance of DNI by specifying the optimizer for the A
+        weights and other kwargs.
+
+        Args:
+            optimizer (optimizers.Optimizer): An Optimizer instance used to
+                update the weights of A based on its credit assignment
+                prediction loss gradients.
+
+        Keywords args:
+            A (numpy array): Initial value of A weights, must be of shape
+                (n_h, m_out). If None, A is initialized with random Gaussian.
+            J_lr (float): Learning rate for learning approximate Jacobian.
+            activation (functions.Function): Activation function for the
+                synthetic gradient function, applied elementwise after A a_tilde
+                operation. Default is identity.
+            SG_label_activation (functions.Function): Activation function for
+                the synthetic gradient function as used in calculating the
+                *label* for the
+            use_approx_J (bool): If True, trains the network using the
+                approximated Jacobian rather than the exact Jacobian.
+            SG_L2_reg (float): L2 regularization strength on the A weights, by
+                default 0.
+            fix_A_interval (int): The number of time steps to wait between
+                updating the synthetic gradient method used to bootstrap the
+                label estimates. Default is 5."""
 
         self.name = 'DNI'
         allowed_kwargs_ = {'A', 'J_lr', 'activation', 'SG_label_activation',
-                           'use_approx_J', 'SG_L2_reg', 'fix_SG_interval'}
+                           'use_approx_J', 'SG_L2_reg', 'fix_A_interval'}
         #Default parameters
         self.optimizer = optimizer
         self.SG_L2_reg = 0
-        self.fix_SG_interval = 5
+        self.fix_A_interval = 5
         self.activation = identity
         self.SG_label_activation = identity
         self.use_approx_J = False
@@ -779,58 +806,87 @@ class DNI(Learning_Algorithm):
         self.J_approx = np.copy(self.net.W_rec)
         self.i_fix = 0
         if self.A is None:
-            self.A = np.random.normal(0, np.sqrt(1/self.n_h),
+            self.A = np.random.normal(0, np.sqrt(1/self.m_out),
                                       (self.n_h, self.m_out))
 
     def update_learning_vars(self):
+        """Updates the A matrix by Eqs. (3) and (4)."""
 
-
-        #Get network jacobian
+        #Get network jacobian from current time step.
         self.net.get_a_jacobian()
 
-        #Compute synthetic gradient estimate of credit assignment
+        #Compute synthetic gradient estimate of credit assignment at previous
+        #time step. This is NOT used to drive learning in W but rather to drive
+        #learning in A.
         self.a_tilde_prev = np.concatenate([self.net.a_prev,
                                             self.net.y_prev,
                                             np.array([1])])
         self.sg = self.synthetic_grad(self.a_tilde_prev)
+
+        #Compute the target, error and loss for the synthetic gradient function
         self.sg_target = self.get_sg_target()
-        self.e_sg = self.sg - self.sg_target
-        self.sg_loss = np.mean((self.sg - self.sg_target)**2)
-        self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
+        self.A_error = self.sg - self.sg_target
+        self.A_loss = np.mean((self.sg - self.sg_target)**2)
 
-        self.SG_grads = np.multiply.outer(self.scaled_e_sg, self.a_tilde_prev)
+        #Compute gradients for A
+        self.scaled_A_error = self.A_error * self.activation.f_prime(self.sg_h)
+        self.A_grad = np.multiply.outer(self.scaled_A_error, self.a_tilde_prev)
 
+        #Apply L2 regularization to A
         if self.SG_L2_reg > 0:
-            self.SG_grad += self.SG_L2_reg*self.A
+            self.A_grad += self.SG_L2_reg*self.A
 
-        #Update SG parameters
-        self.A = self.optimizer.get_updated_params([self.A], [self.SG_grads])[0]
+        #Update synthetic gradient parameters
+        self.A = self.optimizer.get_updated_params([self.A], [self.A_grad])[0]
 
-        if self.i_fix == self.fix_SG_interval - 1:
+        #On interval determined by self.fix_A_interval, update A_, the values
+        #used to calculate the target in Eq. (3), with the latest value of A.
+        if self.i_fix == self.fix_A_interval - 1:
             self.i_fix = 0
             self.A_ = np.copy(self.A)
         else:
             self.i_fix += 1
 
-        if self.J_lr is not None:
+        #If using approximate Jacobian, update the approximation.
+        if self.use_approx_J:
             self.update_J_approx()
 
     def get_sg_target(self):
+        """Function for generating the target for training A. Implements Eq. (3)
+        using a different set of weights A_, which are static and only
+        re-assigned to A  every fix_A_interval time steps.
 
+        Returns:
+            sg_target (numpy array): Array of shape (n_out) used to get error
+                signals for A in update_learning_vars."""
+
+        #Get latest q value, slide current q value to q_prev.
         self.propagate_feedback_to_hidden()
 
-        self.a_tilde = np.concatenate([self.net.a, self.net.y, np.array([1])])
+        self.a_tilde = np.concatenate([self.net.a,
+                                       self.net.y,
+                                       np.array([1])])
 
-        if self.use_approx_J:
-            sg_target = self.q_prev + self.synthetic_grad_(self.a_tilde).dot(self.J_approx)
-        else:
-            sg_target = self.q_prev + self.synthetic_grad_(self.a_tilde).dot(self.net.a_J)
+        #Implement Eq. (3).
+        c_estimate = self.synthetic_grad_(self.a_tilde)
+        if self.use_approx_J: #Approximate Jacobian
+            sg_target = self.q_prev + c_estimate.dot(self.J_approx)
+        else: #Exact Jacobian
+            sg_target = self.q_prev + c_estimate.dot(self.net.a_J)
 
         return sg_target
 
     def update_J_approx(self):
+        """Updates the approximate Jacobian by SGD according to a squared-error
+        loss function:
 
-        self.loss_a = np.square(self.J_approx.dot(self.net.a_prev) - self.net.a).mean()
+        J_loss = 0.5 * || J a_prev - a ||^2.                     (6)
+
+        Thus the gradient for the Jacobian is
+
+        dJ_loss/dJ_{ij} = (J a_prev - a)"""
+
+        self.loss_a = 0.5 * np.square(self.J_approx.dot(self.net.a_prev) - self.net.a).mean()
         self.e_a = self.J_approx.dot(self.net.a_prev) - self.net.a
 
         self.J_approx -= self.J_lr*np.multiply.outer(self.e_a, self.net.a_prev)
