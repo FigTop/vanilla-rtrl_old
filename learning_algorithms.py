@@ -711,8 +711,7 @@ class RFLO(Learning_Algorithm):
                                      self.net.x,
                                      np.array([1])])
         self.D = self.net.activation.f_prime(self.net.h)
-        self.M_immediate = self.alpha * np.multiply.outer(self.D,
-                                                          self.a_hat)
+        self.M_immediate = self.alpha * np.multiply.outer(self.D, self.a_hat)
 
         #Update eligibility traces
         self.B = (1 - self.alpha) * self.B + self.M_immediate

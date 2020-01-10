@@ -61,8 +61,8 @@ if os.environ['HOME']=='/Users/omarschall':
     np.random.seed()
 
 
-task = Sensorimotor_Mapping(t_report=15, report_duration=4)
-task = Add_Task(3, 5, deterministic=True, tau_task=4)
+#task = Sensorimotor_Mapping(t_report=15, report_duration=4)
+task = Add_Task(6, 10, deterministic=True, tau_task=1)
 task.time_steps_per_trial = 60
 task.trial_mask = np.ones(task.time_steps_per_trial)
 #task = Sine_Wave(p_transition=0.05, frequencies=[0.03, 0.1, 0.01], method='regular',
@@ -84,15 +84,15 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 0.5
+alpha = 1
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.001)
-SG_optimizer = SGD(lr=0.01)
+optimizer = SGD(lr=0.0005)
+SG_optimizer = SGD(lr=0.005)
 
 
 if params['algorithm'] == 'Only_Output_Weights':
@@ -114,19 +114,24 @@ if params['algorithm'] == 'RFLO':
 
 learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task,
                                                 fixed_modulation=None)
-#learn_alg = RTRL(rnn)
-J_lr = 0.01
+learn_alg = UORO(rnn)
+#learn_alg = Only_Output_Weights(rnn)
+J_lr = 0.005
 learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
                 SG_label_activation=tanh, W_FB=W_FB)
 #learn_alg.name = 'DNIb'
 #learn_alg = COLIN(rnn, decay=0.2, sigma=0.1, task=task)
-learn_alg = Only_Output_Weights(rnn)
+#learn_alg = Only_Output_Weights(rnn)
 comp_algs = []
+
+A = np.random.normal(0, 10, n_hidden)
+B = np.random.normal(0, 10, (n_hidden, n_hidden + n_in + 1))
+learn_alg = UORO(rnn, A=A, B=B)
 
 monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
             'learn_alg.running_loss_avg', 'net.W_rec',
             'learn_alg.modulation']
-#monitors = ['net.loss_', 'net.y_hat', 'learn_alg.B']
+monitors = ['net.loss_', 'net.y_hat', 'learn_alg.A-norm', 'learn_alg.B-norm']
 
 sim = Simulation(rnn,
                  time_steps_per_trial=task.time_steps_per_trial,
@@ -143,7 +148,9 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 if os.environ['HOME']=='/Users/omarschall':
 
 
-    plot_filtered_signals([sim.mons['net.loss_']])
+    plot_filtered_signals([sim.mons['net.loss_'],
+                           sim.mons['learn_alg.A-norm'],
+                           sim.mons['learn_alg.B-norm']])
 
     #Test run
     np.random.seed(2)

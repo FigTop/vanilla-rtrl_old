@@ -336,7 +336,53 @@ class Test_Reverse_KF_RTRL(unittest.TestCase):
 
         assert_allclose(rec_grads, correct_rec_grads)
 
+class Test_RFLO(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+
+    def test_update_learning_vars(self):
+
+        self.learn_alg = RFLO(self.rnn, alpha=0.5, B=np.ones((2, 5)))
+        self.learn_alg.update_learning_vars()
+
+        B_correct = np.array([[1, 1, 1.5, 1.5, 1],
+                              [1, 1, 1.5, 1.5, 1]])
+
+        assert_allclose(self.learn_alg.B, B_correct)
+
+    def test_get_rec_grads(self):
+
+        self.learn_alg = RFLO(self.rnn, alpha=0.5, B=np.ones((2, 5)))
+        self.learn_alg.q = np.array([1, 2])
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_rec_grads = np.array([[1, 1, 1, 1, 1],
+                                      [2, 2, 2, 2, 2]])
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+class Test_DNI(unittest.TestCase):
+
+    pass
 
 # class Test_Learning_Algorithm(unittest.TestCase):
 #
