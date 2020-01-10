@@ -742,7 +742,7 @@ class DNI(Learning_Algorithm):
     gradient is calculated by combining this estimate with the immediate
     parameter influence \phi'(h) a_hat
 
-    dL/dW_{ij} = sg_i * \phi'(h_i) a_hat_j.                                (2)
+    dL/dW_{ij} = dL/da_i da_i/dW_{ij} = sg_i alpha \phi'(h_i) a_hat_j.     (2)
 
     The matrix A must be updated as well to make sure Eq. (1) is a good
     estimate. Details are in our paper or the original; briefly, a bootstrapped
@@ -826,7 +826,7 @@ class DNI(Learning_Algorithm):
         #Compute the target, error and loss for the synthetic gradient function
         self.sg_target = self.get_sg_target()
         self.A_error = self.sg - self.sg_target
-        self.A_loss = np.mean((self.sg - self.sg_target)**2)
+        self.A_loss = 0.5 * np.square(self.A_error).mean()
 
         #Compute gradients for A
         self.scaled_A_error = self.A_error * self.activation.f_prime(self.sg_h)
@@ -867,12 +867,14 @@ class DNI(Learning_Algorithm):
                                        self.net.y,
                                        np.array([1])])
 
-        #Implement Eq. (3).
-        c_estimate = self.synthetic_grad_(self.a_tilde)
+        #Calculate the synthetic gradient for the 'next' (really the current,
+        #but next relative to the previous) time step.
+        sg_next = self.synthetic_grad_(self.a_tilde)
+        #Backpropagate by one time step and add to q_prev to get sg_target.
         if self.use_approx_J: #Approximate Jacobian
-            sg_target = self.q_prev + c_estimate.dot(self.J_approx)
+            sg_target = self.q_prev + sg_next.dot(self.J_approx)
         else: #Exact Jacobian
-            sg_target = self.q_prev + c_estimate.dot(self.net.a_J)
+            sg_target = self.q_prev + sg_next.dot(self.net.a_J)
 
         return sg_target
 
@@ -884,29 +886,54 @@ class DNI(Learning_Algorithm):
 
         Thus the gradient for the Jacobian is
 
-        dJ_loss/dJ_{ij} = (J a_prev - a)"""
+        dJ_loss/dJ_{ij} = (J a_prev - a)_i a_prev_j              (7)."""
 
-        self.loss_a = 0.5 * np.square(self.J_approx.dot(self.net.a_prev) - self.net.a).mean()
-        self.e_a = self.J_approx.dot(self.net.a_prev) - self.net.a
-
-        self.J_approx -= self.J_lr*np.multiply.outer(self.e_a, self.net.a_prev)
+        self.J_error = self.J_approx.dot(self.net.a_prev) - self.net.a
+        self.J_loss = 0.5 * np.square(self.J_error).mean()
+        self.J_approx -= self.J_lr*np.multiply.outer(self.J_error,
+                                                     self.net.a_prev)
 
     def synthetic_grad(self, a_tilde):
-        #self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
+        """Computes the synthetic gradient using current values of A.
+
+        Retuns:
+            An array of shape (n_h) representing the synthetic gradient."""
+
         self.sg_h = self.A.dot(a_tilde)
         return self.activation.f(self.sg_h)
 
     def synthetic_grad_(self, a_tilde):
+        """Computes the synthetic gradient using A_ and with an extra activation
+        function (for DNI(b)), only for computing the label in Eq. (3).
+
+        Retuns:
+            An array of shape (n_h) representing the synthetic gradient."""
+
         self.sg_h_ = self.A_.dot(a_tilde)
         return self.SG_label_activation.f((self.activation.f(self.sg_h_)))
 
     def get_rec_grads(self):
+        """Computes the recurrent grads for the network by implementing Eq. (2),
+        using the current synthetic gradient function.
 
+        Note: assuming self.a_tilde already calculated by calling get_sg_target,
+        which should happen by default since update_learning_vars is always
+        called before get_rec_grads.
+
+        Returns:
+            An array of shape (n_h, m) representing the network gradient for
+                the recurrent parameters."""
+
+        #Calculate synthetic gradient
         self.sg = self.synthetic_grad(self.a_tilde)
-        self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
+        #Combine the first 3 factors of the RHS of Eq. (2) into sg_scaled
+        D = self.net.activation.f_prime(self.net.h)
+        self.sg_scaled = self.sg * self.net.alpha * D
 
-        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        #Final result of Eq. (2)
         return np.multiply.outer(self.sg_scaled, self.a_hat)
 
 class BPTT(Learning_Algorithm):
