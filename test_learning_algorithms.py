@@ -382,7 +382,107 @@ class Test_RFLO(unittest.TestCase):
 
 class Test_DNI(unittest.TestCase):
 
-    pass
+    @classmethod
+    def setUpClass(cls):
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+        cls.rnn.y_prev = np.ones(2) * 0.5
+        cls.rnn.y = np.ones(2) * 2
+
+    def test_update_learning_vars(self):
+
+        optimizer = SGD(lr=1)
+        A = np.ones((2, 5))
+        self.learn_alg = DNI(self.rnn, optimizer=optimizer, A=A)
+        self.learn_alg.get_sg_target = MagicMock()
+        self.learn_alg.get_sg_target.return_value = np.array([3.5, 3.5])
+        self.learn_alg.update_learning_vars()
+
+        correct_A = np.array([[0.5, 0.5, 0.75, 0.75, 0.5],
+                              [0.5, 0.5, 0.75, 0.75, 0.5]])
+
+        assert_allclose(self.learn_alg.A, correct_A)
+
+    def test_get_sg_target(self):
+
+        optimizer = SGD(lr=1)
+        A = np.ones((2, 5))
+        self.learn_alg = DNI(self.rnn, optimizer=optimizer,
+                             use_approx_J=True, J_lr=1, A=A)
+        sg_target = self.learn_alg.get_sg_target()
+
+        correct_sg_target = np.array([7, 7])
+
+        assert_allclose(sg_target, correct_sg_target)
+
+    def test_update_J_approx(self):
+
+        optimizer = SGD(lr=1)
+        A = np.ones((2, 5))
+        self.learn_alg = DNI(self.rnn, optimizer=optimizer,
+                             use_approx_J=True, J_lr=1, A=A)
+        self.rnn.a = np.array([2, 2])
+        self.learn_alg.update_J_approx()
+
+        correct_J_approx = np.array([[2, 1],
+                                     [1, 2]])
+
+        assert_allclose(self.learn_alg.J_approx, correct_J_approx)
+
+    def test_get_rec_grads(self):
+
+        optimizer = SGD(lr=1)
+        A = np.ones((2, 5))
+        self.learn_alg = DNI(self.rnn, optimizer=optimizer,
+                             use_approx_J=True, J_lr=1, A=A)
+        self.learn_alg.a_tilde = np.ones(2)
+        self.learn_alg.synthetic_grad = MagicMock()
+        self.learn_alg.synthetic_grad.return_value = np.array([2, 2])
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_reg_grads = np.array([[2, 2, 4, 4, 2],
+                                      [2, 2, 4, 4, 2]])
+
+        assert_allclose(rec_grads, correct_reg_grads)
+
+class Test_Future_BPTT(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+        cls.rnn.y_prev = np.ones(2) * 0.5
+        cls.rnn.y = np.ones(2) * 2
 
 # class Test_Learning_Algorithm(unittest.TestCase):
 #

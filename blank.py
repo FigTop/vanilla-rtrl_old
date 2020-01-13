@@ -165,7 +165,7 @@ if params['algorithm'] == 'KF-RTRL':
 if params['algorithm'] == 'R-KF-RTRL':
     learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Forward_BPTT(rnn, 10)
+    learn_alg = Future_BPTT(rnn, 10)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
@@ -193,7 +193,7 @@ comp_algs = [UORO(rnn),
              KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
                    use_approx_kernel=True, learned_alpha_e=False),
              DNI(rnn, SG_optimizer),
-             Forward_BPTT(rnn, 14)]
+             Future_BPTT(rnn, 14)]
 comp_algs = [UORO(rnn)]
 comp_algs = []
 
@@ -1203,3 +1203,90 @@ class Sine_Wave(Task):
             sg_norm = norm(self.sg)
             if sg_norm > self.SG_clipnorm:
                 self.sg = self.sg / sg_norm
+
+class BPTT(Learning_Algorithm):
+
+    def __init__(self, net, t1, t2, monitors=[], use_historical_W=False):
+
+        super().__init__(net, monitors)
+
+        #The two integer parameters
+        self.t1  = t1    #Number of steps to average loss over
+        self.t2  = t2    #Number of steps to propagate backwards
+        self.T   = t1+t2 #Total amount of net hist needed to memorize
+        self.use_historical_W = use_historical_W
+
+        #Lists storing relevant net history
+        self.h_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
+        self.a_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
+        self.e_hist = [np.zeros(self.net.n_out) for _ in range(t1)]
+        self.x_hist = [np.zeros(self.net.n_in) for _ in range(self.T)]
+        self.W_rec_hist = [self.net.W_rec for _ in range(self.T)]
+
+    def update_learning_vars(self):
+        '''
+        Must be run every time step to update storage of relevant history
+        '''
+
+        for attr in ['h', 'a', 'e', 'x', 'W_rec']:
+            self.__dict__[attr+'_hist'].append(getattr(self.net, attr))
+            del(self.__dict__[attr+'_hist'][0])
+
+    def __call__(self):
+        '''
+        Run only when grads are needed for the optimizer
+        '''
+
+        W_out_grad = [np.multiply.outer(self.e_hist[-i],self.a_hist[-i]) for i in range(1, self.t1+1)]
+        self.W_out_grad = sum(W_out_grad)/self.t1
+
+        b_out_grad = [self.e_hist[-i] for i in range(1, self.t1+1)]
+        self.b_out_grad = sum(b_out_grad)/self.t1
+
+        self.outer_grads = [self.W_out_grad, self.b_out_grad]
+
+        get_a_J = self.net.get_a_jacobian
+
+        if self.use_historical_W:
+
+            self.a_Js = [get_a_J(update=False,
+                         h=self.h_hist[-i],
+                         h_prev=self.h_hist[-(i+1)],
+                         W_rec=self.W_rec_hist[-i]) for i in range(1, self.T)]
+        else:
+
+            self.a_Js = [get_a_J(update=False,
+                         h=self.h_hist[-i],
+                         h_prev=self.h_hist[-(i+1)],
+                         W_rec=self.net.W_rec) for i in range(1, self.T)]
+
+        n_h, n_in = self.net.n_h, self.net.n_in
+        self.rec_grad = np.zeros((n_h, n_h+n_in+1))
+
+        CA_list = []
+
+        for i in range(1, self.t1+1):
+
+            self.q = self.e_hist[-i].dot(self.net.W_out)
+
+            for j in range(self.t2):
+
+                self.J = np.eye(n_h)
+
+                for k in range(j):
+
+                    self.J = self.J.dot(self.a_Js[-(i+k)])
+
+                self.J = self.net.alpha*self.J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
+
+                self.pre_activity = np.concatenate([self.a_hist[-(i+j+1)], self.x_hist[-(i+j)], np.array([1])])
+                CA = self.q.dot(self.J)
+                CA_list.append(CA)
+                self.rec_grad += np.multiply.outer(CA, self.pre_activity)
+
+        self.credit_assignment = sum(CA_list)/len(CA_list)
+
+        grads = [self.rec_grad[:,:n_h], self.rec_grad[:,n_h:-1], self.rec_grad[:,-1]]
+        grads += self.outer_grads
+
+        return grads

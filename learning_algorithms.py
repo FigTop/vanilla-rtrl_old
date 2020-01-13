@@ -808,12 +808,15 @@ class DNI(Learning_Algorithm):
         if self.A is None:
             self.A = np.random.normal(0, np.sqrt(1/self.m_out),
                                       (self.n_h, self.m_out))
+        self.A_ = np.copy(self.A)
 
     def update_learning_vars(self):
         """Updates the A matrix by Eqs. (3) and (4)."""
 
-        #Get network jacobian from current time step.
-        self.net.get_a_jacobian()
+        if self.use_approx_J: #If using approximate Jacobian, update it.
+            self.update_J_approx()
+        else: #Otherwise get the exact Jacobian.
+            self.net.get_a_jacobian()
 
         #Compute synthetic gradient estimate of credit assignment at previous
         #time step. This is NOT used to drive learning in W but rather to drive
@@ -834,7 +837,7 @@ class DNI(Learning_Algorithm):
 
         #Apply L2 regularization to A
         if self.SG_L2_reg > 0:
-            self.A_grad += self.SG_L2_reg*self.A
+            self.A_grad += self.SG_L2_reg * self.A
 
         #Update synthetic gradient parameters
         self.A = self.optimizer.get_updated_params([self.A], [self.A_grad])[0]
@@ -846,10 +849,6 @@ class DNI(Learning_Algorithm):
             self.A_ = np.copy(self.A)
         else:
             self.i_fix += 1
-
-        #If using approximate Jacobian, update the approximation.
-        if self.use_approx_J:
-            self.update_J_approx()
 
     def get_sg_target(self):
         """Function for generating the target for training A. Implements Eq. (3)
@@ -936,94 +935,7 @@ class DNI(Learning_Algorithm):
         #Final result of Eq. (2)
         return np.multiply.outer(self.sg_scaled, self.a_hat)
 
-class BPTT(Learning_Algorithm):
-
-    def __init__(self, net, t1, t2, monitors=[], use_historical_W=False):
-
-        super().__init__(net, monitors)
-
-        #The two integer parameters
-        self.t1  = t1    #Number of steps to average loss over
-        self.t2  = t2    #Number of steps to propagate backwards
-        self.T   = t1+t2 #Total amount of net hist needed to memorize
-        self.use_historical_W = use_historical_W
-
-        #Lists storing relevant net history
-        self.h_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
-        self.a_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
-        self.e_hist = [np.zeros(self.net.n_out) for _ in range(t1)]
-        self.x_hist = [np.zeros(self.net.n_in) for _ in range(self.T)]
-        self.W_rec_hist = [self.net.W_rec for _ in range(self.T)]
-
-    def update_learning_vars(self):
-        '''
-        Must be run every time step to update storage of relevant history
-        '''
-
-        for attr in ['h', 'a', 'e', 'x', 'W_rec']:
-            self.__dict__[attr+'_hist'].append(getattr(self.net, attr))
-            del(self.__dict__[attr+'_hist'][0])
-
-    def __call__(self):
-        '''
-        Run only when grads are needed for the optimizer
-        '''
-
-        W_out_grad = [np.multiply.outer(self.e_hist[-i],self.a_hist[-i]) for i in range(1, self.t1+1)]
-        self.W_out_grad = sum(W_out_grad)/self.t1
-
-        b_out_grad = [self.e_hist[-i] for i in range(1, self.t1+1)]
-        self.b_out_grad = sum(b_out_grad)/self.t1
-
-        self.outer_grads = [self.W_out_grad, self.b_out_grad]
-
-        get_a_J = self.net.get_a_jacobian
-
-        if self.use_historical_W:
-
-            self.a_Js = [get_a_J(update=False,
-                         h=self.h_hist[-i],
-                         h_prev=self.h_hist[-(i+1)],
-                         W_rec=self.W_rec_hist[-i]) for i in range(1, self.T)]
-        else:
-
-            self.a_Js = [get_a_J(update=False,
-                         h=self.h_hist[-i],
-                         h_prev=self.h_hist[-(i+1)],
-                         W_rec=self.net.W_rec) for i in range(1, self.T)]
-
-        n_h, n_in = self.net.n_h, self.net.n_in
-        self.rec_grad = np.zeros((n_h, n_h+n_in+1))
-
-        CA_list = []
-
-        for i in range(1, self.t1+1):
-
-            self.q = self.e_hist[-i].dot(self.net.W_out)
-
-            for j in range(self.t2):
-
-                self.J = np.eye(n_h)
-
-                for k in range(j):
-
-                    self.J = self.J.dot(self.a_Js[-(i+k)])
-
-                self.J = self.net.alpha*self.J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
-
-                self.pre_activity = np.concatenate([self.a_hist[-(i+j+1)], self.x_hist[-(i+j)], np.array([1])])
-                CA = self.q.dot(self.J)
-                CA_list.append(CA)
-                self.rec_grad += np.multiply.outer(CA, self.pre_activity)
-
-        self.credit_assignment = sum(CA_list)/len(CA_list)
-
-        grads = [self.rec_grad[:,:n_h], self.rec_grad[:,n_h:-1], self.rec_grad[:,-1]]
-        grads += self.outer_grads
-
-        return grads
-
-class BPTT_Triangles(Learning_Algorithm):
+class Efficient_BPTT(Learning_Algorithm):
 
     def __init__(self, net, T_truncation, **kwargs):
 
@@ -1101,7 +1013,7 @@ class BPTT_Triangles(Learning_Algorithm):
 
         pass
 
-class Forward_BPTT(Learning_Algorithm):
+class Future_BPTT(Learning_Algorithm):
 
     def __init__(self, net, T_truncation, **kwargs):
 
@@ -1124,23 +1036,7 @@ class Forward_BPTT(Learning_Algorithm):
         self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
         self.a_hat_hist.append(np.copy(self.a_hat))
         self.h_hist.append(np.copy(self.net.h))
-
         self.propagate_feedback_to_hidden()
-
-#        for i_CA in range(len(self.CA_hist)):
-#
-#            q = np.copy(self.q)
-#            #J = np.eye(self.n_h)
-#
-#            for i_BP in range(i_CA):
-#
-#                J = self.net.get_a_jacobian(update=False,
-#                                            h=self.h_hist[-(i_BP+1)])
-#                q = q.dot(J)
-#                #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
-#
-#            #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
-#            self.CA_hist[-(i_CA + 1)] += q
 
         q = np.copy(self.q)
 
@@ -1150,10 +1046,6 @@ class Forward_BPTT(Learning_Algorithm):
             J = self.net.get_a_jacobian(update=False,
                                         h=self.h_hist[-(i_BP+1)])
             q = q.dot(J)
-            #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
-
-        #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
-
 
     def get_rec_grads(self):
 

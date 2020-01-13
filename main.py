@@ -37,12 +37,13 @@ if os.environ['HOME']=='/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(algorithm=['Only_Output_Weights',
-                                                'RTRL', 'UORO', 'KF-RTRL', 'R-KF-RTRL',
-                                                'BPTT', 'DNI', 'DNIb',
-                                                'RFLO', 'KeRNL'],
-                                     alpha=[1, 0.5],
-                                     task=['Coin', 'Mimic'])
+#    macro_configs = config_generator(algorithm=['Only_Output_Weights',
+#                                                'RTRL', 'UORO', 'KF-RTRL', 'R-KF-RTRL',
+#                                                'BPTT', 'DNI', 'DNIb',
+#                                                'RFLO', 'KeRNL'],
+#                                     alpha=[1, 0.5],
+#                                     task=['Coin', 'Mimic'])
+    macro_configs = config_generator(algorithm=['DNI', 'DNIb'])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -62,13 +63,9 @@ if os.environ['HOME']=='/Users/omarschall':
 
 
 #task = Sensorimotor_Mapping(t_report=15, report_duration=4)
-task = Add_Task(6, 10, deterministic=True, tau_task=1)
-task.time_steps_per_trial = 60
-task.trial_mask = np.ones(task.time_steps_per_trial)
-#task = Sine_Wave(p_transition=0.05, frequencies=[0.03, 0.1, 0.01], method='regular',
-#                 never_off=False)
+task = Add_Task(5, 9, deterministic=True, tau_task=1)
 
-data = task.gen_data(80000, 1000)
+data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -91,8 +88,8 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.0005)
-SG_optimizer = SGD(lr=0.005)
+optimizer = SGD(lr=0.0001)
+SG_optimizer = SGD(lr=0.05)
 
 
 if params['algorithm'] == 'Only_Output_Weights':
@@ -100,43 +97,25 @@ if params['algorithm'] == 'Only_Output_Weights':
 if params['algorithm'] == 'RTRL':
     learn_alg = RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Forward_BPTT(rnn, 20)
+    learn_alg = Future_BPTT(rnn, 20)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
-    W_a_lr = 0.001
-    learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, W_a_lr=W_a_lr,
+    J_lr = 0.01
+    learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
                     SG_label_activation=tanh, W_FB=W_FB)
     learn_alg.name = 'DNIb'
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
 
-
-learn_alg = Reward_Modulated_Hebbian_Plasticity(rnn, alpha=alpha, task=task,
-                                                fixed_modulation=None)
-learn_alg = UORO(rnn)
-#learn_alg = Only_Output_Weights(rnn)
-J_lr = 0.005
-learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
-                SG_label_activation=tanh, W_FB=W_FB)
-#learn_alg.name = 'DNIb'
-#learn_alg = COLIN(rnn, decay=0.2, sigma=0.1, task=task)
-#learn_alg = Only_Output_Weights(rnn)
 comp_algs = []
-
-A = np.random.normal(0, 10, n_hidden)
-B = np.random.normal(0, 10, (n_hidden, n_hidden + n_in + 1))
-learn_alg = UORO(rnn, A=A, B=B)
 
 monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
             'learn_alg.running_loss_avg', 'net.W_rec',
             'learn_alg.modulation']
-monitors = ['net.loss_', 'net.y_hat', 'learn_alg.A-norm', 'learn_alg.B-norm']
+monitors = ['net.loss_']#, 'learn_alg.A-norm', 'learn_alg.B-norm']
 
-sim = Simulation(rnn,
-                 time_steps_per_trial=task.time_steps_per_trial,
-                 reset_sigma=None,
-                 trial_mask=task.trial_mask)
+sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
@@ -145,12 +124,18 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         check_loss=True,
         sigma=0.03)
 
+#Filter losses
+loss = sim.mons['net.loss_']
+downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
+filtered_loss = uniform_filter1d(downsampled_loss, 10)
+processed_data = {'filtered_loss': filtered_loss}
+
 if os.environ['HOME']=='/Users/omarschall':
 
 
     plot_filtered_signals([sim.mons['net.loss_'],
-                           sim.mons['learn_alg.A-norm'],
-                           sim.mons['learn_alg.B-norm']])
+                           sim.mons['learn_alg.A_loss'],
+                           sim.mons['learn_alg.J_loss']])
 
     #Test run
     np.random.seed(2)
