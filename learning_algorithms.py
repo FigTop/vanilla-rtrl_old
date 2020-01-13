@@ -936,86 +936,98 @@ class DNI(Learning_Algorithm):
         return np.multiply.outer(self.sg_scaled, self.a_hat)
 
 class Efficient_BPTT(Learning_Algorithm):
+    """Implements the 'E-BPTT' version of backprop we discuss in the paper for
+    an RNN.
+
+    We describe in more detail in the paper. In brief, the network activity is
+    'unrolled' for T_trunction time steps in non-overlapping intervals. The
+    gradient for each interval is computed using the future-facing relation
+    from Section 2. Thus 'update_learning_vars' is called at every step to
+    update the memory of relevant network variables, while get_rec_grads only
+    returns non-zero elements every T_truncation time steps."""
 
     def __init__(self, net, T_truncation, **kwargs):
+        """Inits an instance of Efficient_BPTT by specifying the network to
+        train and the truncation horizon. No default allowable kwargs."""
 
-        self.name = 'BPTT_Triangles'
+        self.name = 'E-BPTT'
         allowed_kwargs_ = set()
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         self.T_truncation = T_truncation
 
-        self.CA_hist = [np.zeros(self.n_h)]*T_truncation
-        self.a_hat_hist = [np.zeros(self.m)]*T_truncation
-        self.h_hist = [np.zeros(self.n_h)]*T_truncation
-        self.q_hist = [np.zeros(self.n_h)]*T_truncation
-
-        self.i_t = 0
+        # Initialize lists for storing network data
+        self.a_hat_history = []
+        self.h_history = []
+        self.q_history = []
 
     def update_learning_vars(self):
+        """Updates the memory of the algorithm with the relevant network
+        variables for running E-BPTT."""
 
-
-        #Update history
-        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        # Add latest values to list
+        self.a_hat_history.insert(0, np.concatenate([self.net.a_prev,
+                                                     self.net.x,
+                                                     np.array([1])]))
+        self.h_history.insert(0, self.net.h)
         self.propagate_feedback_to_hidden()
-
-        self.a_hat_hist[self.i_t] = np.copy(self.a_hat)
-        self.h_hist[self.i_t] = np.copy(self.net.h)
-        self.q_hist[self.i_t] = np.copy(self.q)
-
-        self.i_t += 1
-        if self.i_t == self.T_truncation:
-            self.i_t = 0
-
-
-
-        for i_CA in range(len(self.CA_hist)):
-
-            q = np.copy(self.q)
-            #J = np.eye(self.n_h)
-
-            for i_BP in range(i_CA):
-
-                J = self.net.get_a_jacobian(update=False,
-                                            h=self.h_hist[-(i_BP+1)])
-                q = q.dot(J)
-                #J = J.dot(self.net.get_a_jacobian(update=False, h=self.h_hist[-(i_BP+1)]))
-
-            #self.CA_hist[-(i_CA + 1)] += self.q.dot(J)
-            self.CA_hist[-(i_CA + 1)] += q
+        self.q_history.insert(0, self.q)
 
     def get_rec_grads(self):
+        """Using the accumulated history of q, h and a_hat values over the
+        truncation interval, computes the recurrent gradient.
 
-        if self.i_t > 0:
+        Returns:
+            rec_grads (numpy array): Array of shape (n_h, m) representing
+                the gradient dL/dW after truncation interval completed,
+                otherwise an array of 0s of the same shape."""
 
-            rec_grads = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+        #Once a 'triangle' is formed (see Fig. 3 in paper), compute gradient.
+        if len(self.a_hat_history) >= self.T_truncation:
+
+            #Initialize recurrent grads at 0
+            rec_grads = np.zeros((self.n_h, self.m))
+            #Start with most recent credit assignment value
+            c = self.q_history.pop(0)
+
+            for i_BPTT in range(self.T_truncation):
+
+                # Access present values of h and a_hat
+                h = self.h_history.pop(0)
+                a_hat = self.a_hat_history.pop(0)
+
+                #Use to get gradients w.r.t. weights from credit assignment
+                D = self.net.activation.f_prime(h)
+                rec_grads += np.multiply.outer(c * D, a_hat)
+
+                if i_BPTT == self.T_truncation - 1: #Skip if at end
+                    continue
+
+                #Use future-facing relation to backpropagate by one time step.
+                q = self.q_history.pop(0)
+                J = self.net.get_a_jacobian(h=h, update=False)
+                c = q + c.dot(J)
+
+            return rec_grads
 
         else:
 
-            pass
-
-        if len(self.CA_hist)==self.T_truncation:
-
-            self.net.CA = np.copy(self.CA_hist[0])
-
-            self.D = self.net.activation.f_prime(self.h_hist[0])
-            rec_grads = np.multiply.outer(self.net.CA*self.D, self.a_hat_hist[0])
-
-            self.delete_history()
-
-        else:
-
-            pass
-
-        return rec_grads
-
-    def reset_learning(self):
-
-        pass
+            return np.zeros((self.n_h, self.m))
 
 class Future_BPTT(Learning_Algorithm):
+    """Implements the 'F-BPTT' version of backprop we discuss in the paper for
+    an RNN.
+
+    Although more expensive than E-BPTT by a factor of the truncation horizon,
+    this version covers more 'loss-parmaeter sensitivity' terms in Fig. 3 and
+    produces, at each time step, an approximate 'future-facing' gradient up to
+    truncation that can be used for comparison with other algorithm's outputs.
+
+    Details of computation are in paper."""
 
     def __init__(self, net, T_truncation, **kwargs):
+        """Inits an instance of Future_BPTT by specifying the network to
+        train and the truncation horizon. No default allowable kwargs."""
 
         self.name = 'F-BPTT'
         allowed_kwargs_ = set()
@@ -1023,57 +1035,54 @@ class Future_BPTT(Learning_Algorithm):
 
         self.T_truncation = T_truncation
 
-        self.CA_hist = []
-        self.a_hat_hist = []
-        self.h_hist = []
+        self.c_history = []
+        self.a_hat_history = []
+        self.h_history = []
 
     def update_learning_vars(self):
-
-        #Initialize new credit assignment for current time step
-        self.CA_hist.append([0])
+        """Updates the list of credit assignment vectors by appending the
+        immediate credit assignment to the front and adding appropriately
+        backpropagated errors to all of the rest."""
 
         #Update history
-        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        self.a_hat_hist.append(np.copy(self.a_hat))
-        self.h_hist.append(np.copy(self.net.h))
+        self.a_hat_history.insert(0, np.concatenate([self.net.a_prev,
+                                                     self.net.x,
+                                                     np.array([1])]))
+        self.h_history.insert(0, self.net.h)
+
         self.propagate_feedback_to_hidden()
-
         q = np.copy(self.q)
+        self.c_history.insert(0, q)
+        for i_BPTT in range(1, len(self.c_history)):
 
-        for i_BP in range(len(self.CA_hist)):
-
-            self.CA_hist[-(i_BP + 1)] += q
-            J = self.net.get_a_jacobian(update=False,
-                                        h=self.h_hist[-(i_BP+1)])
+            #self.c_history[i_BPTT] += q
+            h = self.h_history[i_BPTT]
+            J = self.net.get_a_jacobian(h=h, update=False)
             q = q.dot(J)
+            self.c_history[i_BPTT] += q
 
     def get_rec_grads(self):
 
-        if len(self.CA_hist)==self.T_truncation:
+        if len(self.c_history)==self.T_truncation:
 
-            self.net.CA = np.copy(self.CA_hist[0])
+            c = self.c_history.pop(-1)
+            h = self.h_history.pop(-1)
+            a_hat = self.a_hat_history.pop(-1)
 
-            self.D = self.net.activation.f_prime(self.h_hist[0])
-            rec_grads = np.multiply.outer(self.net.CA*self.D, self.a_hat_hist[0])
-
-            self.delete_history()
+            D = self.net.activation.f_prime(h)
+            rec_grads = np.multiply.outer(c * D, a_hat)
 
         else:
 
-            rec_grads = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+            rec_grads = np.zeros((self.n_h, self.m))
 
         return rec_grads
 
     def reset_learning(self):
 
-        self.CA_hist = []
-        self.a_hat_hist = []
-        self.h_hist = []
-
-    def delete_history(self):
-
-        for attr in ['CA', 'a_hat', 'h']:
-            del(self.__dict__[attr+'_hist'][0])
+        self.c_history = []
+        self.a_hat_history = []
+        self.h_history = []
 
 class KeRNL(Learning_Algorithm):
 

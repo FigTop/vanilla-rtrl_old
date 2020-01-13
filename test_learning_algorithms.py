@@ -484,6 +484,76 @@ class Test_Future_BPTT(unittest.TestCase):
         cls.rnn.y_prev = np.ones(2) * 0.5
         cls.rnn.y = np.ones(2) * 2
 
+class Test_Efficient_BPTT(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+        cls.rnn.y_prev = np.ones(2) * 0.5
+        cls.rnn.y = np.ones(2) * 2
+
+    def test_update_learning_vars(self):
+
+        self.learn_alg = Efficient_BPTT(self.rnn, T_truncation=3)
+        self.learn_alg.update_learning_vars()
+        self.rnn.h = np.array([0.5, 0.5])
+        self.learn_alg.update_learning_vars()
+
+        correct_a_hat_history = [np.array([1, 1, 2, 2, 1]),
+                                 np.array([1, 1, 2, 2, 1])]
+        correct_h_history = [np.array([0.5, 0.5]),
+                             np.array([1, 1])]
+        correct_q_history = [np.array([0.5, 0.5]),
+                             np.array([0.5, 0.5])]
+
+        assert_allclose(self.learn_alg.a_hat_history[0],
+                        correct_a_hat_history[0])
+        assert_allclose(self.learn_alg.h_history[0],
+                        correct_h_history[0])
+        assert_allclose(self.learn_alg.q_history[0],
+                        correct_q_history[0])
+
+    def test_get_rec_grads(self):
+
+        self.learn_alg = Efficient_BPTT(self.rnn, T_truncation=2)
+        self.learn_alg.a_hat_history = [np.array([1, 1, 2, 2, 1])]
+        self.learn_alg.h_history = [np.array([1, 1])]
+        self.learn_alg.q_history = [np.array([1, 1])]
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_rec_grads = np.zeros((2, 5))
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+        self.learn_alg.a_hat_history = [np.array([1, 1, 2, 2, 1])] * 2
+        self.learn_alg.h_history = [np.array([1, 1])] * 2
+        self.learn_alg.q_history = [np.array([1, 1]),
+                                    np.array([-0.5, -0.5])]
+
+        rec_grads = self.learn_alg.get_rec_grads()
+
+        correct_rec_grads = np.array([[1.5, 1.5, 3, 3, 1.5],
+                                      [1.5, 1.5, 3, 3, 1.5]])
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+
 # class Test_Learning_Algorithm(unittest.TestCase):
 #
 #     @classmethod

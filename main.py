@@ -65,7 +65,7 @@ if os.environ['HOME']=='/Users/omarschall':
 #task = Sensorimotor_Mapping(t_report=15, report_duration=4)
 task = Add_Task(5, 9, deterministic=True, tau_task=1)
 
-data = task.gen_data(1000000, 5000)
+data = task.gen_data(10000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -88,7 +88,7 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = SGD(lr=0.0001)
+optimizer = SGD(lr=0.001)
 SG_optimizer = SGD(lr=0.05)
 
 
@@ -114,6 +114,8 @@ monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
             'learn_alg.running_loss_avg', 'net.W_rec',
             'learn_alg.modulation']
 monitors = ['net.loss_']#, 'learn_alg.A-norm', 'learn_alg.B-norm']
+
+learn_alg = Future_BPTT(rnn, 10)
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
