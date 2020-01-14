@@ -180,7 +180,8 @@ class Only_Output_Weights(Learning_Algorithm):
         return np.zeros((self.n_h, self.m))
 
 class RTRL(Learning_Algorithm):
-    """Implements the Real-Time Recurrent Learning (RTRL) algorithm.
+    """Implements the Real-Time Recurrent Learning (RTRL) algorithm from
+    Williams and Zipser 1989.
 
     RTRL maintains a long-term "influence matrix" dadw that represents the
     derivative of the hidden state with respect to a flattened vector of
@@ -189,7 +190,7 @@ class RTRL(Learning_Algorithm):
     the columns end-to-end. In other words, w_k = W_{ij} when i = k%n_h and
     j = k//n_h. The influence matrix updates according to the equation
 
-    M' = JM + M_immediate       (1)
+    M' = JM + M_immediate                            (1)
 
     where J is the network Jacobian and M_immediate is the immediate influence
     of a parameter w on the hidden state a. (See paper for more detailed
@@ -203,7 +204,7 @@ class RTRL(Learning_Algorithm):
     Finally, the algorithm returns recurrent gradients by projecting the
     feedback vector q onto the influence matrix M:
 
-    dL/dw = dL/da da/dw = qM        (2)
+    dL/dw = dL/da da/dw = qM                         (2)
 
     Eq. (2) is implemented in the get_rec_grads method."""
 
@@ -257,11 +258,12 @@ class Stochastic_Algorithm(Learning_Algorithm):
         return nu
 
 class UORO(Stochastic_Algorithm):
-    """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm.
+    """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm
+    from Tallec et al. 2017.
 
-    Full details in our review paper or in original Tallec et al. 2017. Broadly,
-    an outer product approximation of M is maintained by 2 vectors A and B,
-    which update by the equations
+    Full details in our review paper or in original paper. Broadly, an outer
+    product approximation of M is maintained by 2 vectors A and B, which update
+    by the equations
 
     A' = p0 J A + p1 \nu        (1)
     B' = 1/p0 B + 1/p1 \nu M_immediate      (2)
@@ -413,7 +415,7 @@ class UORO(Stochastic_Algorithm):
 
 class KF_RTRL(Stochastic_Algorithm):
     """Implements the Kronecker-Factored Real-Time Recurrent Learning Algorithm
-    (KF-RTRL).
+    (KF-RTRL) from Mujika et al. 2018.
 
     Details in review paper or original Mujika et al. 2018. Broadly, M is
     approximated as a Kronecker product between a (row) vector A and a matrix
@@ -668,7 +670,7 @@ class Reverse_KF_RTRL(Stochastic_Algorithm):
 
 class RFLO(Learning_Algorithm):
     """Implements the Random-Feedback Local Online learning algorithm (RFLO)
-    from Murray (2019).
+    from Murray 2019.
 
     Maintains an eligibility trace B that is updated by temporally filtering
     the immediate influences \phi'(h_i) a_hat_j by the network's inverse time
@@ -729,11 +731,13 @@ class RFLO(Learning_Algorithm):
         self.B *= 0
 
 class DNI(Learning_Algorithm):
-    """Implements the Decoupled Neural Interface (DNI) algorithm for an RNN.
+    """Implements the Decoupled Neural Interface (DNI) algorithm for an RNN from
+    Jaderberg et al. 2017.
 
-    Details are in Jaderberg et al. (2017). Briefly, we linearly approximate
-    the (future-facing) credit assignment vector c = dL/da by the variable
-    'sg' for 'synthetic gradient' (of shape (n_h)) using
+    Details are in our review, original paper, or Czarnecki et al. 2017.
+    Briefly, we linearly approximate the (future-facing) credit assignment
+    vector c = dL/da by the variable 'sg' for 'synthetic gradient'
+    (of shape (n_h)) using
 
     c ~ sg = A a_tilde                                                     (1)
 
@@ -1102,6 +1106,14 @@ class Future_BPTT(Learning_Algorithm):
         self.h_history = []
 
 class KeRNL(Learning_Algorithm):
+    """Implements the Kernel RNN Learning (KeRNL) algorithm from Roth et al.
+    2019.
+
+    Details in original paper, but briefly, a matrix A of shape (n_h, n_h) and
+    an eligibility trace B of shape (n_h, n_m) are both maintained to
+    approximate the influence matrix as M_{kij} ~ A_{ki} B_{ij}. In addition,
+    a set of n_h learned timescales \alpha_i are maintained.
+    """
 
     def __init__(self, net, optimizer, sigma_noise=0.00001,
                  use_approx_kernel=False, learned_alpha_e=False,

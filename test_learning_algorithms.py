@@ -614,87 +614,95 @@ class Test_Future_BPTT(unittest.TestCase):
 
         assert_allclose(rec_grads, correct_rec_grads)
 
-# class Test_Learning_Algorithm(unittest.TestCase):
-#
-#     @classmethod
-#     def setUpClass(cls):
-#         """Initializes task data and params so that simulations can be run."""
-#
-#         cls.task = Add_Task(4, 6, deterministic=True, tau_task=4)
-#         cls.data = cls.task.gen_data(50, 50)
-#
-#         n_in = cls.task.n_in
-#         n_h = 16
-#         n_out = cls.task.n_out
-#
-#         cls.W_in = np.random.normal(0, np.sqrt(1/(n_in)), (n_h, n_in))
-#         M_rand = np.random.normal(0, 1, (n_h, n_h))
-#         cls.W_rec = np.linalg.qr(M_rand)[0]
-#         cls.W_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
-#         cls.W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_h))
-#
-#         cls.b_rec = np.zeros(n_h)
-#         cls.b_out = np.zeros(n_out)
-#
-#     def test_forward_bptt(self):
-#         """Verifies that BPTT algorithm gives same aggregate weight change as
-#         RTRL for a very small learning rate, while also checking that the
-#         recurrent weights did change some amount (i.e. learning rate not *too*
-#         small)."""
-#
-#         self.data = self.task.gen_data(400, 10)
-#
-#         alpha = 1
-#
-#         self.rnn_1 = RNN(self.W_in, self.W_rec, self.W_out,
-#                          self.b_rec, self.b_out,
-#                          activation=tanh,
-#                          alpha=alpha,
-#                          output=softmax,
-#                          loss=softmax_cross_entropy)
-#
-#         self.rnn_2 = RNN(self.W_in, self.W_rec, self.W_out,
-#                          self.b_rec, self.b_out,
-#                          activation=tanh,
-#                          alpha=alpha,
-#                          output=softmax,
-#                          loss=softmax_cross_entropy)
-#
-#         np.random.seed(1)
-#         self.optimizer_1 = SGD(lr=0.000001)
-#         self.learn_alg_1 = RTRL(self.rnn_1)
-#         np.random.seed(1)
-#         self.optimizer_2 = SGD(lr=0.000001)
-#         self.learn_alg_2 = Forward_BPTT(self.rnn_2, 15)
-#
-#         monitors = []
-#
-#         np.random.seed(2)
-#         self.sim_1 = Simulation(self.rnn_1)
-#         self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
-#                        optimizer=self.optimizer_1,
-#                        monitors=monitors,
-#                        verbose=False)
-#
-#         np.random.seed(2)
-#         self.sim_2 = Simulation(self.rnn_2)
-#         self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
-#                        optimizer=self.optimizer_2,
-#                        monitors=monitors,
-#                        verbose=False)
-#
-#         #print(self.W_rec[0, 0], '/n', self.rnn_1.W_rec[0, 0], '/n', self.rnn_2.W_rec[0, 0])
-#
-#         #Assert networks learned similar weights with a small tolerance.
-#         #assert_allclose(self.rnn_1.W_rec,
-#         #                           self.rnn_2.W_rec, atol=1e-5))
-#         #Assert networks' parameters changed appreciably, despite a large
-#         #tolerance for closeness.
-#         #self.assertFalse(assert_allclose(self.W_rec,
-#         #                            self.rnn_2.W_rec, atol=1e-4))
-#
-#
-#
+class Test_Exact_Learning_Algorithms(unittest.TestCase):
+    """Verifies that BPTT algorithms gives same aggregate weight change as
+    RTRL for a very small learning rate, while also checking that the
+    recurrent weights did change some amount (i.e. learning rate not *too*
+    small that this is trivially true)."""
+
+    @classmethod
+    def setUpClass(cls):
+
+        cls.task = Add_Task(4, 6, deterministic=True, tau_task=1)
+        cls.data = cls.task.gen_data(400, 0)
+
+        n_in = cls.task.n_in
+        n_h = 16
+        n_out = cls.task.n_out
+
+        cls.W_in = np.random.normal(0, np.sqrt(1/(n_in)), (n_h, n_in))
+        M_rand = np.random.normal(0, 1, (n_h, n_h))
+        cls.W_rec = np.linalg.qr(M_rand)[0]
+        cls.W_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
+        cls.W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_h))
+
+        cls.b_rec = np.zeros(n_h)
+        cls.b_out = np.zeros(n_out)
+
+    def test_small_lr_case(self):
+
+            alpha = 1
+
+            self.rnn_1 = RNN(self.W_in, self.W_rec, self.W_out,
+                             self.b_rec, self.b_out,
+                             activation=tanh,
+                             alpha=alpha,
+                             output=softmax,
+                             loss=softmax_cross_entropy)
+
+            self.rnn_2 = RNN(self.W_in, self.W_rec, self.W_out,
+                             self.b_rec, self.b_out,
+                             activation=tanh,
+                             alpha=alpha,
+                             output=softmax,
+                             loss=softmax_cross_entropy)
+
+            self.rnn_3 = RNN(self.W_in, self.W_rec, self.W_out,
+                             self.b_rec, self.b_out,
+                             activation=tanh,
+                             alpha=alpha,
+                             output=softmax,
+                             loss=softmax_cross_entropy)
+
+            lr = 0.00001
+            self.optimizer_1 = SGD(lr=lr)
+            self.learn_alg_1 = RTRL(self.rnn_1)
+            self.optimizer_2 = SGD(lr=lr)
+            self.learn_alg_2 = Future_BPTT(self.rnn_2, 25)
+            self.optimizer_3 = SGD(lr=lr)
+            self.learn_alg_3 = Efficient_BPTT(self.rnn_3, 100)
+
+            monitors = []
+
+            np.random.seed(1)
+            self.sim_1 = Simulation(self.rnn_1)
+            self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
+                           optimizer=self.optimizer_1,
+                           monitors=monitors,
+                           verbose=False)
+
+            np.random.seed(1)
+            self.sim_2 = Simulation(self.rnn_2)
+            self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
+                           optimizer=self.optimizer_2,
+                           monitors=monitors,
+                           verbose=False)
+
+            np.random.seed(1)
+            self.sim_3 = Simulation(self.rnn_3)
+            self.sim_3.run(self.data, learn_alg=self.learn_alg_3,
+                           optimizer=self.optimizer_3,
+                           monitors=monitors,
+                           verbose=False)
+
+            #Assert networks learned similar weights with a small tolerance.
+            assert_allclose(self.rnn_1.W_rec, self.rnn_2.W_rec, atol=1e-4)
+            assert_allclose(self.rnn_2.W_rec, self.rnn_3.W_rec, atol=1e-4)
+            #But that there was some difference from initialization
+            self.assertFalse(np.isclose(self.rnn_1.W_rec,
+                                        self.W_rec, atol=1e-4).all())
+
+
 #     def test_kernl_reduce_rflo(self):
 #         """Verifies that KeRNL reduces to RFLO in special case.
 #
