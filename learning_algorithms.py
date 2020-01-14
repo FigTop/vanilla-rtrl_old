@@ -1023,7 +1023,10 @@ class Future_BPTT(Learning_Algorithm):
     produces, at each time step, an approximate 'future-facing' gradient up to
     truncation that can be used for comparison with other algorithm's outputs.
 
-    Details of computation are in paper."""
+    Details of computation are in paper. When a credit assignment estimate is
+    calculated, the gradient is ultimately calculated according to
+
+    dL/dW_{ij} = c_i \phi'(h_i) a_hat_j                             (1)."""
 
     def __init__(self, net, T_truncation, **kwargs):
         """Inits an instance of Future_BPTT by specifying the network to
@@ -1040,35 +1043,48 @@ class Future_BPTT(Learning_Algorithm):
         self.h_history = []
 
     def update_learning_vars(self):
-        """Updates the list of credit assignment vectors by appending the
-        immediate credit assignment to the front and adding appropriately
-        backpropagated errors to all of the rest."""
+        """Updates the list of credit assignment vectors according to Section
+        4.1.2 in the paper.
+
+        First updates relevant history with latest network variables
+        a_hat, h and q. Then backpropagates the latest q to each previous time
+        step, adding the result to each previous credit assignment estimate."""
 
         #Update history
         self.a_hat_history.insert(0, np.concatenate([self.net.a_prev,
                                                      self.net.x,
                                                      np.array([1])]))
         self.h_history.insert(0, self.net.h)
-
         self.propagate_feedback_to_hidden()
         q = np.copy(self.q)
+        #Add immediate credit assignment to front of list
         self.c_history.insert(0, q)
+
+        #Loop over truncation horizon and backpropagate q, pausing along way to
+        #update credit assignment estimates
         for i_BPTT in range(1, len(self.c_history)):
 
-            #self.c_history[i_BPTT] += q
-            h = self.h_history[i_BPTT]
+            h = self.h_history[i_BPTT - 1]
             J = self.net.get_a_jacobian(h=h, update=False)
             q = q.dot(J)
             self.c_history[i_BPTT] += q
 
     def get_rec_grads(self):
+        """Removes the oldest credit assignment value from the c_history list
+        and uses it to produce recurrent gradients according to Eq. (1).
 
-        if len(self.c_history)==self.T_truncation:
+        Note: for the first several time steps of the simulation, before
+        self.c_history fills up to T_truncation size, 0s are returned for
+        the recurrent gradients."""
 
+        if len(self.c_history) >= self.T_truncation:
+
+            #Remove oldest c, h and a_hat from lists
             c = self.c_history.pop(-1)
             h = self.h_history.pop(-1)
             a_hat = self.a_hat_history.pop(-1)
 
+            #Implement Eq. (1)
             D = self.net.activation.f_prime(h)
             rec_grads = np.multiply.outer(c * D, a_hat)
 
@@ -1079,6 +1095,7 @@ class Future_BPTT(Learning_Algorithm):
         return rec_grads
 
     def reset_learning(self):
+        """Resets learning by deleting network variable history."""
 
         self.c_history = []
         self.a_hat_history = []
@@ -1196,176 +1213,6 @@ class KeRNL(Learning_Algorithm):
         self.Omega = np.zeros_like(self.Omega)
         self.Gamma = np.zeros_like(self.Gamma)
         self.eligibility = np.zeros_like(self.eligibility)
-
-class Random_Walk_RTRL(Learning_Algorithm):
-    """Algorithm idea combining tensor structure of KeRNL with stochastic
-    update principles of KF-RTRL."""
-
-    def __init__(self, net, rho_A=1, rho_B=1, gamma=0.5, **kwargs):
-
-        self.name = 'RW-RTRL'
-        allowed_kwargs_ = set()
-        super().__init__(net, allowed_kwargs_, **kwargs)
-
-        self.gamma = gamma
-        self.rho_A = rho_A
-        self.rho_B = rho_B
-        self.A = np.zeros((self.n_h, self.m))
-        self.B = np.zeros((self.n_h, self.n_h))
-
-    def update_learning_vars(self):
-
-        self.net.get_a_jacobian()
-        a_J = self.net.a_J
-
-        self.nu = np.random.choice([-1, 1], self.n_h)
-
-        self.a_hat = np.concatenate([self.net.a_prev,
-                                     self.net.x,
-                                     np.array([1])])
-        self.D = self.net.activation.f_prime(self.net.h)
-
-        self.e_ij = np.multiply.outer(self.D**(1-self.gamma),
-                                      self.a_hat)
-        self.e_ki = np.diag(self.net.alpha * self.D**self.gamma)
-
-        self.A = self.A + (self.nu * (self.rho_A * self.e_ij).T).T
-        self.B = a_J.dot(self.B) + self.nu*self.rho_B*self.e_ki
-
-    def get_rec_grads(self):
-
-        return (self.q.dot(self.B) * self.A.T).T
-
-class Reward_Modulated_Hebbian_Plasticity(Learning_Algorithm):
-    """Implements a reward-modulated Hebbian plasticity rule for *trial-
-    structured* tasks only (for now)."""
-
-    def __init__(self, net, alpha, task, **kwargs):
-
-        self.name = 'RM-Hebb'
-        allowed_kwargs_ = {'B', 'fixed_modulation'}
-        super().__init__(net, allowed_kwargs_, **kwargs)
-
-        self.alpha = alpha
-        if self.B is None:
-            self.B = np.zeros((self.n_h, self.m))
-
-        self.task = task
-
-        self.running_loss_avg = 0
-        self.i_t = 0
-
-    def update_learning_vars(self):
-        """Updates B by one time step of temporal filtration via the invesre
-        time constant alpha (see RFLO)."""
-
-        self.i_trial = self.i_t % self.task.time_steps_per_trial
-
-        #Get relevant values and derivatives from network
-        self.a_hat   = np.concatenate([self.net.a_prev,
-                                       self.net.x,
-                                       np.array([1])])
-        self.D = self.net.activation.f_prime(self.net.h)
-        self.M_immediate = self.alpha * np.multiply.outer(self.D,
-                                                          self.a_hat)
-
-        #Update eligibility traces
-        self.B = (1 - self.alpha) * self.B + self.M_immediate
-        #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
-        #                                                                    self.a_hat)
-
-        if self.task.trial_mask[self.i_trial] > 0.3:
-            #Update running loss average
-            self.running_loss_avg = 0.99 * self.running_loss_avg + 0.01 * self.net.loss_
-
-        self.i_t += 1
-
-    def get_rec_grads(self):
-        """Scales Hebbian plasticity rule by loss running average."""
-
-        if self.task.trial_mask[self.i_trial] > 0.3:
-            scale = 1
-        else:
-            scale = 0
-
-        if self.fixed_modulation is not None:
-            self.modulation = self.fixed_modulation
-        else:
-            self.modulation = scale * (self.net.loss_ - self.running_loss_avg)
-        return self.modulation * self.B
-
-    def reset_learning(self):
-        """Reset eligibility trace to 0."""
-
-        self.B *= 0
-
-class COLIN(Learning_Algorithm):
-    """Implements Cholinergic Operant Learning In Neurons"""
-
-    def __init__(self, net, decay, sigma, task, **kwargs):
-
-        self.name = 'COLIN'
-        allowed_kwargs_ = {'B', 'fixed_modulation'}
-        super().__init__(net, allowed_kwargs_, **kwargs)
-
-        self.decay = decay
-        if self.B is None:
-            self.B = np.zeros((self.n_h, self.m))
-
-        self.task = task
-        self.sigma = sigma
-        self.alpha_loss = 0.99
-        self.running_loss_avg = 0
-        self.i_t = 0
-
-    def update_learning_vars(self):
-        """Updates B by one time step of temporal filtration via the invesre
-        time constant alpha (see RFLO)."""
-
-        self.i_trial = self.i_t % self.task.time_steps_per_trial
-
-        #Get relevant values and derivatives from network
-        self.a_hat   = np.concatenate([self.net.a_prev,
-                                       self.net.x,
-                                       np.array([1])])
-        self.D = self.net.activation.f_prime(self.net.h)
-        self.D_noise = self.D * (self.net.noise/self.sigma**2)
-        #self.D_noise = self.D *(1/self.sigma**2)
-        #self.D_noise = self.D * (self.sigma*self.net.alpha/self.sigma**2)
-        self.M_immediate = self.net.alpha * np.multiply.outer(self.D_noise,
-                                                              self.a_hat)
-
-        #Update eligibility traces
-        #np.multiply.outer(self.net.noise/self.net.sigma, self.net.a_prev)
-        self.B = (1 - self.decay) * self.B + self.M_immediate
-        #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
-        #                                                                    self.a_hat)
-
-        if self.task.trial_mask[self.i_trial] > 0.3:
-            #Update running loss average
-            self.running_loss_avg = ((1 - self.alpha_loss) * self.running_loss_avg +
-                                     self.alpha_loss * self.net.loss_)
-
-        self.i_t += 1
-
-    def get_rec_grads(self):
-        """Scales Hebbian plasticity rule by loss running average."""
-
-        if self.task.trial_mask[self.i_trial] > 0.3:
-            scale = 1
-        else:
-            scale = 0
-
-        if self.fixed_modulation is not None:
-            self.modulation = self.fixed_modulation
-        else:
-            self.modulation = scale * (self.net.loss_ - self.running_loss_avg)
-        return self.modulation * self.B
-
-    def reset_learning(self):
-        """Reset eligibility trace to 0."""
-
-        self.B *= 0
 
 
 
