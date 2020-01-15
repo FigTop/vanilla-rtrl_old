@@ -37,13 +37,12 @@ if os.environ['HOME']=='/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-#    macro_configs = config_generator(algorithm=['Only_Output_Weights',
-#                                                'RTRL', 'UORO', 'KF-RTRL', 'R-KF-RTRL',
-#                                                'BPTT', 'DNI', 'DNIb',
-#                                                'RFLO', 'KeRNL'],
-#                                     alpha=[1, 0.5],
-#                                     task=['Coin', 'Mimic'])
-    macro_configs = config_generator(algorithm=['DNI', 'DNIb'])
+    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
+                                                'UORO', 'KF-RTRL', 'R-KF-RTRL',
+                                                'BPTT', 'DNI', 'DNIb',
+                                                'RFLO', 'KeRNL'],
+                                     alpha=[1, 0.5],
+                                     task=['Coin', 'Mimic'])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -55,17 +54,50 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'RTRL'}
+    params = {'algorithm': 'DNIb', 'alpha': 1, 'task': 'Coin'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
     np.random.seed()
 
 
-#task = Sensorimotor_Mapping(t_report=15, report_duration=4)
-task = Add_Task(5, 9, deterministic=True, tau_task=1)
+if params['alpha'] == 1:
+    n_1, n_2 = 5, 9
+    tau_task = 1
+if params['alpha'] == 0.5:
+    n_1, n_2 = 2, 4
+    tau_task = 2
 
-data = task.gen_data(10000, 5000)
+if params['task'] == 'Mimic':
+    
+    n_in = 32
+    n_hidden = 32
+    n_out = 32
+    
+    
+    
+    W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+    W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+    W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+    b_rec_target = np.random.normal(0, 0.1, n_hidden)
+    b_out_target = np.random.normal(0, 0.1, n_out)
+    
+    alpha = params['alpha']
+    
+    rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
+                     b_rec_target, b_out_target,
+                     activation=tanh,
+                     alpha=alpha,
+                     output=identity,
+                     loss=mean_squared_error)
+
+    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
+    
+elif params['task'] == 'Coin':
+    
+    task = Add_Task(n_1, n_2, deterministic=True, tau_task=tau_task)
+    
+data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
 n_hidden = 32
@@ -73,49 +105,62 @@ n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-#W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
-#W_rec = (W_rec + W_rec.T)/2
-#W_rec = 0.54*np.eye(n_hidden)
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 1
-rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-          activation=tanh,
-          alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+alpha = params['alpha']
 
-optimizer = SGD(lr=0.001)
-SG_optimizer = SGD(lr=0.05)
+if params['task'] == 'Coin':
+    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+              activation=tanh,
+              alpha=alpha,
+              output=softmax,
+              loss=softmax_cross_entropy)
 
+if params['task'] == 'Mimic':
+    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+              activation=tanh,
+              alpha=alpha,
+              output=identity,
+              loss=mean_squared_error)
+
+optimizer = SGD(lr=0.0001)
+SG_optimizer = SGD(lr=0.001)
+if params['alpha'] == 1 and params['task'] == 'Coin':
+    SG_optimizer = SGD(lr=0.05)
+KeRNL_optimizer = SGD(lr=5)
 
 if params['algorithm'] == 'Only_Output_Weights':
     learn_alg = Only_Output_Weights(rnn)
 if params['algorithm'] == 'RTRL':
     learn_alg = RTRL(rnn)
+if params['algorithm'] == 'UORO':
+    learn_alg = UORO(rnn)
+if params['algorithm'] == 'KF-RTRL':
+    learn_alg = KF_RTRL(rnn)
+if params['algorithm'] == 'R-KF-RTRL':
+    learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Future_BPTT(rnn, 20)
+    learn_alg = Future_BPTT(rnn, 10)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
-    J_lr = 0.01
+    J_lr = 0.001
+    if params['alpha'] == 1 and params['task'] == 'Coin':
+        J_lr = 0.01
     learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
                     SG_label_activation=tanh, W_FB=W_FB)
     learn_alg.name = 'DNIb'
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
+if params['algorithm'] == 'KeRNL':
+    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001)
 
 comp_algs = []
 
-monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr',
-            'learn_alg.running_loss_avg', 'net.W_rec',
-            'learn_alg.modulation']
-monitors = ['net.loss_']#, 'learn_alg.A-norm', 'learn_alg.B-norm']
-
-learn_alg = Future_BPTT(rnn, 10)
+monitors = ['net.loss_']
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -123,8 +168,7 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         monitors=monitors,
         verbose=True,
         check_accuracy=False,
-        check_loss=True,
-        sigma=0.03)
+        check_loss=True)
 
 #Filter losses
 loss = sim.mons['net.loss_']

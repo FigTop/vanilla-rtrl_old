@@ -8,8 +8,7 @@ Created on Mon Nov  5 12:54:56 2018
 
 from copy import copy
 import time
-from utils import (norm, classification_accuracy,
-                   normalized_dot_product, half_normalized_dot_product,
+from utils import (norm, classification_accuracy, normalized_dot_product,
                    get_spectral_radius, rgetattr)
 import numpy as np
 
@@ -241,10 +240,7 @@ class Simulation:
             self.i_trial = self.i_t//self.time_steps_per_trial
             if self.reset_sigma is not None:
                 self.net.reset_network(sigma=self.reset_sigma)
-                try:
-                    self.learn_alg.reset_learning()
-                except AttributeError:
-                    pass
+                self.learn_alg.reset_learning()
 
     def forward_pass(self, x, y):
         """Runs network forward, computes immediate losses and errors."""
@@ -388,7 +384,6 @@ class Simulation:
                 if feature in key:
                     attr = key.split('-')[0]
                     self.mons[key].append(func(rgetattr(self, attr)))
-                    #setattr(self, key, func(rgetattr(self, attr)))
 
     def save_best_model(self, data):
         """Runs a test simulation, compares loss to current best model, and
@@ -445,18 +440,19 @@ class Simulation:
             for i, key_i in enumerate(self.rec_grads_dict):
                 for j, key_j in enumerate(self.rec_grads_dict):
 
-                    if 'BPTT' in key_i:
+                    #For comparison with Future_BPTT, must lag gradients by
+                    #the truncation horizon
+                    if 'F-BPTT' in key_i:
                         i_index = -1
                     else:
                         i_index = 0
-                    if 'BPTT' in key_j:
+                    if 'F-BPTT' in key_j:
                         j_index = -1
                     else:
                         j_index = 0
 
                     g_i = self.rec_grads_dict[key_i][i_index]
                     g_j = self.rec_grads_dict[key_j][j_index]
-                    #alignment = half_normalized_dot_product(g_i, g_j)
                     alignment = normalized_dot_product(g_i, g_j)
                     self.alignment_matrix[i, j] = alignment
                     self.alignment_weights[i, j] = norm(g_i)*norm(g_j)
