@@ -1109,122 +1109,133 @@ class KeRNL(Learning_Algorithm):
     """Implements the Kernel RNN Learning (KeRNL) algorithm from Roth et al.
     2019.
 
-    Details in original paper, but briefly, a matrix A of shape (n_h, n_h) and
-    an eligibility trace B of shape (n_h, n_m) are both maintained to
-    approximate the influence matrix as M_{kij} ~ A_{ki} B_{ij}. In addition,
-    a set of n_h learned timescales \alpha_i are maintained.
-    """
+    Details in our review or original paper. Briefly, a matrix A of shape
+    (n_h, n_h) and an eligibility trace B of shape (n_h, m) are both
+    maintained to approximate the influence matrix as M_{kij} ~ A_{ki} B_{ij}.
+    In addition, a set of n_h learned timescales \alpha_i are maintained such
+    that da^{(t+ \Delta t)}_k/da^{(t)}_i ~ A_{ki} e^{-\alpha_i \Delta t}. These
+    approximations are updated at every time step. B is updated by temporally
+    filtering the immediate influence via the learned timescales
 
-    def __init__(self, net, optimizer, sigma_noise=0.00001,
-                 use_approx_kernel=False, learned_alpha_e=False,
-                 **kwargs):
+    B'_{ij} = (1 - \alpha_i) B_{ij} + \alpha \phi'(h_i) a_hat_j         (1)
+
+    while A and \alpha are updated by SGD on their ability to predict
+    perturbative effects. See Algorithm 1: Pseudocode on page 5 of Roth et al.
+    2019 for details."""
+
+    def __init__(self, net, optimizer, sigma_noise=0.00001, **kwargs):
+        """Inits an instance of KeRNL by specifying the optimizer used to train
+        the A and alpha values and a noise standard deviation for the
+        perturbations.
+
+        Args:
+            optimizer (optimizers.Optimizer): An instance of the Optimizer class
+                for the training of A and alpha.
+            sigma_noise (float): Standard deviation for the values, sampled
+                i.i.d. from a zero-mean Gaussian, used to perturb the network
+                state to noisy_net and thus estimate target predictions for
+                A and alpha.
+
+        Keyword args:
+            A (numpy array): Initial value of A matrix, must be of shape
+                (n_h, n_h). Default is identity.
+            B (numpy array): Initial value of B matrix, must be of shape
+                (n_h, m). Default is zeros.
+            alpha (numpy array): Initial value of learned timescales alpha,
+                must be of shape (n_h). Default is all 0.8.
+            Omega (numpy array): Initial value of filtered perturbations, must
+                be of shape (n_h). Default is 0.
+            Gamma (numpy array): Initial value of derivative of filtered
+                perturbations, must be of shape (n_h). Default is 0.
+            T_reset (int): Number of time steps between regular resets of
+                perturbed network to network state and Omega, Gamma, B variables
+                to 0. If unspecified, default is no resetting."""
 
         self.name = 'KeRNL'
-        self.n_h = net.n_h
-        self.n_in = net.n_in
+        allowed_kwargs_ = {'A', 'B', 'alpha', 'Omega', 'Gamma', 'T_reset'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
         self.i_t = 0
         self.sigma_noise = sigma_noise
         self.optimizer = optimizer
-        self.use_approx_kernel = use_approx_kernel
-        self.learned_alpha_e = learned_alpha_e
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
 
         #Initialize learning variables
-        #self.beta = np.random.normal(0, 1/np.sqrt(self.n_h), (self.n_h, self.n_h))
-        self.beta = np.eye(self.n_h)
-        #self.gamma = (1/10)**np.random.uniform(0, 2, self.n_h)
-        if use_approx_kernel:
-            self.gamma = np.ones(self.n_h)*0.8
-        else:
-            self.gamma = (1/10)**np.random.uniform(0, 2, self.n_h)
-        self.eligibility = np.zeros((self.n_h, self.n_h + self.n_in + 1))
-        self.Omega = np.zeros(self.n_h)
-        self.Gamma = np.zeros(self.n_h)
+        if self.A is None:
+            self.A = np.eye(self.n_h)
+        if self.B is None:
+            self.B = np.zeros((self.n_h, self.m))
+        if self.alpha is None:
+            self.alpha = np.ones(self.n_h) * 0.8
+        if self.Omega is None:
+            self.Omega = np.zeros(self.n_h)
+        if self.Gamma is None:
+            self.Gamma = np.zeros(self.n_h)
 
-        #Initialize noisy network
-        self.noisy_net = copy(net)
-
-        allowed_kwargs_ = {'beta', 'gamma', 'Omega',
-                           'Gamma', 'eligibility', 'T_reset'}
-        super().__init__(net, allowed_kwargs_, **kwargs)
-
-        if use_approx_kernel:
-            self.kernel = self.approx_kernel
-        else:
-            self.kernel = self.exact_kernel
-
-    def exact_kernel(self, delta_t):
-
-        return np.maximum(0, np.exp(-self.gamma*(delta_t)))
-
-    def approx_kernel(self, delta_t):
-
-        return np.maximum(0, 1 - self.gamma*delta_t)
+        #Initialize noisy network as copy of original network
+        self.noisy_net = copy(self.net)
 
     def update_learning_vars(self):
+        """Updates the matrices A and B, which are ultimately used to drive
+        learning. In the process also updates alpha, Omega, and Gamma."""
 
-        #if self.i_t > 0 and self.i_t%1000 == 0 and False:
-        #    set_trace()
-
-        #Observe Jacobian if desired:
-        self.J = self.net.get_a_jacobian(update=False)
-
-        #Update noisy net's parameters
-        self.noisy_net.W_rec = self.net.W_rec
-        self.noisy_net.W_in = self.net.W_in
-        self.noisy_net.b_rec = self.net.b_rec
-
-        #Update noisy net forward
+        #Reset learning variables if desired and on schedule to do so
         if self.T_reset is not None:
             if self.i_t % self.T_reset == 0:
                 self.reset_learning()
 
+        #Match noisy net's parameters to latest network parameters
+        self.noisy_net.W_rec = self.net.W_rec
+        self.noisy_net.W_in = self.net.W_in
+        self.noisy_net.b_rec = self.net.b_rec
+
+        #Run perturbed network forwards
         self.noisy_net.a += self.zeta
         self.noisy_net.next_state(self.net.x)
 
-        #Update learning varialbes
+        #Update learning variables (see Pseudocode in Roth et al. 2019)
+        self.kernel = np.maximum(0, 1 - self.alpha)
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
-        if self.use_approx_kernel:
-            self.Gamma = self.kernel(1)*self.Gamma - self.Omega
-        else:
-            self.Gamma = self.kernel(1)*(self.Gamma - self.Omega)
-        self.Omega = self.kernel(1)*self.Omega + (1 - self.kernel(1))*self.zeta
+        self.Gamma = self.kernel * self.Gamma - self.Omega
+        self.Omega = self.kernel * self.Omega + (1 - self.kernel) * self.zeta
 
-        #Update eligibility traces
+        #Update eligibility trace (Eq. 1)
         self.D = self.net.activation.f_prime(self.net.h)
-        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
-        if self.learned_alpha_e:
-            self.papw = np.multiply.outer((1 - self.kernel(1))*self.D, self.a_hat)
-        else:
-            self.papw = self.net.alpha*np.multiply.outer(self.D, self.a_hat)
-        self.eligibility = (self.eligibility.T*self.kernel(1)).T + self.papw
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        self.papw = self.net.alpha * np.multiply.outer(self.D, self.a_hat)
+        self.B = (self.B.T * self.kernel).T + self.papw
 
-        #Get error in predicting perturbations effect
-        self.error_prediction = self.beta.dot(self.Omega)
-        self.error_observed = (self.noisy_net.a - self.net.a)
-        self.loss_noise = np.square(self.error_prediction - self.error_observed).sum()
-        #self.loss_noise = np.square((self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a))).sum()
-        self.e_noise = self.error_prediction - self.error_observed
-        #self.e_noise = self.beta.dot(self.Omega) - (self.noisy_net.a - self.net.a)
+        #Get error in predicting perturbations effect (see Pseudocode)
+        self.error_prediction = self.A.dot(self.Omega)
+        self.error_observed = self.noisy_net.a - self.net.a
+        self.noise_loss = np.square(self.error_prediction -
+                                    self.error_observed).sum()
+        self.noise_error = self.error_prediction - self.error_observed
 
-        #Update beta and gamma
-        self.beta_grads = np.multiply.outer(self.e_noise, self.Omega)
-        self.gamma_grads = self.e_noise.dot(self.beta)*self.Gamma
-        self.beta, self.gamma = self.optimizer.get_updated_params([self.beta, self.gamma],
-                                                                  [self.beta_grads, self.gamma_grads])
+        #Update A and alpha (see Pseudocode)
+        self.A_grads = np.multiply.outer(self.noise_error, self.Omega)
+        self.alpha_grads = self.noise_error.dot(self.A) * self.Gamma
+        self.A, self.alpha = self.optimizer.get_updated_params([self.A, self.alpha],
+                                                               [self.A_grads, self.alpha_grads])
 
         self.i_t += 1
 
     def get_rec_grads(self):
+        """Using updated A and B, returns recurrent gradients according to final
+        line in Pseudocode table in Roth et al. 2019."""
 
-        return (self.eligibility.T*self.q.dot(self.beta)).T
+        return (self.B.T * self.q.dot(self.A)).T
 
     def reset_learning(self):
+        """Resets learning variables to 0 and resets the perturbed network
+        to the state of the primary network."""
 
         self.noisy_net.a = np.copy(self.net.a)
         self.Omega = np.zeros_like(self.Omega)
         self.Gamma = np.zeros_like(self.Gamma)
-        self.eligibility = np.zeros_like(self.eligibility)
+        self.B = np.zeros_like(self.B)
 
 
 

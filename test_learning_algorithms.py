@@ -702,6 +702,36 @@ class Test_Exact_Learning_Algorithms(unittest.TestCase):
             self.assertFalse(np.isclose(self.rnn_1.W_rec,
                                         self.W_rec, atol=1e-4).all())
 
+class Test_KeRNL(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.W_in = np.eye(2)
+        cls.W_rec = np.eye(2)
+        cls.W_out = np.eye(2)
+        cls.b_rec = np.zeros(2)
+        cls.b_out = np.zeros(2)
+
+        cls.rnn = RNN(cls.W_in, cls.W_rec, cls.W_out,
+                      cls.b_rec, cls.b_out,
+                      activation=identity,
+                      alpha=1,
+                      output=softmax,
+                      loss=softmax_cross_entropy)
+
+        cls.rnn.h = np.ones(2)
+        cls.rnn.a = np.ones(2)
+        cls.rnn.a_prev = np.ones(2)
+        cls.rnn.x = np.ones(2) * 2
+        cls.rnn.error = np.ones(2) * 0.5
+        cls.rnn.y_prev = np.ones(2) * 0.5
+        cls.rnn.y = np.ones(2) * 2
+
+    def test_update_learning_vars(self):
+
+        optimizer = SGD(lr=1)
+        self.learn_alg = KeRNL(self.rnn, optimizer)
+
 
 #     def test_kernl_reduce_rflo(self):
 #         """Verifies that KeRNL reduces to RFLO in special case.
