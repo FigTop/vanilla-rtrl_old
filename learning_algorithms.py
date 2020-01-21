@@ -1197,7 +1197,10 @@ class KeRNL(Learning_Algorithm):
         self.kernel = np.maximum(0, 1 - self.alpha)
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
         self.Gamma = self.kernel * self.Gamma - self.Omega
-        self.Omega = self.kernel * self.Omega + (1 - self.kernel) * self.zeta
+
+        ### --- BIG CHANGE --- ###
+        #self.Omega = self.kernel * self.Omega + (1 - self.kernel) * self.zeta
+        self.Omega = self.kernel * self.Omega + self.zeta
 
         #Update eligibility trace (Eq. 1)
         self.D = self.net.activation.f_prime(self.net.h)
@@ -1217,8 +1220,9 @@ class KeRNL(Learning_Algorithm):
         #Update A and alpha (see Pseudocode)
         self.A_grads = np.multiply.outer(self.noise_error, self.Omega)
         self.alpha_grads = self.noise_error.dot(self.A) * self.Gamma
-        self.A, self.alpha = self.optimizer.get_updated_params([self.A, self.alpha],
-                                                               [self.A_grads, self.alpha_grads])
+        params = [self.A, self. alpha]
+        grads = [self.A_grads, self.alpha_grads]
+        self.A, self.alpha = self.optimizer.get_updated_params(params, grads)
 
         self.i_t += 1
 

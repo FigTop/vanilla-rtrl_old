@@ -32,7 +32,7 @@ from scipy.stats import linregress
 from scipy.ndimage.filters import uniform_filter1d
 
 if os.environ['HOME']=='/home/oem214':
-    n_seeds = 20
+    n_seeds = 9
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
@@ -41,8 +41,7 @@ if os.environ['HOME']=='/home/oem214':
                                                 'UORO', 'KF-RTRL', 'R-KF-RTRL',
                                                 'BPTT', 'DNI', 'DNIb',
                                                 'RFLO', 'KeRNL'],
-                                     alpha=[1, 0.5],
-                                     task=['Coin', 'Mimic'])
+                                     difficulty=list(range(10)))
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -54,36 +53,29 @@ if os.environ['HOME']=='/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'DNIb', 'alpha': 1, 'task': 'Coin'}
+    params = {'algorithm': 'DNI', 'difficulty': 1, 'task': 'Mimic'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
     np.random.seed()
 
-
-if params['alpha'] == 1:
-    n_1, n_2 = 5, 9
-    tau_task = 1
-if params['alpha'] == 0.5:
-    n_1, n_2 = 2, 4
-    tau_task = 2
+params['task'] = 'Mimic'
 
 if params['task'] == 'Mimic':
-    
-    n_in = 32
+
+    n_in = 2
     n_hidden = 32
-    n_out = 32
-    
-    
-    
+    n_out = 2
+
     W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
     W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+    W_rec_target *= (0.5 + 0.1 * params['difficulty'])
     W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
     b_rec_target = np.random.normal(0, 0.1, n_hidden)
     b_out_target = np.random.normal(0, 0.1, n_out)
-    
-    alpha = params['alpha']
-    
+
+    alpha = 0.5
+
     rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
                      b_rec_target, b_out_target,
                      activation=tanh,
@@ -91,12 +83,15 @@ if params['task'] == 'Mimic':
                      output=identity,
                      loss=mean_squared_error)
 
-    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-    
+    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=2)
+
 elif params['task'] == 'Coin':
-    
+
+    n_1 = params['difficulty'] + 2
+    n_2 = params['difficulty'] + 5
+    tau_task = 2
     task = Add_Task(n_1, n_2, deterministic=True, tau_task=tau_task)
-    
+
 data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
@@ -110,7 +105,7 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = params['alpha']
+alpha = 0.5
 
 if params['task'] == 'Coin':
     rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
@@ -128,8 +123,6 @@ if params['task'] == 'Mimic':
 
 optimizer = SGD(lr=0.0001)
 SG_optimizer = SGD(lr=0.001)
-if params['alpha'] == 1 and params['task'] == 'Coin':
-    SG_optimizer = SGD(lr=0.05)
 KeRNL_optimizer = SGD(lr=5)
 
 if params['algorithm'] == 'Only_Output_Weights':
@@ -143,13 +136,11 @@ if params['algorithm'] == 'KF-RTRL':
 if params['algorithm'] == 'R-KF-RTRL':
     learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Future_BPTT(rnn, 10)
+    learn_alg = Future_BPTT(rnn, 21)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
     J_lr = 0.001
-    if params['alpha'] == 1 and params['task'] == 'Coin':
-        J_lr = 0.01
     learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
                     SG_label_activation=tanh, W_FB=W_FB)
     learn_alg.name = 'DNIb'
@@ -160,7 +151,7 @@ if params['algorithm'] == 'KeRNL':
 
 comp_algs = []
 
-monitors = ['net.loss_']
+monitors = []
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -171,10 +162,23 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         check_loss=True)
 
 #Filter losses
-loss = sim.mons['net.loss_']
-downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
-filtered_loss = uniform_filter1d(downsampled_loss, 10)
-processed_data = {'filtered_loss': filtered_loss}
+#loss = sim.mons['net.loss_']
+#downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
+#filtered_loss = uniform_filter1d(downsampled_loss, 10)
+#processed_data = {'filtered_loss': filtered_loss}
+#del(sim.mons['net.loss_'] )
+
+#Get validation losses
+np.random.seed(1)
+n_test = 10000
+data = task.gen_data(0, n_test)
+test_sim = copy(sim)
+test_sim.run(data,
+             mode='test',
+             monitors=['net.loss_'],
+             verbose=False)
+test_loss = np.mean(test_sim.mons['net.loss_'])
+processed_data = {'test_loss': test_loss}
 
 if os.environ['HOME']=='/Users/omarschall':
 
