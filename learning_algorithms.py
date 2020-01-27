@@ -1152,7 +1152,8 @@ class KeRNL(Learning_Algorithm):
                 to 0. If unspecified, default is no resetting."""
 
         self.name = 'KeRNL'
-        allowed_kwargs_ = {'A', 'B', 'alpha', 'Omega', 'Gamma', 'T_reset'}
+        allowed_kwargs_ = {'A', 'B', 'alpha', 'Omega', 'Gamma', 'T_reset',
+                           'bug_fix'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         self.i_t = 0
@@ -1199,8 +1200,10 @@ class KeRNL(Learning_Algorithm):
         self.Gamma = self.kernel * self.Gamma - self.Omega
 
         ### --- BIG CHANGE --- ###
-        #self.Omega = self.kernel * self.Omega + (1 - self.kernel) * self.zeta
-        self.Omega = self.kernel * self.Omega + self.zeta
+        if self.bug_fix == 'off':
+            self.Omega = self.kernel * self.Omega + (1 - self.kernel) * self.zeta
+        if self.bug_fix == 'on':
+            self.Omega = self.kernel * self.Omega + self.zeta
 
         #Update eligibility trace (Eq. 1)
         self.D = self.net.activation.f_prime(self.net.h)
@@ -1217,6 +1220,14 @@ class KeRNL(Learning_Algorithm):
                                     self.error_observed).sum()
         self.noise_error = self.error_prediction - self.error_observed
 
+        ###ALTERNATIVE NOISE ERROR CALCULATION###
+        #pred_norm = norm(self.error_prediction)
+        #obs_norm = norm(self.error_observed)
+        #outer_prod = np.multiply.outer(self.error_observed, self.Omega)
+        #dot_prod = np.dot(self.error_observed, self.error_prediction)
+        #self.beta_error = (outer_prod * pred_norm**2 - 0.5 * dot_prod * self.Omega)/(obs_norm * pred_norm**3)
+        ###ALTERNATIVE NOISE ERROR CALCULATION###
+
         #Update A and alpha (see Pseudocode)
         self.A_grads = np.multiply.outer(self.noise_error, self.Omega)
         self.alpha_grads = self.noise_error.dot(self.A) * self.Gamma
@@ -1227,9 +1238,9 @@ class KeRNL(Learning_Algorithm):
         self.i_t += 1
 
     def get_rec_grads(self):
-        """Using updated A and B, returns recurrent gradients according to final
-        line in Pseudocode table in Roth et al. 2019."""
-
+        """Using updated A and B, returns recurrent gradients according to
+        final line in Pseudocode table in Roth et al. 2019."""
+        
         return (self.B.T * self.q.dot(self.A)).T
 
     def reset_learning(self):
