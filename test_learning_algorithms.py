@@ -732,20 +732,10 @@ class Test_KeRNL(unittest.TestCase):
         optimizer = SGD(lr=1)
         self.learn_alg = KeRNL(self.rnn, optimizer, sigma_noise=1)
         self.learn_alg.zeta = np.array([0.1, 0.1])
-        #print(self.learn_alg.zeta)
         self.learn_alg.update_learning_vars()
-        #print(self.learn_alg.zeta)
-        #print(self.learn_alg.noisy_net.a)
-        #print(self.learn_alg.B)
-        #self.noisy_net.a = 3.1
-        #self.Omega = 0.8 * self.zeta
-        #self.B = np.array([[1, 1, 2, 2, 1],
-                            #[1, 1, 2, 2, 1]])
-        #self.error = 2.1, 2.1
-        #-1.3, -1.3
-        noise_error = 0.8 * self.learn_alg.zeta - np.array([2.1, 2.1])
-        A_grads = np.multiply.outer(noise_error, 0.8 * self.learn_alg.zeta)
-        #A_grads = -(1.3 * 0.8) * np.array([self.learn_alg.zeta]*2)
+
+        noise_error = self.learn_alg.zeta - np.array([2.1, 2.1])
+        A_grads = np.multiply.outer(noise_error, self.learn_alg.zeta)
 
         correct_alpha = np.array([0.8, 0.8])
         correct_A = np.eye(2) - A_grads
@@ -755,6 +745,10 @@ class Test_KeRNL(unittest.TestCase):
         assert_allclose(self.learn_alg.alpha, correct_alpha)
         assert_allclose(self.learn_alg.A, correct_A)
         assert_allclose(self.learn_alg.B, correct_B)
+
+    def test_get_rec_grads(self):
+
+        pass
 
 #     def test_kernl_reduce_rflo(self):
 #         """Verifies that KeRNL reduces to RFLO in special case.

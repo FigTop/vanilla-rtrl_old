@@ -10,7 +10,7 @@ import numpy as np
 from pdb import set_trace
 from utils import *
 from functions import *
-from copy import copy
+from copy import deepcopy
 
 class Learning_Algorithm:
     """Parent class for all learning algorithms.
@@ -1152,8 +1152,7 @@ class KeRNL(Learning_Algorithm):
                 to 0. If unspecified, default is no resetting."""
 
         self.name = 'KeRNL'
-        allowed_kwargs_ = {'A', 'B', 'alpha', 'Omega', 'Gamma', 'T_reset',
-                           'bug_fix'}
+        allowed_kwargs_ = {'A', 'B', 'alpha', 'Omega', 'Gamma', 'T_reset'}
         super().__init__(net, allowed_kwargs_, **kwargs)
 
         self.i_t = 0
@@ -1174,7 +1173,7 @@ class KeRNL(Learning_Algorithm):
             self.Gamma = np.zeros(self.n_h)
 
         #Initialize noisy network as copy of original network
-        self.noisy_net = copy(self.net)
+        self.noisy_net = deepcopy(self.net)
 
     def update_learning_vars(self):
         """Updates the matrices A and B, which are ultimately used to drive
@@ -1198,12 +1197,7 @@ class KeRNL(Learning_Algorithm):
         self.kernel = np.maximum(0, 1 - self.alpha)
         self.zeta = np.random.normal(0, self.sigma_noise, self.n_h)
         self.Gamma = self.kernel * self.Gamma - self.Omega
-
-        ### --- BIG CHANGE --- ###
-        if self.bug_fix == 'off':
-            self.Omega = self.kernel * self.Omega + (1 - self.kernel) * self.zeta
-        if self.bug_fix == 'on':
-            self.Omega = self.kernel * self.Omega + self.zeta
+        self.Omega = self.kernel * self.Omega + self.zeta
 
         #Update eligibility trace (Eq. 1)
         self.D = self.net.activation.f_prime(self.net.h)
@@ -1220,14 +1214,6 @@ class KeRNL(Learning_Algorithm):
                                     self.error_observed).sum()
         self.noise_error = self.error_prediction - self.error_observed
 
-        ###ALTERNATIVE NOISE ERROR CALCULATION###
-        #pred_norm = norm(self.error_prediction)
-        #obs_norm = norm(self.error_observed)
-        #outer_prod = np.multiply.outer(self.error_observed, self.Omega)
-        #dot_prod = np.dot(self.error_observed, self.error_prediction)
-        #self.beta_error = (outer_prod * pred_norm**2 - 0.5 * dot_prod * self.Omega)/(obs_norm * pred_norm**3)
-        ###ALTERNATIVE NOISE ERROR CALCULATION###
-
         #Update A and alpha (see Pseudocode)
         self.A_grads = np.multiply.outer(self.noise_error, self.Omega)
         self.alpha_grads = self.noise_error.dot(self.A) * self.Gamma
@@ -1240,7 +1226,7 @@ class KeRNL(Learning_Algorithm):
     def get_rec_grads(self):
         """Using updated A and B, returns recurrent gradients according to
         final line in Pseudocode table in Roth et al. 2019."""
-        
+
         return (self.B.T * self.q.dot(self.A)).T
 
     def reset_learning(self):

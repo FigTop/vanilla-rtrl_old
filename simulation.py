@@ -6,7 +6,7 @@ Created on Mon Nov  5 12:54:56 2018
 @author: omarschall
 """
 
-from copy import copy
+from copy import deepcopy
 import time
 from utils import (norm, classification_accuracy, normalized_dot_product,
                    get_spectral_radius, rgetattr)
@@ -416,7 +416,7 @@ class Simulation:
         """Creates what is effectively a copy of the current simulation, but
         saving on memory by omitting monitors or other large attributes."""
 
-        sim = Simulation(copy(self.net),
+        sim = Simulation(deepcopy(self.net),
                          time_steps_per_trial=self.time_steps_per_trial,
                          reset_sigma=self.reset_sigma,
                          i_job=self.i_job,
