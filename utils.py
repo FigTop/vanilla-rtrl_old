@@ -52,7 +52,7 @@ def classification_accuracy(data, y_hat):
     i_label = np.argmax(data['test']['Y'], axis=1)
     i_pred = np.argmax(y_hat, axis=1)
 
-    acc = np.sum(i_label==i_pred)/len(i_label)
+    acc = np.sum(i_label == i_pred) / len(i_label)
 
     return acc
 
@@ -63,11 +63,11 @@ def normalized_dot_product(a, b):
     a_norm = norm(a)
     b_norm = norm(b)
 
-    if a_norm >0 and b_norm > 0:
-        return np.dot(a.flatten(),b.flatten())/(a_norm*b_norm)
+    if a_norm > 0 and b_norm > 0:
+        return np.dot(a.flatten(), b.flatten())/(a_norm * b_norm)
     else:
         return 0
-    
+
 def half_normalized_dot_product(a, b):
     """Calculates the projection of b onto the unit vector defined by a,
     after flattening."""
@@ -107,7 +107,7 @@ def generate_real_matrix_with_given_eigenvalues(evals):
     n_half = len(evals)
     evals = np.concatenate([evals, np.conjugate(evals)])
 
-    evecs = unitary_group.rvs(2*n_half)[:,:n_half]
+    evecs = unitary_group.rvs(2 * n_half)[:, :n_half]
     evecs = np.concatenate([evecs, np.conjugate(evecs)], axis=1)
 
     M = evecs.dot(np.diag(evals)).dot(evecs)
@@ -117,7 +117,7 @@ def generate_real_matrix_with_given_eigenvalues(evals):
 def weighted_median(hist, bin_centers):
     """Given the result of a weighted histogram, calculates the weighted
     median."""
-    
+
     hist_cdf = np.cumsum(hist)/hist.sum()
     return bin_centers[np.where(hist_cdf >= 0.5)[0][0]]
 
@@ -200,7 +200,7 @@ def plot_array_of_downsampled_signals(signals, ticks=None, return_fig=False,
                                       plot_zero_line=True, **kwargs):
     """Plots time series data in the shape (T, n_row, n_col) as an array
     of filtered signals with n_row rows and n_col cols."""
-    
+
     fig, ax = plt.subplots(signals.shape[1], signals.shape[2],
                            figsize=(30, 10))
 
