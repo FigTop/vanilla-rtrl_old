@@ -14,7 +14,7 @@ Run main.py to train a network and observe its behvaior after training. In main,
 9. Run new simulations in 'test' mode to evaluate network behvaior and plot relevant results.
 
 Other modules:  
-functions.py: Contains Function class (for compactly storing a function and its derivative) and several key instances, such as tanh and softmax cross entropy.
+functions.py: Contains Function class (for compactly storing a function and its derivative) and several key instances, such as tanh and softmax cross entropy.  
 gen_data.py: Contains Tas class and several subclasses for specific types of tasks, such as Add and Mimic.  
 learning_algorithms.py: Contains Learning_Algorithm parent class and several subclasses for specific types of learning algorithms, such as RTRL, BPTT, UORO, etc.  
 network.py: Contains RNN class, which defines a leaky vanilla RNN. (In principle, there could be a general RNN class with subclasses for specific RNN architectures, with the Learning_Algorithm subclasses written to be as architecture-agnostic as possible. However, we currently have hardcoded in leaky vanilla RNNs.)  
