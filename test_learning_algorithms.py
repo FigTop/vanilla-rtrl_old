@@ -748,72 +748,82 @@ class Test_KeRNL(unittest.TestCase):
 
     def test_get_rec_grads(self):
 
-        pass
+        A = np.array([[1, 2],
+                      [1, 2]])
+        B = np.array([[1, 2],
+                      [0, 2]])
+        optimizer = SGD(lr=1)
+        self.learn_alg = KeRNL(self.rnn, optimizer, sigma_noise=1, A=A, B=B)
+        self.learn_alg.q = np.array([0.5, 0.5])
+        rec_grads = self.learn_alg.get_rec_grads()
 
-#     def test_kernl_reduce_rflo(self):
-#         """Verifies that KeRNL reduces to RFLO in special case.
-#
-#         If beta is initialized to the identity while the gammas are all
-#         initialized to the network inverse time constant alpha, and the KeRNL
-#         optimizer has 0 learning rate (i.e. beta and gamma do not change), then
-#         KeRNL should produce the same gradients as RFLO if the approximate
-#         KeRNL of (1 - alpha) (rather than exp(-alpha)) is used."""
-#
-#         self.data = self.task.gen_data(200, 100)
-#
-#         alpha = 0.3
-#
-#         self.rnn_1 = RNN(self.W_in, self.W_rec, self.W_out,
-#                          self.b_rec, self.b_out,
-#                          activation=tanh,
-#                          alpha=alpha,
-#                          output=softmax,
-#                          loss=softmax_cross_entropy)
-#
-#         self.rnn_2 = RNN(self.W_in, self.W_rec, self.W_out,
-#                          self.b_rec, self.b_out,
-#                          activation=tanh,
-#                          alpha=alpha,
-#                          output=softmax,
-#                          loss=softmax_cross_entropy)
-#
-#         #RFLO
-#         np.random.seed(1)
-#         self.optimizer_1 = SGD(lr=0.001)
-#         self.learn_alg_1 = RFLO(self.rnn_1, alpha)
-#         #KeRNL with beta and gamma fixed to RFLO values
-#         np.random.seed(1)
-#         self.optimizer_2 = SGD(lr=0.001)
-#         self.KeRNL_optimizer = SGD(lr=0)
-#         beta = np.eye(self.rnn_2.n_h)
-#         gamma = np.ones(self.rnn_2.n_h)*alpha
-#         self.learn_alg_2 = KeRNL(self.rnn_2, self.KeRNL_optimizer,
-#                                  beta=beta, gamma=gamma,
-#                                  use_approx_kernel=True)
-#
-#         monitors = []
-#
-#         np.random.seed(2)
-#         self.sim_1 = Simulation(self.rnn_1)
-#         self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
-#                        optimizer=self.optimizer_1,
-#                        monitors=monitors,
-#                        verbose=False)
-#
-#         np.random.seed(2)
-#         self.sim_2 = Simulation(self.rnn_2)
-#         self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
-#                        optimizer=self.optimizer_2,
-#                        monitors=monitors,
-#                        verbose=False)
-#
-#         #Assert networks learned similar weights with a small tolerance.
-#         assert_allclose(self.rnn_1.W_rec,
-#                                    self.rnn_2.W_rec, atol=1e-5))
-#         #Assert networks' parameters changed appreciably, despite a large
-#         #tolerance for closeness.
-#         self.assertFalse(assert_allclose(self.W_rec,
-#                                     self.rnn_2.W_rec, atol=1e-3))
+        correct_rec_grads = np.array([[1, 2],
+                                      [0, 4]])
+
+        assert_allclose(rec_grads, correct_rec_grads)
+
+    def test_kernl_reduce_rflo(self):
+        """Verifies that KeRNL reduces to RFLO in special case.
+
+        If beta is initialized to the identity while the gammas are all
+        initialized to the network inverse time constant alpha, and the KeRNL
+        optimizer has 0 learning rate (i.e. beta and gamma do not change), then
+        KeRNL should produce the same gradients as RFLO if the approximate
+        KeRNL of (1 - alpha) (rather than exp(-alpha)) is used."""
+
+        self.task = Add_Task(4, 6, deterministic=True, tau_task=2)
+        self.data = self.task.gen_data(100, 0)
+
+        alpha = 0.3
+
+        self.rnn_1 = RNN(self.W_in, self.W_rec, self.W_out,
+                         self.b_rec, self.b_out,
+                         activation=tanh,
+                         alpha=alpha,
+                         output=softmax,
+                         loss=softmax_cross_entropy)
+
+        self.rnn_2 = RNN(self.W_in, self.W_rec, self.W_out,
+                         self.b_rec, self.b_out,
+                         activation=tanh,
+                         alpha=alpha,
+                         output=softmax,
+                         loss=softmax_cross_entropy)
+
+        #RFLO
+        np.random.seed(1)
+        self.optimizer_1 = SGD(lr=0.001)
+        self.learn_alg_1 = RFLO(self.rnn_1, alpha)
+        #KeRNL with beta and gamma fixed to RFLO values
+        np.random.seed(1)
+        self.optimizer_2 = SGD(lr=0.001)
+        self.KeRNL_optimizer = SGD(lr=0)
+        A = np.eye(self.rnn_2.n_h)
+        alpha_i = np.ones(self.rnn_2.n_h) * alpha
+        self.learn_alg_2 = KeRNL(self.rnn_2, self.KeRNL_optimizer,
+                                 A=A, alpha=alpha_i)
+
+        monitors = []
+
+        np.random.seed(2)
+        self.sim_1 = Simulation(self.rnn_1)
+        self.sim_1.run(self.data, learn_alg=self.learn_alg_1,
+                       optimizer=self.optimizer_1,
+                       monitors=monitors,
+                       verbose=False)
+
+        np.random.seed(2)
+        self.sim_2 = Simulation(self.rnn_2)
+        self.sim_2.run(self.data, learn_alg=self.learn_alg_2,
+                       optimizer=self.optimizer_2,
+                       monitors=monitors,
+                       verbose=False)
+
+        #Assert networks learned the same weights
+        assert_allclose(self.rnn_1.W_rec, self.rnn_2.W_rec)
+        #Assert networks' parameters changed appreciably, despite a large
+        #tolerance for closeness.
+        self.assertFalse(np.isclose(self.W_rec, self.rnn_2.W_rec).all())
 
 if __name__ == '__main__':
     unittest.main()

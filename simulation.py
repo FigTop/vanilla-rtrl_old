@@ -427,8 +427,10 @@ class Simulation:
         """Computes alignment matrix for different learning algorithms run
         in parallel."""
 
+        #Update learning variables for the algorithms *not* being used to train
+        #the network
         for i_alg, alg in enumerate(self.algs):
-            if i_alg > 0:
+            if i_alg > 0: #Only the comparison algorithms
                 alg.update_learning_vars()
                 alg()
             key = alg.name
@@ -455,7 +457,7 @@ class Simulation:
                     g_j = self.rec_grads_dict[key_j][j_index]
                     alignment = normalized_dot_product(g_i, g_j)
                     self.alignment_matrix[i, j] = alignment
-                    self.alignment_weights[i, j] = norm(g_i)*norm(g_j)
+                    self.alignment_weights[i, j] = norm(g_i) * norm(g_j)
 
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:
