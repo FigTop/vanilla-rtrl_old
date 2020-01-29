@@ -130,7 +130,7 @@ def plot_eigenvalues(*matrices, fig=None, return_fig=False):
     if fig is None:
         fig = plt.figure()
     theta = np.arange(0, 2*np.pi, 0.01)
-    plt.plot(np.cos(theta), np.sin(theta), 'k', linestyle='--', linewidth=0.1)
+    plt.plot(np.cos(theta), np.sin(theta), 'k', linestyle='--', linewidth=0.3)
     plt.axis('equal')
 
     for M in matrices:

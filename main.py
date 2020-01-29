@@ -20,6 +20,7 @@ import time
 from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
+from metalearning_algorithms import *
 from functions import *
 from itertools import product
 import os
@@ -31,59 +32,61 @@ from scipy.stats import linregress
 from scipy.ndimage.filters import uniform_filter1d
 
 if os.environ['HOME']=='/home/oem214':
-    n_seeds = 20
+    n_seeds = 40
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(algorithm=['Only_Output_Weights',
-                                                'RTRL', 'UORO', 'KF-RTRL', 'I-KF-RTRL',
-                                                'BPTT', 'DNI', 'DNIb',
-                                                'RFLO', 'KeRNL'],
-                                     alpha=[1, 0.5],
-                                     task=['Coin', 'Mimic'])
+#    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
+#                                                'UORO', 'KF-RTRL', 'R-KF-RTRL',
+#                                                'BPTT', 'DNI', 'DNIb',
+#                                                'RFLO', 'KeRNL'],
+#                                     difficulty=list(range(10)))
+    macro_configs = config_generator(algorithm=['RFLO', 'KeRNL'],
+                                     base_learning_rate=[0, 0.003, 0.01, 0.03, 0.1,
+                                                         0.3, 1, 3, 10, 30])
+#    macro_configs = config_generator(algorithm=['RTRL', 'Only_Output_Weights'],
+#                                     n_in=[2, 8, 32, 64],
+#                                     n_h=[2, 8, 32, 64],
+#                                     n_out=[2, 8, 32, 64])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
-    
+
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
-    np.random.seed(i_job)
-    
+    np.random.seed(i_job + 100)
+
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
 if os.environ['HOME']=='/Users/omarschall':
-    params = {'algorithm': 'KeRNL',
-              'alpha': 1,
-              'task': 'Coin'}
+    params = {'algorithm': 'KeRNL', 'n_in': 64, 'n_h': 2, 'n_out': 32}
+    params = {'algorithm': 'KeRNL', 'difficulty': 3, 'base_learning_rate': 0.001}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-    np.random.seed()
-    
-if params['alpha'] == 1:
-    n_1, n_2 = 6, 10
-    tau_task = 1
-if params['alpha'] == 0.5:
-    n_1, n_2 = 5, 7
-    tau_task = 2
+    np.random.seed(3)
+
+params['task'] = 'Coin'
+params['difficulty'] = 3
+#params['bug_fix'] = 'on'
+#params['base_learning_rate'] = 0.1
 
 if params['task'] == 'Mimic':
-    
-    n_in = 32
+
+    n_in = 2
     n_hidden = 32
-    n_out = 32
-    
-    
-    
+    n_out = 2
+
     W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
     W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+    W_rec_target *= (0.5 + 0.1 * params['difficulty'])
     W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
     b_rec_target = np.random.normal(0, 0.1, n_hidden)
     b_out_target = np.random.normal(0, 0.1, n_out)
-    
-    alpha = params['alpha']
-    
+
+    alpha = 0.5
+
     rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
                      b_rec_target, b_out_target,
                      activation=tanh,
@@ -91,13 +94,15 @@ if params['task'] == 'Mimic':
                      output=identity,
                      loss=mean_squared_error)
 
-    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-    
+    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=2)
+
 elif params['task'] == 'Coin':
-    
-    task = Coin_Task(n_1, n_2, one_hot=True, deterministic=True,
-                     tau_task=tau_task)
-    
+
+    n_1 = params['difficulty'] + 2
+    n_2 = params['difficulty'] + 6
+    tau_task = 1
+    task = Add_Task(n_1, n_2, deterministic=True, tau_task=tau_task)
+
 data = task.gen_data(1000000, 5000)
 
 n_in     = task.n_in
@@ -106,15 +111,12 @@ n_out    = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-#W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
-#W_rec = (W_rec + W_rec.T)/2
-#W_rec = 0.54*np.eye(n_hidden)
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = params['alpha']
+alpha = 1
 
 if params['task'] == 'Coin':
     rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
@@ -132,10 +134,6 @@ if params['task'] == 'Mimic':
 
 optimizer = SGD(lr=0.0001)
 SG_optimizer = SGD(lr=0.001)
-if params['alpha'] == 1 and params['task'] == 'Coin':
-    SG_optimizer = SGD(lr=0.05)
-KeRNL_optimizer = SGD(lr=5)
-
 
 if params['algorithm'] == 'Only_Output_Weights':
     learn_alg = Only_Output_Weights(rnn)
@@ -145,42 +143,30 @@ if params['algorithm'] == 'UORO':
     learn_alg = UORO(rnn)
 if params['algorithm'] == 'KF-RTRL':
     learn_alg = KF_RTRL(rnn)
-if params['algorithm'] == 'I-KF-RTRL':
-    learn_alg = Inverse_KF_RTRL(rnn)
+if params['algorithm'] == 'R-KF-RTRL':
+    learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Forward_BPTT(rnn, 10)
+    learn_alg = Future_BPTT(rnn, 21)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
-    W_a_lr = 0.001
-    if params['alpha'] == 1 and params['task'] == 'Coin':
-        W_a_lr = 0.01
-    learn_alg = DNI(rnn, SG_optimizer, backprop_weights='approximate', W_a_lr=W_a_lr,
+    J_lr = 0.001
+    learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
                     SG_label_activation=tanh, W_FB=W_FB)
     learn_alg.name = 'DNIb'
 if params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha)
 if params['algorithm'] == 'KeRNL':
-    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                      use_approx_kernel=True, learned_alpha_e=False)
+    sigma_noise = 0.0000001
+    kernl_lr = params['base_learning_rate']/sigma_noise
+    KeRNL_optimizer = SGD(kernl_lr)
+    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=sigma_noise)
 
-comp_algs = [UORO(rnn),
-             KF_RTRL(rnn),
-             Inverse_KF_RTRL(rnn),
-             RFLO(rnn, alpha=alpha),
-             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
-                   use_approx_kernel=True, learned_alpha_e=False),
-             DNI(rnn, SG_optimizer),
-             Forward_BPTT(rnn, 14)]
-comp_algs = [UORO(rnn)]
 comp_algs = []
 
-ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
-
+monitors = ['learn_alg.A', 'learn_alg.alpha']
 monitors = ['net.loss_', 'net.y_hat']
-#monitors = ['net.loss_', 'alignment_matrix', 'net.a', 'learn_alg.noisy_net.a',
-#            'learn_alg.error_prediction', 'learn_alg.error_observed', 'learn_alg.loss_noise']
-#monitors = ['net.loss_', 'alignment_matrix', 'alignment_weights', 'learn_alg.rec_grads-norm']
+monitors = []
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -191,76 +177,59 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         check_loss=True)
 
 #Filter losses
-loss = sim.mons['net.loss_']
-downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
-filtered_loss = uniform_filter1d(downsampled_loss, 10)
-processed_data = {'filtered_loss': filtered_loss}
+#loss = sim.mons['net.loss_']
+#downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
+#filtered_loss = uniform_filter1d(downsampled_loss, 10)
+#processed_data = {'filtered_loss': filtered_loss}
+#del(sim.mons['net.loss_'] )
+
+#Get validation losses
+np.random.seed(1)
+n_test = 10000
+data = task.gen_data(0, n_test)
+test_sim = copy(sim)
+test_sim.run(data,
+             mode='test',
+             monitors=['net.loss_'],
+             verbose=False)
+test_loss = np.mean(test_sim.mons['net.loss_'])
+processed_data = {'test_loss': test_loss}
 
 if os.environ['HOME']=='/Users/omarschall':
-    
+
+
+    plot_filtered_signals([sim.mons['net.loss_']])
+
     #Test run
-    np.random.seed(1)
-    n_test = 100
+    np.random.seed(2)
+    n_test = 10000
     data = task.gen_data(100, n_test)
     test_sim = copy(sim)
     test_sim.run(data,
                  mode='test',
                  monitors=['net.loss_', 'net.y_hat', 'net.a'],
                  verbose=False)
-    plt.figure()
+    fig = plt.figure()
     plt.plot(test_sim.mons['net.y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
-#    plt.plot(data['test']['X'][:,0])
-#    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
-#    #plt.ylim([0, 1.2])
-#    #for i in range(n_test//task.time_steps_per_trial):
-#    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
-#    plt.xlim([400, 500])
-    
+    #plt.plot(test_sim.mons['net.y_hat'][:,1])
+    #plt.plot(data['test']['Y'][:,1])
+    #plt.plot(data['test']['X'][:,0]*0.1)
+    #plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
+    #plt.ylim([-0.2, 0.2])
+    #for i in range(n_test//task.time_steps_per_trial):
+    #    continue
+    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
+    plt.xlim([9800, 10000])
+    #fig.savefig()
+
     plt.figure()
     x = test_sim.mons['net.y_hat'].flatten()
     y = data['test']['Y'].flatten()
-    plt.plot(x, y, '.', alpha=0.5)
+    plt.plot(x, y, '.', alpha=0.05)
     plt.plot([np.amin(x), np.amax(x)],
               [np.amin(y), np.amax(y)], 'k', linestyle='--')
     plt.axis('equal')
-    
-    plt.figure()
-    plot_filtered_signals([sim.mons['net.loss_']], filter_size=1000,
-                          plot_loss_benchmarks=True)
-    #plt.ylim([0.3, 0.7])
-    plt.title(learn_alg.name)
-#                           sim.mons['a_tilde-norm'],
-#                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
-    
-    if len(comp_algs) > 0:
-        fig = plot_array_of_histograms(sim.mons['alignment_matrix'],
-                                       sim.mons['alignment_weights'],
-                                       ticks, n_bins=400,
-                                       return_fig=True,
-                                       fig_size=(12, 6))
-        title = ('Histogram of gradient alignments \n' +
-                 'over learning via {}').format(learn_alg.name)
-        #plt.suptitle(title, fontsize=24)
-    if False:
-        plt.figure()
-        plt.imshow(sim.mons['alignment_matrix'].mean(0),
-                   cmap='RdBu_r', vmin=-1, vmax=1)
-        plt.colorbar()
-        plt.xticks(list(range(len(ticks))), ticks)
-        plt.yticks(list(range(len(ticks))), ticks)
-        
-        plt.figure()
-        plt.imshow(sim.mons['alignment_matrix'].std(0),
-                   cmap='RdBu_r', vmin=-1, vmax=1)
-        plt.colorbar()
-        plt.xticks(list(range(len(ticks))), ticks)
-        plt.yticks(list(range(len(ticks))), ticks)
-    
-
-#    #plt.axis('equal')
-#    plt.ylim([0, 1.1])
-#    plt.xlim([0, 1.1])
 
 if os.environ['HOME']=='/home/oem214':
 
@@ -271,7 +240,7 @@ if os.environ['HOME']=='/home/oem214':
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     save_path = os.path.join(save_dir, 'rnn_'+str(i_job))
-    
+
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
 

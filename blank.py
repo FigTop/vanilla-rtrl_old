@@ -11,6 +11,316 @@ import numpy as np
 import pickle
 import os
 from utils import *
+from sklearn.cross_decomposition.cca_ import cca
+
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Sep 10 16:30:58 2018
+
+@author: omarschall
+"""
+
+import numpy as np
+from network import RNN
+from fast_weights_network import Fast_Weights_RNN
+from simulation import Simulation
+from utils import *
+from gen_data import *
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    pass
+import time
+from optimizers import *
+from analysis_funcs import *
+from learning_algorithms import *
+from metalearning_algorithms import *
+from functions import *
+from itertools import product
+import os
+import pickle
+from copy import copy
+from state_space import State_Space_Analysis
+from pdb import set_trace
+from scipy.stats import linregress
+from scipy.ndimage.filters import uniform_filter1d
+
+if os.environ['HOME']=='/home/oem214':
+    n_seeds = 20
+    try:
+        i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
+    except KeyError:
+        i_job = 0
+    macro_configs = config_generator(algorithm=['Only_Output_Weights',
+                                                'RTRL', 'UORO', 'KF-RTRL', 'R-KF-RTRL',
+                                                'BPTT', 'DNI', 'DNIb',
+                                                'RFLO', 'KeRNL'],
+                                     alpha=[1, 0.5],
+                                     task=['Coin', 'Mimic'])
+    micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
+
+    params, i_seed = micro_configs[i_job]
+    i_config = i_job//n_seeds
+    np.random.seed(i_job)
+
+    save_dir = os.environ['SAVEPATH']
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+
+if os.environ['HOME']=='/Users/omarschall':
+    params = {'algorithm': 'DNI',
+              'alpha': 1,
+              'task': 'Coin'}
+    i_job = 0
+    save_dir = '/Users/omarschall/vanilla-rtrl/library'
+
+    np.random.seed(0)
+
+if params['alpha'] == 1:
+    n_1, n_2 = 6, 10
+    tau_task = 1
+if params['alpha'] == 0.5:
+    n_1, n_2 = 5, 7
+    tau_task = 2
+
+if params['task'] == 'Mimic':
+
+    n_in = 32
+    n_hidden = 32
+    n_out = 32
+
+
+
+    W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+    W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+    W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+    b_rec_target = np.random.normal(0, 0.1, n_hidden)
+    b_out_target = np.random.normal(0, 0.1, n_out)
+
+    alpha = params['alpha']
+
+    rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
+                     b_rec_target, b_out_target,
+                     activation=tanh,
+                     alpha=alpha,
+                     output=identity,
+                     loss=mean_squared_error)
+
+    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
+
+elif params['task'] == 'Coin':
+
+    task = Add_Task(n_1, n_2, one_hot=True, deterministic=True,
+                    tau_task=tau_task)
+
+data = task.gen_data(100000, 1000)
+
+n_in     = task.n_in
+n_hidden = 32
+n_out    = task.n_out
+
+W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+#W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
+#W_rec = (W_rec + W_rec.T)/2
+#W_rec = 0.54*np.eye(n_hidden)
+W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
+b_rec = np.zeros(n_hidden)
+b_out = np.zeros(n_out)
+
+alpha = params['alpha']
+
+if params['task'] == 'Coin':
+    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+              activation=tanh,
+              alpha=alpha,
+              output=softmax,
+              loss=softmax_cross_entropy)
+
+if params['task'] == 'Mimic':
+    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+              activation=tanh,
+              alpha=alpha,
+              output=identity,
+              loss=mean_squared_error)
+
+optimizer = SGD(lr=0.001)
+SG_optimizer = SGD(lr=0.001)
+if params['alpha'] == 1 and params['task'] == 'Coin':
+    SG_optimizer = SGD(lr=0.05)
+KeRNL_optimizer = SGD(lr=5)
+
+
+if params['algorithm'] == 'Only_Output_Weights':
+    learn_alg = Only_Output_Weights(rnn)
+if params['algorithm'] == 'RTRL':
+    learn_alg = RTRL(rnn)
+if params['algorithm'] == 'UORO':
+    learn_alg = UORO(rnn)
+if params['algorithm'] == 'KF-RTRL':
+    learn_alg = KF_RTRL(rnn)
+if params['algorithm'] == 'R-KF-RTRL':
+    learn_alg = Reverse_KF_RTRL(rnn)
+if params['algorithm'] == 'BPTT':
+    learn_alg = Future_BPTT(rnn, 10)
+if params['algorithm'] == 'DNI':
+    learn_alg = DNI(rnn, SG_optimizer)
+if params['algorithm'] == 'DNIb':
+    W_a_lr = 0.001
+    if params['alpha'] == 1 and params['task'] == 'Coin':
+        W_a_lr = 0.01
+    learn_alg = DNI(rnn, SG_optimizer, backprop_weights='approximate', W_a_lr=W_a_lr,
+                    SG_label_activation=tanh, W_FB=W_FB)
+    learn_alg.name = 'DNIb'
+if params['algorithm'] == 'RFLO':
+    learn_alg = RFLO(rnn, alpha=alpha)
+if params['algorithm'] == 'KeRNL':
+    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
+                      use_approx_kernel=True, learned_alpha_e=False)
+
+optimizer = SGD(lr=0.09)
+learn_alg = Forward_BPTT_LR_by_RTRL(rnn, optimizer, 10, meta_lr=0.0001)
+#learn_alg = Forward_BPTT(rnn, 10)
+#optimizer = SGD(lr=0.07)
+
+comp_algs = [UORO(rnn),
+             KF_RTRL(rnn),
+             Reverse_KF_RTRL(rnn),
+             RFLO(rnn, alpha=alpha),
+             KeRNL(rnn, KeRNL_optimizer, sigma_noise=0.001,
+                   use_approx_kernel=True, learned_alpha_e=False),
+             DNI(rnn, SG_optimizer),
+             Future_BPTT(rnn, 14)]
+comp_algs = [UORO(rnn)]
+comp_algs = []
+
+ticks = [learn_alg.name] + [alg.name for alg in comp_algs]
+
+monitors = ['net.loss_', 'net.y_hat', 'optimizer.lr']
+#monitors = ['net.loss_', 'alignment_matrix', 'net.a', 'learn_alg.noisy_net.a',
+#            'learn_alg.error_prediction', 'learn_alg.error_observed', 'learn_alg.loss_noise']
+#monitors = ['net.loss_', 'alignment_matrix', 'alignment_weights', 'learn_alg.rec_grads-norm']
+
+sim = Simulation(rnn)
+sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+        comp_algs=comp_algs,
+        monitors=monitors,
+        verbose=True,
+        check_accuracy=False,
+        check_loss=True)
+
+#loss_fixed_low_LR = sim.mons['net.loss_']
+#LR_fixed_low_LR = sim.mons['optimizer.lr']
+#loss_fixed_high_LR = sim.mons['net.loss_']
+#LR_fixed_high_LR = sim.mons['optimizer.lr']
+#loss_init_low_LR = sim.mons['net.loss_']
+#LR_init_low_LR = sim.mons['optimizer.lr']
+loss_init_high_LR = sim.mons['net.loss_']
+LR_init_high_LR = sim.mons['optimizer.lr']
+
+#Filter losses
+loss = sim.mons['net.loss_']
+downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
+filtered_loss = uniform_filter1d(downsampled_loss, 10)
+processed_data = {'filtered_loss': filtered_loss}
+
+if os.environ['HOME']=='/Users/omarschall':
+
+    #Test run
+    np.random.seed(1)
+    n_test = 100
+    data = task.gen_data(100, n_test)
+    test_sim = copy(sim)
+    test_sim.run(data,
+                 mode='test',
+                 monitors=['net.loss_', 'net.y_hat', 'net.a'],
+                 verbose=False)
+    plt.figure()
+    plt.plot(test_sim.mons['net.y_hat'][:,0])
+    plt.plot(data['test']['Y'][:,0])
+#    plt.plot(data['test']['X'][:,0])
+#    plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
+#    #plt.ylim([0, 1.2])
+#    #for i in range(n_test//task.time_steps_per_trial):
+#    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
+#    plt.xlim([400, 500])
+
+    plt.figure()
+    x = test_sim.mons['net.y_hat'].flatten()
+    y = data['test']['Y'].flatten()
+    plt.plot(x, y, '.', alpha=0.5)
+    plt.plot([np.amin(x), np.amax(x)],
+              [np.amin(y), np.amax(y)], 'k', linestyle='--')
+    plt.axis('equal')
+
+    plt.figure()
+    plot_filtered_signals([sim.mons['net.loss_']], filter_size=1000,
+                          plot_loss_benchmarks=True)
+    #plt.ylim([0.3, 0.7])
+    plt.title(learn_alg.name)
+#                           sim.mons['a_tilde-norm'],
+#                           sim.mons['w_tilde-norm']], plot_loss_benchmarks=True)
+
+    if len(comp_algs) > 0:
+        fig = plot_array_of_histograms(sim.mons['alignment_matrix'],
+                                       sim.mons['alignment_weights'],
+                                       ticks, n_bins=400,
+                                       return_fig=True,
+                                       fig_size=(12, 6))
+        title = ('Histogram of gradient alignments \n' +
+                 'over learning via {}').format(learn_alg.name)
+        #plt.suptitle(title, fontsize=24)
+    if False:
+        plt.figure()
+        plt.imshow(sim.mons['alignment_matrix'].mean(0),
+                   cmap='RdBu_r', vmin=-1, vmax=1)
+        plt.colorbar()
+        plt.xticks(list(range(len(ticks))), ticks)
+        plt.yticks(list(range(len(ticks))), ticks)
+
+        plt.figure()
+        plt.imshow(sim.mons['alignment_matrix'].std(0),
+                   cmap='RdBu_r', vmin=-1, vmax=1)
+        plt.colorbar()
+        plt.xticks(list(range(len(ticks))), ticks)
+        plt.yticks(list(range(len(ticks))), ticks)
+
+
+#    #plt.axis('equal')
+#    plt.ylim([0, 1.1])
+#    plt.xlim([0, 1.1])
+
+if os.environ['HOME']=='/home/oem214':
+
+    result = {'sim': sim, 'i_seed': i_seed, 'task': task,
+              'config': params, 'i_config': i_config, 'i_job': i_job,
+              'processed_data': processed_data}
+    save_dir = os.environ['SAVEPATH']
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    save_path = os.path.join(save_dir, 'rnn_'+str(i_job))
+
+    with open(save_path, 'wb') as f:
+        pickle.dump(result, f)
+
+
+
+
+T = len(sim.singular_vectors)
+cca_matrix = np.zeros((T, T))
+for i in range(T):
+    for j in range(T):
+        cca = CCA()
+        cca.fit(sim.singular_vectors[i],
+                sim.singular_vectors[j])
+        cca_matrix[i,j] = 1 - cca.score(sim.singular_vectors[i],
+                                        sim.singular_vectors[j])
+mds = MDS()
+mds.dissimilarity = 'precomputed'
+mds.fit_transform(cca_matrix)
 
 
 x = [0, 1]
@@ -71,83 +381,83 @@ print(t2 - t1)
 ### --- Define Layer Normalization --- ###
 
 def layer_normalization_(z):
-    
+
     return (z - np.mean(z))/np.std(z)
 
 def layer_normalization_derivative(z):
-    
+
     return "don't care"
 
 layer_normalization = function(layer_normalization_, layer_normalization_derivative)
-            
+
 if hasattr(self, 't_stop_SG_train'):
     if self.t_stop_SG_train==i_t:
         self.learn_alg.optimizer.lr = 0
 
 def forward_estimate_credit_assignment(self, i_t, data, t_steps=14, delta_a=0.0001):
-    
+
     try:
         truncated_data = {'test': {'X': data['train']['X'][i_t:i_t+t_steps,:],
                                    'Y': data['train']['Y'][i_t:i_t+t_steps,:]}}
     except IndexError:
         return
-    
+
     fiducial_rnn = copy(self.net)
     fiducial_sim = copy(self)
     perturbed_rnn = copy(self.net)
     perturbed_sim = copy(self)
-    
+
     direction = np.random.normal(0, 1, self.net.n_hidden)
     perturbation = delta_a*direction/norm(direction)
     a_fiducial = self.net.a - perturbation
     a_perturbed = self.net.a + perturbation
-    
+
     fiducial_sim.run(truncated_data,
                      mode='test',
                      monitors=['loss_'],
                      a_initial=a_fiducial,
                      verbose=False)
-    
+
     perturbed_sim.run(truncated_data,
                       mode='test',
                       monitors=['loss_'],
                       a_initial=a_perturbed,
                       verbose=False)
-    
+
     delta_loss = perturbed_sim.mons['loss_'].sum() - fiducial_sim.mons['loss_'].sum()
     self.CA_forward_est = delta_loss/(2*delta_a)
     self.CA_SG_est = self.learn_alg.sg.dot(direction)
 
 if False:
     data_dir = '/scratch/oem214/vanilla-rtrl/library/ssa_2_run'
-    
+
     i_file = i_job
     file_name = 'rnn_{}'.format(i_file)
     test_file_name = 'rnn_{}_test_data'.format(i_file)
-    
+
     data_path = os.path.join(data_dir, test_file_name)
     rnn_path = os.path.join(data_dir, file_name)
     with open(data_path, 'rb') as f:
         test_data = pickle.load(f)
     with open(rnn_path, 'rb') as f:
         result = pickle.load(f)
-        
+
     n_trials = len(test_data.keys())
     alignments = np.zeros((n_trials, n_trials))
     for i in range(n_trials):
         for j in range(n_trials):
             alignments[i,j] = np.square(test_data[i]['PCs'].T.dot(test_data[j]['PCs'])).sum()/3
-    
+
     result = {}
     result[file_name+'_alignments'] = alignments
-    
+
     if os.environ['HOME']=='/home/oem214':
-    
+
         save_dir = os.environ['SAVEPATH']
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         save_path = os.path.join(save_dir, 'rnn_{}_analysis'.format(i_file))
-        
+
         with open(save_path, 'wb') as f:
             pickle.dump(result, f)
 
@@ -163,7 +473,7 @@ with open(data_path, 'rb') as f:
     test_data = pickle.load(f)
 with open(rnn_path, 'rb') as f:
     result = pickle.load(f)
-    
+
 n_trials = len(test_data.keys())
 alignments = np.zeros((n_trials, n_trials))
 for i in range(n_trials):
@@ -179,7 +489,7 @@ if os.environ['HOME']=='/home/oem214':
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     save_path = os.path.join(save_dir, 'rnn_{}_analysis'.format(i_file))
-    
+
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
 
@@ -198,12 +508,12 @@ for i in range(test_data['PC_on_trajs'].shape[0]):
     plt.plot(test_data['PC_on_trajs'][i,:,0],test_data['PC_on_trajs'][i,:,1], color='b', alpha=0.2)
 for i in range(test_data['PC_off_trajs'].shape[0]):
     plt.plot(test_data['PC_off_trajs'][i,:,0],test_data['PC_off_trajs'][i,:,1], color='g', alpha=0.2)
-    
+
 if hasattr(self, 'time_steps_per_trial'):
     X_reshaped = data['test']['X'].reshape((-1, self.time_steps_per_trial, self.net.n_in))
     on_trials = np.where(X_reshaped[:,1,0]>0)[0]
     off_trials = np.where(X_reshaped[:,1,0]<0)[0]
-    
+
 #Initialize test data
 if hasattr(self, 'SSA_PCs') and mode=='train':
     test_data = {}
@@ -211,16 +521,16 @@ if hasattr(self, 'SSA_PCs') and mode=='train':
     save_path = os.path.join(self.save_dir, file_name)
     with open(save_path, 'wb') as f:
         pickle.dump(test_data, f)
-        
+
 if hasattr(self, 'SSA_PCs') and self.mode=='train':
-    
+
     with open(save_path, 'rb') as f:
         test_data = pickle.load(f)
-    
+
     np.random.seed(0)
     test_sim = copy(self)
     test_sim.run(data, mode='test', monitors=['a'], verbose=False)
-    
+
     test_data_trial = {}
     PCs = State_Space_Analysis(test_sim.mons['a'], add_fig=False).V[:,:self.SSA_PCs]
     A = test_sim.mons['a'].reshape((-1, self.time_steps_per_trial, self.net.n_hidden))
@@ -229,7 +539,7 @@ if hasattr(self, 'SSA_PCs') and self.mode=='train':
     test_data_trial['PCs'] = PCs
     test_data_trial['PC_on_trajs'] = PC_on_trajs
     test_data_trial['PC_off_trajs'] = PC_off_trajs
-    
+
     test_data[self.i_trial] = test_data_trial
     with open(save_path, 'wb') as f:
         pickle.dump(test_data, f)
@@ -242,7 +552,7 @@ if hasattr(self, 'SSA_PCs') and self.mode=='train':
 #for i in range(n_trials):
 #    for j in range(n_trials):
 #        alignments[i,j] = (norm(sim.SSAs[i][:,:n_PCs].T.dot(sim.SSAs[j][:,:n_PCs]))**2)/n_PCs
-#        
+#
 #plt.imshow(alignments)
 
 
@@ -255,9 +565,9 @@ if hasattr(self, 'SSA_PCs') and self.mode=='train':
 #    autocov = np.zeros((a.shape[1], n_tau))
 #    for i in range(a_t.shape[1]):
 #        for tau in range(1, 1+n_tau):
-#        
+#
 #            autocov[i, tau-1] = np.corrcoef(a_t[:,i], np.roll(a_t[:,i], tau, axis=0))[0,1]
-#        
+#
 #        #plt.plot(autocov[i, :], 'b', alpha=0.2)
 #    Y.append(autocov.mean())
 #
@@ -316,29 +626,29 @@ val_losses = {}
 
 #for file_name in os.listdir(data_dir):
 for i_file in [29]:
-    
+
     file_name = 'rnn_'+str(i_file)
-    
+
     if 'code' in file_name or '.' in file_name:
         continue
-    
+
     file_no = int(file_name.split('_')[-1])
-    
+
     with open(os.path.join(data_dir, file_name), 'rb') as f:
         try:
             result = pickle.load(f)
         except EOFError:
             n_errors += 1
-    
+
     #plt.figure(figsize=(10, 20))
     for i in range(9):
         i_x = i%n_row
         i_y = i//n_row
         np.random.seed(i+100)
         data = result['task'].gen_data(1000, 5000)
-        
 
-    
+
+
         test_sim = Simulation(result['sim'].best_net, learn_alg=None, optimizer=None)
         test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
         axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
@@ -350,10 +660,10 @@ for i_file in [29]:
         #axarr[i_x, i_y].set_title(title)
         axarr[i_x, i_y].set_xticks([])
         axarr[i_x, i_y].set_yticks([])
-    
-    continue 
+
+    continue
 #    config = [result['sim'].net.alpha, result['task'].tau_task]
-#    
+#
 #    if config not in configs:
 #        configs.append(config)
 #        i_conf = len(configs) - 1
@@ -361,21 +671,21 @@ for i_file in [29]:
 #    else:
 #        i_conf = configs.index(config)
 #        first = False
-#    
+#
 #    if config==[0.3, 4]:
 #        i_seed = result['i_seed']
 #        if i_seed==17:
 #            break
 #    else:
 #        continue
-    
+
     np.random.seed(100)
     data = result['task'].gen_data(1000, 5000)
-        
+
     i_seed = result['i_seed']
     i_x = i_seed%n_row
     i_y = i_seed//n_row
-    
+
     test_sim = Simulation(result['sim'].best_net, learn_alg=None, optimizer=None)
     test_sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
     axarr[i_x, i_y].plot(test_sim.mons['y_hat'][:,0])
@@ -387,34 +697,34 @@ for i_file in [29]:
     #axarr[i_x, i_y].set_title(title)
     axarr[i_x, i_y].set_xticks([])
     axarr[i_x, i_y].set_yticks([])
-        
+
     val_losses[file_name] = result['sim'].best_val_loss
-    
+
     continue
-        
+
     i_x = i_conf%n_row
     i_y = i_conf//n_row
-    
+
     #np.random.seed(result['i_seed'])
     #data = result['task'].gen_data(1000, 10000)
-    
+
     #sim = Simulation(result['sim'].net, learn_alg=None, optimizer=None)
     #sim.run(data, mode='test', monitors=['loss_', 'y_hat'], verbose=False)
     #axarr[i_x, i_y].plot(sim.mons['y_hat'][:,0])
     #axarr[i_x, i_y].plot(data['test']['Y'][:,0], alpha=0.4)
-    
+
     loss_1 = rectangular_filter(result['sim'].mons['loss_'], filter_size=1000)
     #loss_2 = rectangular_filter(result['sim'].mons['sg_loss'], filter_size=1000)
     #loss_3 = rectangular_filter(result['sim'].mons['loss_a'], filter_size=1000)
-    
+
     loss_avg_1[i_conf] += loss_1
     #loss_avg_2[i_conf] += loss_2
     #loss_avg_3[i_conf] += loss_3
-    
+
     axarr[i_x, i_y].plot(loss_1, color='b', alpha=0.05)
     #axarr[i_x, i_y].plot(loss_2, color='y', alpha=0.05)
     #axarr[i_x, i_y].plot(loss_3, color='r', alpha=0.05)
-    
+
     if first:
         axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
         axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
@@ -431,13 +741,13 @@ for i_file in [29]:
 
 n_seeds = 20
 for i_conf in range(len(configs)):
-    
+
     i_x = i_conf%n_row
     i_y = i_conf//n_row
-    
+
     axarr[i_x, i_y].plot(loss_avg_1[i_conf]/n_seeds, color='b')
     #axarr[i_x, i_y].plot(loss_avg_2[i_conf]/n_seeds, color='y')
-    #axarr[i_x, i_y].plot(loss_avg_3[i_conf]/n_seeds, color='r')    
+    #axarr[i_x, i_y].plot(loss_avg_3[i_conf]/n_seeds, color='r')
 
 ### STATE SPACE STUFF ###
 #State space
@@ -452,15 +762,15 @@ for i_conf in range(len(configs)):
 #        cond = np.logical_and(cond, cond_)
 #    print(cond.sum())
 #    ssa.plot_in_state_space(test_sim.mons['a'][5:-1][cond], '.', alpha=0.1, color=col)
-#    
+#
 ##    for past in [[0,0], [0, 1], [1, 0], [1, 1]]:
 ##        cond = np.where(np.logical_and(data['test']['X'][2:-2,0]==past[0], data['test']['X'][4:,0]==past[1]))
 ##        ssa.plot_in_state_space(test_sim.mons['a'][:-4,][cond], '.', alpha=0.3)
-#    
+#
 #for y in [0.25, 0.5, 0.75, 1]:
 #    cond = np.where(data['test']['Y'][:,0]==y)
 #    ssa.plot_in_state_space(test_sim.mons['a'][cond], '.', alpha=0.3)
-    
+
 #ssa.plot_in_state_space(test_sim.mons['a'])
 
 
@@ -470,9 +780,9 @@ for i_conf in range(len(configs)):
 #                                      mode='valid')
 #        axarr[i_x, i_y].plot(smoothed_signal, col, alpha=alpha)
 #        signals[i_conf][key].append(smoothed_signal)
-#        
+#
 #    for key, col in zip(['sg_loss', 'loss_a'], ['y', 'g']):
-#        
+#
 #        smoothed_signal = np.convolve(result['rnn'].learn_alg.mons[key],
 #                                      np.ones(filter_size)/filter_size,
 #                                      mode='valid')
@@ -483,24 +793,24 @@ for i_conf in range(len(configs)):
 #
 #    i_x = i_conf%n_row
 #    i_y = i_conf//n_row
-#    
+#
 #    for key, col in zip(['loss_', 'acc', 'sg_loss', 'loss_a'], ['b', 'k', 'y', 'g']):
-#        
+#
 #        signals[i_conf][key] = np.array(signals[i_conf][key])
-#        
+#
 #        axarr[i_x, i_y].plot(np.nanmean(signals[i_conf][key], axis=0), col)
-#    
+#
 #    if True:
 #        axarr[i_x, i_y].axhline(y=0.66, color='r', linestyle='--')
 #        axarr[i_x, i_y].axhline(y=0.52, color='m', linestyle='--')
-#        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')    
-#        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')   
-#        
+#        axarr[i_x, i_y].axhline(y=0.45, color='g', linestyle='--')
+#        axarr[i_x, i_y].axhline(y=0.75, color='k', linestyle='--')
+#
 #    axarr[i_x, i_y].set_ylim([0, 1])
 #    axarr[i_x, i_y].set_xlim([0, 10000])
 #    axarr[i_x, i_y].set_xticks([])
 #    axarr[i_x, i_y].set_title('{}, {}, {}'.format(conf[0], conf[1], conf[2]), fontsize=8)
-#    
+#
 #print(n_errors)
 #### ------------- #####
 
@@ -534,11 +844,11 @@ for i_conf in range(len(configs)):
 #avg_eval_mod = []
 #spectral_radii = []
 #for W_rec in rnn.mons['W_rec']:
-#    
+#
 #    eigs, vecs = np.linalg.eig(W_rec)
 #    avg_eval_mod.append(np.absolute(eigs).mean())
 #    spectral_radii.append(np.amax(np.absolute(eigs)))
-#    
+#
 #plt.plot(avg_eval_mod)
 #plt.plot(spectral_radii)
 #plt.legend(['Avg eigenvalue modulus', 'Spectral radius'])
@@ -565,21 +875,21 @@ for i_conf in range(len(configs)):
 #n_roll = 14
 #
 #def d_prime(A, B):
-#    
+#
 #    return (np.mean(A) - np.mean(B))/np.sqrt(0.5*(np.var(A) + np.var(B)))
 #
 #for i_pc in range(n_pc):
 #    PC = traj[:,i_pc]
 #    d_primes = []
 #    for i_roll in range(n_roll):
-#    
+#
 #        A = PC[np.where(np.roll(x,i_roll)==0)]
 #        B = PC[np.where(np.roll(x,i_roll)==1)]
-#        
+#
 #        d_primes.append(d_prime(A,B))
-#        
+#
 #    plt.plot(d_primes)
-#    
+#
 #plt.legend(['PC{}'.format(i) for i in range(n_pc)])
 #plt.xticks(range(n_roll))
 #plt.xlabel('Time Lag')
@@ -599,11 +909,11 @@ for i_conf in range(len(configs)):
 #input_data = np.zeros((n_train, 84))
 #output_data = np.zeros((n_train, 84))
 #for i in range(1, n_train):
-#    
+#
 #    k = char_to_ix[text[i]]
 #    input_data[i,k] = 1
 #    output_data[i-1, k] = 1
-#    
+#
 #data = {}
 #data['train'] = {'X': input_data, 'Y': output_data}
 #
@@ -611,7 +921,7 @@ for i_conf in range(len(configs)):
 #output_data = np.zeros((n_test, 84))
 #
 #for i in range(n_train, n_train+n_test):
-#    
+#
 #    k = char_to_ix[text[i]]
 #    input_data[i-n_train,k] = 1
 #    output_data[i-1-n_train, k] = 1
@@ -621,3 +931,532 @@ for i_conf in range(len(configs)):
 #data['test'] = {'X': np.zeros((1000, 84)), 'Y': np.zeros((1000, 84))}
 #
 #rnn.run(data, mode='test', monitors=['y_hat'])
+
+class DNI(Learning_Algorithm):
+
+    def __init__(self, net, optimizer, **kwargs):
+
+        self.name = 'DNI'
+        allowed_kwargs_ = {'SG_clipnorm', 'SG_target_clipnorm', 'W_a_lr',
+                           'activation', 'SG_label_activation', 'backprop_weights',
+                           'sg_loss_thr', 'U_lr', 'l2_reg', 'fix_SG_interval', 'alpha_e',
+                           'train_SG_with_exact_CA'}
+        #Default parameters
+        self.optimizer = optimizer
+        self.l2_reg = 0
+        self.fix_SG_interval = 5
+        self.activation = identity
+        self.SG_label_activation = identity
+        self.backprop_weights = 'exact'
+        self.sg_loss_thr = 0.05
+        self.train_SG_with_exact_CA = False
+        #Override defaults with kwargs
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        sigma = np.sqrt(1/self.n_h)
+        self.SG_init(sigma)
+
+        self.i_fix = 0
+
+        self.W_a = np.copy(self.net.W_rec)
+        self.U = np.copy(self.A)
+        self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
+        self.SG_params = [self.A, self.B, self.C]
+        self.e_w = np.zeros((self.n_h, self.n_h + self.n_in + 1))
+
+    def SG_init(self, sigma):
+
+        self.A = np.random.normal(0, sigma, (self.n_h, self.n_h))
+        self.B = np.random.normal(0, sigma, (self.n_h, self.n_out))
+        self.C = np.zeros(self.n_h)
+
+    def update_learning_vars(self):
+
+        #Get network jacobian
+        self.net.get_a_jacobian()
+
+        #Computer SG error term
+        self.sg = self.synthetic_grad(self.net.a_prev, self.net.y_prev)
+
+        if self.SG_clipnorm is not None:
+            self.sg_norm = norm(self.sg)
+            if self.sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / self.sg_norm
+
+        self.sg_target = self.get_sg_target()
+
+        if self.SG_target_clipnorm is not None:
+            self.sg_target_norm = norm(self.sg_target)
+            if self.sg_target_norm > self.SG_target_clipnorm:
+                self.sg_target = self.sg_target / self.sg_target_norm
+
+        self.e_sg = self.sg - self.sg_target
+        self.sg_loss = np.mean((self.sg - self.sg_target)**2)
+        self.scaled_e_sg = self.e_sg*self.activation.f_prime(self.sg_h)
+
+        #Get SG grads
+        self.SG_grads = [np.multiply.outer(self.scaled_e_sg, self.net.a_prev),
+                         np.multiply.outer(self.scaled_e_sg, self.net.y_prev),
+                         self.scaled_e_sg]
+
+        if self.l2_reg > 0:
+            self.SG_grads[0] += self.l2_reg*self.A
+            self.SG_grads[1] += self.l2_reg*self.B
+            self.SG_grads[2] += self.l2_reg*self.C
+
+        #Update SG parameters
+        self.SG_params = self.optimizer.get_updated_params(self.SG_params, self.SG_grads)
+        self.A, self.B, self.C = self.SG_params
+
+        if self.i_fix == self.fix_SG_interval - 1:
+            self.i_fix = 0
+            self.A_, self.B_, self.C_ = np.copy(self.A), np.copy(self.B), np.copy(self.C)
+        else:
+            self.i_fix += 1
+
+        if self.W_a_lr is not None:
+            self.update_W_a()
+
+        if self.U_lr is not None:
+            self.update_U()
+
+    def get_sg_target(self):
+
+        self.propagate_feedback_to_hidden()
+
+        if self.backprop_weights=='exact':
+            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.net.a_J)
+        elif self.backprop_weights=='approximate':
+            sg_target = self.q_prev + self.synthetic_grad_(self.net.a, self.net.y).dot(self.W_a)
+        elif self.backprop_weights=='composite':
+            sg_target = self.q_prev + self.U.dot(self.net.a)
+
+        if self.train_SG_with_exact_CA:
+            sg_target = self.net.CA
+
+        return sg_target
+
+    def update_W_a(self):
+
+        self.loss_a = np.square(self.W_a.dot(self.net.a_prev) - self.net.a).mean()
+        self.e_a = self.W_a.dot(self.net.a_prev) - self.net.a
+
+        self.W_a -= self.W_a_lr*np.multiply.outer(self.e_a, self.net.a_prev)
+
+    def update_U(self):
+
+        self.loss_u = np.square(self.U.dot(self.net.a_prev) - self.sg).mean()
+        self.e_u = self.U.dot(self.net.a_prev) - self.sg
+        self.U -= self.U_lr*np.multiply.outer(self.e_u, self.net.a_prev)
+
+    def synthetic_grad(self, a, y):
+        self.sg_h = self.A.dot(a) + self.B.dot(y) + self.C
+        return self.activation.f(self.sg_h)
+
+    def synthetic_grad_(self, a, y):
+        self.sg_h_ = self.A_.dot(a) + self.B_.dot(y) + self.C_
+        return self.SG_label_activation.f((self.activation.f(self.sg_h_)))
+
+    def get_rec_grads(self):
+
+        self.sg = self.synthetic_grad(self.net.a, self.net.y)
+        self.sg_scaled = self.net.alpha*self.sg*self.net.activation.f_prime(self.net.h)
+
+        if self.SG_clipnorm is not None:
+            sg_norm = norm(self.sg)
+            if sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / sg_norm
+
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+
+        if self.alpha_e is not None:
+            self.update_synaptic_eligibility_trace()
+            return (self.e_w.T*self.sg).T
+        else:
+            return np.multiply.outer(self.sg_scaled, self.a_hat)
+
+    def update_synaptic_eligibility_trace(self):
+
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.a_hat = np.concatenate([self.net.a_prev, self.net.x, np.array([1])])
+        self.e_w = (1 - self.alpha_e)*self.e_w + self.alpha_e*np.outer(self.D, self.a_hat)
+
+class Copy_Task(Task):
+
+    def __init__(self, n_symbols, T):
+
+        super().__init__(n_symbols + 1, n_symbols + 1)
+
+        self.n_symbols = n_symbols
+        self.T = T
+
+    def gen_dataset(self, N):
+
+        n_sequences = N//(2*self.T)
+
+        I = np.eye(self.n_in)
+
+        X = np.zeros((1, self.n_in))
+        Y = np.zeros((1, self.n_in))
+
+        for i in range(n_sequences):
+
+            seq = I[np.random.randint(0, self.n_symbols, size=self.T)]
+            cue = np.tile(I[-1], (self.T, 1))
+            X = np.concatenate([X, seq, cue])
+            Y = np.concatenate([Y, cue, seq])
+
+        return X, Y
+
+
+class Repeat_Sequence(Task):
+
+    def __init__(self, n_symbols, T_sequence, T_delay):
+
+        super().__init__(n_symbols, n_symbols)
+
+class Sine_Wave(Task):
+
+    def __init__(self, p_transition, frequencies, never_off=False, **kwargs):
+
+        allowed_kwargs = {'p_frequencies', 'amplitude', 'method'}
+        for k in kwargs:
+            if k not in allowed_kwargs:
+                raise TypeError('Unexpected keyword argument '
+                                'passed to Sine_Wave.__init__: ' + str(k))
+
+        super().__init__(2, 2)
+
+        self.p_transition = p_transition
+        self.method = 'random'
+        self.amplitude = 0.1
+        self.frequencies = frequencies
+        self.p_frequencies = np.ones_like(frequencies)/len(frequencies)
+        self.never_off = never_off
+        self.__dict__.update(kwargs)
+        if self.method == 'regular':
+            self.time_steps_per_trial = int(1/self.p_transition)
+            self.trial_mask = np.ones(self.time_steps_per_trial)
+
+    def gen_dataset(self, N):
+
+        X = np.zeros((N, 2))
+        Y = np.zeros((N, 2))
+
+        self.switch_cond = False
+
+        active = False
+        t = 0
+        X[0,0] = 1
+        for i in range(1, N):
+
+            if self.method=='regular':
+                if i%self.time_steps_per_trial==0:
+                    self.switch_cond = True
+            elif self.method=='random':
+                if np.random.rand()<self.p_transition:
+                    self.switch_cond = True
+
+            if self.switch_cond:
+
+                t = 0
+
+                if active and not self.never_off:
+                    X[i,0] = 1
+                    X[i,1] = 0
+                    Y[i,:] = 0
+
+                if not active or self.never_off:
+                    X[i,0] = np.random.choice(self.frequencies, p=self.p_frequencies)
+                    X[i,1] = 1
+                    Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)
+                    Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)
+
+                active = not active
+
+            else:
+
+                t+=1
+                X[i,:] = X[i-1,:]
+                Y[i,0] = self.amplitude*np.cos(2*np.pi*X[i,0]*t)*(active or self.never_off)
+                Y[i,1] = self.amplitude*np.sin(2*np.pi*X[i,0]*t)*(active or self.never_off)
+
+            self.switch_cond = False
+
+        X[:,0] = -np.log(X[:,0])
+
+        return X, Y
+
+
+
+        if self.SG_clipnorm is not None:
+            self.sg_norm = norm(self.sg)
+            if self.sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / self.sg_norm
+
+        if self.SG_target_clipnorm is not None:
+            self.sg_target_norm = norm(self.sg_target)
+            if self.sg_target_norm > self.SG_target_clipnorm:
+                self.sg_target = self.sg_target / self.sg_target_norm
+
+        if self.SG_clipnorm is not None:
+            sg_norm = norm(self.sg)
+            if sg_norm > self.SG_clipnorm:
+                self.sg = self.sg / sg_norm
+
+class BPTT(Learning_Algorithm):
+
+    def __init__(self, net, t1, t2, monitors=[], use_historical_W=False):
+
+        super().__init__(net, monitors)
+
+        #The two integer parameters
+        self.t1  = t1    #Number of steps to average loss over
+        self.t2  = t2    #Number of steps to propagate backwards
+        self.T   = t1+t2 #Total amount of net hist needed to memorize
+        self.use_historical_W = use_historical_W
+
+        #Lists storing relevant net history
+        self.h_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
+        self.a_hist = [np.zeros(self.net.n_h) for _ in range(self.T)]
+        self.e_hist = [np.zeros(self.net.n_out) for _ in range(t1)]
+        self.x_hist = [np.zeros(self.net.n_in) for _ in range(self.T)]
+        self.W_rec_hist = [self.net.W_rec for _ in range(self.T)]
+
+    def update_learning_vars(self):
+        '''
+        Must be run every time step to update storage of relevant history
+        '''
+
+        for attr in ['h', 'a', 'e', 'x', 'W_rec']:
+            self.__dict__[attr+'_hist'].append(getattr(self.net, attr))
+            del(self.__dict__[attr+'_hist'][0])
+
+    def __call__(self):
+        '''
+        Run only when grads are needed for the optimizer
+        '''
+
+        W_out_grad = [np.multiply.outer(self.e_hist[-i],self.a_hist[-i]) for i in range(1, self.t1+1)]
+        self.W_out_grad = sum(W_out_grad)/self.t1
+
+        b_out_grad = [self.e_hist[-i] for i in range(1, self.t1+1)]
+        self.b_out_grad = sum(b_out_grad)/self.t1
+
+        self.outer_grads = [self.W_out_grad, self.b_out_grad]
+
+        get_a_J = self.net.get_a_jacobian
+
+        if self.use_historical_W:
+
+            self.a_Js = [get_a_J(update=False,
+                         h=self.h_hist[-i],
+                         h_prev=self.h_hist[-(i+1)],
+                         W_rec=self.W_rec_hist[-i]) for i in range(1, self.T)]
+        else:
+
+            self.a_Js = [get_a_J(update=False,
+                         h=self.h_hist[-i],
+                         h_prev=self.h_hist[-(i+1)],
+                         W_rec=self.net.W_rec) for i in range(1, self.T)]
+
+        n_h, n_in = self.net.n_h, self.net.n_in
+        self.rec_grad = np.zeros((n_h, n_h+n_in+1))
+
+        CA_list = []
+
+        for i in range(1, self.t1+1):
+
+            self.q = self.e_hist[-i].dot(self.net.W_out)
+
+            for j in range(self.t2):
+
+                self.J = np.eye(n_h)
+
+                for k in range(j):
+
+                    self.J = self.J.dot(self.a_Js[-(i+k)])
+
+                self.J = self.net.alpha*self.J.dot(np.diag(self.net.activation.f_prime(self.h_hist[-(i+j)])))
+
+                self.pre_activity = np.concatenate([self.a_hist[-(i+j+1)], self.x_hist[-(i+j)], np.array([1])])
+                CA = self.q.dot(self.J)
+                CA_list.append(CA)
+                self.rec_grad += np.multiply.outer(CA, self.pre_activity)
+
+        self.credit_assignment = sum(CA_list)/len(CA_list)
+
+        grads = [self.rec_grad[:,:n_h], self.rec_grad[:,n_h:-1], self.rec_grad[:,-1]]
+        grads += self.outer_grads
+
+        return grads
+
+class Random_Walk_RTRL(Learning_Algorithm):
+    """Algorithm idea combining tensor structure of KeRNL with stochastic
+    update principles of KF-RTRL."""
+
+    def __init__(self, net, rho_A=1, rho_B=1, gamma=0.5, **kwargs):
+
+        self.name = 'RW-RTRL'
+        allowed_kwargs_ = set()
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        self.gamma = gamma
+        self.rho_A = rho_A
+        self.rho_B = rho_B
+        self.A = np.zeros((self.n_h, self.m))
+        self.B = np.zeros((self.n_h, self.n_h))
+
+    def update_learning_vars(self):
+
+        self.net.get_a_jacobian()
+        a_J = self.net.a_J
+
+        self.nu = np.random.choice([-1, 1], self.n_h)
+
+        self.a_hat = np.concatenate([self.net.a_prev,
+                                     self.net.x,
+                                     np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+
+        self.e_ij = np.multiply.outer(self.D**(1-self.gamma),
+                                      self.a_hat)
+        self.e_ki = np.diag(self.net.alpha * self.D**self.gamma)
+
+        self.A = self.A + (self.nu * (self.rho_A * self.e_ij).T).T
+        self.B = a_J.dot(self.B) + self.nu*self.rho_B*self.e_ki
+
+    def get_rec_grads(self):
+
+        return (self.q.dot(self.B) * self.A.T).T
+
+class Reward_Modulated_Hebbian_Plasticity(Learning_Algorithm):
+    """Implements a reward-modulated Hebbian plasticity rule for *trial-
+    structured* tasks only (for now)."""
+
+    def __init__(self, net, alpha, task, **kwargs):
+
+        self.name = 'RM-Hebb'
+        allowed_kwargs_ = {'B', 'fixed_modulation'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        self.alpha = alpha
+        if self.B is None:
+            self.B = np.zeros((self.n_h, self.m))
+
+        self.task = task
+
+        self.running_loss_avg = 0
+        self.i_t = 0
+
+    def update_learning_vars(self):
+        """Updates B by one time step of temporal filtration via the invesre
+        time constant alpha (see RFLO)."""
+
+        self.i_trial = self.i_t % self.task.time_steps_per_trial
+
+        #Get relevant values and derivatives from network
+        self.a_hat   = np.concatenate([self.net.a_prev,
+                                       self.net.x,
+                                       np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.M_immediate = self.alpha * np.multiply.outer(self.D,
+                                                          self.a_hat)
+
+        #Update eligibility traces
+        self.B = (1 - self.alpha) * self.B + self.M_immediate
+        #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
+        #                                                                    self.a_hat)
+
+        if self.task.trial_mask[self.i_trial] > 0.3:
+            #Update running loss average
+            self.running_loss_avg = 0.99 * self.running_loss_avg + 0.01 * self.net.loss_
+
+        self.i_t += 1
+
+    def get_rec_grads(self):
+        """Scales Hebbian plasticity rule by loss running average."""
+
+        if self.task.trial_mask[self.i_trial] > 0.3:
+            scale = 1
+        else:
+            scale = 0
+
+        if self.fixed_modulation is not None:
+            self.modulation = self.fixed_modulation
+        else:
+            self.modulation = scale * (self.net.loss_ - self.running_loss_avg)
+        return self.modulation * self.B
+
+    def reset_learning(self):
+        """Reset eligibility trace to 0."""
+
+        self.B *= 0
+
+class COLIN(Learning_Algorithm):
+    """Implements Cholinergic Operant Learning In Neurons"""
+
+    def __init__(self, net, decay, sigma, task, **kwargs):
+
+        self.name = 'COLIN'
+        allowed_kwargs_ = {'B', 'fixed_modulation'}
+        super().__init__(net, allowed_kwargs_, **kwargs)
+
+        self.decay = decay
+        if self.B is None:
+            self.B = np.zeros((self.n_h, self.m))
+
+        self.task = task
+        self.sigma = sigma
+        self.alpha_loss = 0.99
+        self.running_loss_avg = 0
+        self.i_t = 0
+
+    def update_learning_vars(self):
+        """Updates B by one time step of temporal filtration via the invesre
+        time constant alpha (see RFLO)."""
+
+        self.i_trial = self.i_t % self.task.time_steps_per_trial
+
+        #Get relevant values and derivatives from network
+        self.a_hat   = np.concatenate([self.net.a_prev,
+                                       self.net.x,
+                                       np.array([1])])
+        self.D = self.net.activation.f_prime(self.net.h)
+        self.D_noise = self.D * (self.net.noise/self.sigma**2)
+        #self.D_noise = self.D *(1/self.sigma**2)
+        #self.D_noise = self.D * (self.sigma*self.net.alpha/self.sigma**2)
+        self.M_immediate = self.net.alpha * np.multiply.outer(self.D_noise,
+                                                              self.a_hat)
+
+        #Update eligibility traces
+        #np.multiply.outer(self.net.noise/self.net.sigma, self.net.a_prev)
+        self.B = (1 - self.decay) * self.B + self.M_immediate
+        #self.B = (1 - self.alpha) * self.B + self.alpha * np.multiply.outer(self.net.a,
+        #                                                                    self.a_hat)
+
+        if self.task.trial_mask[self.i_trial] > 0.3:
+            #Update running loss average
+            self.running_loss_avg = ((1 - self.alpha_loss) * self.running_loss_avg +
+                                     self.alpha_loss * self.net.loss_)
+
+        self.i_t += 1
+
+    def get_rec_grads(self):
+        """Scales Hebbian plasticity rule by loss running average."""
+
+        if self.task.trial_mask[self.i_trial] > 0.3:
+            scale = 1
+        else:
+            scale = 0
+
+        if self.fixed_modulation is not None:
+            self.modulation = self.fixed_modulation
+        else:
+            self.modulation = scale * (self.net.loss_ - self.running_loss_avg)
+        return self.modulation * self.B
+
+    def reset_learning(self):
+        """Reset eligibility trace to 0."""
+
+        self.B *= 0

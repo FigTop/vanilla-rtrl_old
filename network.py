@@ -168,7 +168,7 @@ class RNN:
         Returns:
             Updates self.x, self.h, self.a, and self.*_prev, or returns the
             would-be update from given previous state a."""
-            
+
         if update: #Update network if update is True
             self.x = x
             self.h_prev = np.copy(self.h)
@@ -177,11 +177,13 @@ class RNN:
             self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
                       self.b_rec) #Calculate new pre-activations
             if sigma>0: #Add noise to h if sigma is more than 0.
-                self.noise = np.random.normal(0, sigma, self.n_h)
-                self.h += self.noise
+                self.noise = sigma * np.random.normal(0, self.alpha, self.n_h)
+                #self.h += self.noise
+            else:
+                self.noise = 0
             #Implement recurrent update equation
             self.a = ((1 - self.alpha)*self.a +
-                      self.alpha*self.activation.f(self.h))
+                      self.alpha*self.activation.f(self.h)) + self.noise
         else: #Otherwise calculate would-be next state from provided input a.
             h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
             if sigma>0:

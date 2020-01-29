@@ -6,10 +6,9 @@ Created on Mon Nov  5 12:54:56 2018
 @author: omarschall
 """
 
-from copy import copy
+from copy import deepcopy
 import time
-from utils import (norm, classification_accuracy,
-                   normalized_dot_product, half_normalized_dot_product,
+from utils import (norm, classification_accuracy, normalized_dot_product,
                    get_spectral_radius, rgetattr)
 import numpy as np
 
@@ -36,7 +35,7 @@ class Simulation:
             time_steps_per_trial (int): Number of time steps in a trial, if
                 task has a trial structure. Leave empty if task runs
                 continuously.
-            trial_lr_mask (numpy array): Array of shape (time_steps_per_trial)
+            trial_mask (numpy array): Array of shape (time_steps_per_trial)
                 that scales the loss at each time step within a trial.
             reset_sigma (float): Standard deviation of RNN initial state at
                 start of each trial. Leave empty if RNN state should carry over
@@ -47,7 +46,7 @@ class Simulation:
                 results, if desired."""
 
         allowed_kwargs = {'time_steps_per_trial',
-                          'reset_sigma', 'trial_lr_mask',
+                          'reset_sigma', 'trial_mask',
                           'i_job', 'save_dir'}.union(allowed_kwargs_)
         for k in kwargs:
             if k not in allowed_kwargs:
@@ -112,14 +111,20 @@ class Simulation:
                 the argmax of the outputs matches that of the labels.
             check_loss (bool): Same as check_accuracy but with test loss. If
                 both are False, no test simulation is run.
-            save_model_interval (int): Number of time steps between running
+            best_model_interval (int): Number of time steps between running
                 test simulations and saving the model if it has the lowest
-                yet validation loss."""
+                yet validation loss.
+            save_model_interval (int): Number of time steps between running
+                test simulations and saving the top n_singular_vectors vectors
+                of V in the SVD of the hidden state.
+            n_singular_vectors (int): Number of singular vectors to keep for
+                analysis when saving test results."""
 
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
                           'update_interval', 'comp_algs', 'verbose',
                           'report_interval', 'check_accuracy', 'check_loss',
-                          'save_model_interval'}
+                          'best_model_interval', 'save_model_interval',
+                          'n_singular_vectors'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -141,6 +146,8 @@ class Simulation:
         self.comp_algs = []
         self.report_interval = max(self.total_time_steps//10, 1)
         self.update_interval = 1
+        self.singular_vectors = []
+        self.n_singular_vectors = 3
         self.sigma = 0
 
         #Overwrite defaults with any provided keyword args
@@ -180,7 +187,7 @@ class Simulation:
 
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
-        
+
         #Delete data to save space
         del(self.x_inputs)
         del(self.y_labels)
@@ -233,7 +240,7 @@ class Simulation:
             self.i_trial = self.i_t//self.time_steps_per_trial
             if self.reset_sigma is not None:
                 self.net.reset_network(sigma=self.reset_sigma)
-            self.learn_alg.reset_learning()
+                self.learn_alg.reset_learning()
 
     def forward_pass(self, x, y):
         """Runs network forward, computes immediate losses and errors."""
@@ -255,9 +262,9 @@ class Simulation:
         net.error = net.loss.f_prime(net.z, net.y)
 
         #Re-scale losses and errors if trial structure is provided
-        if self.trial_lr_mask is not None:
-            self.loss_ *= self.trial_lr_mask[self.i_t_trial]
-            self.error *= self.trial_lr_mask[self.i_t_trial]
+        if self.trial_mask is not None:
+            net.loss_ *= self.trial_mask[self.i_t_trial]
+            net.error *= self.trial_mask[self.i_t_trial]
 
     def train_step(self):
         """Uses self.learn_alg to calculate gradients and self.optimizer to
@@ -283,8 +290,8 @@ class Simulation:
         #Only update on schedule (default update_interval=1)
         if self.i_t%self.update_interval == 0:
             #Get updated parameters
-            net.params = self.optimizer.get_update(net.params,
-                                                   self.grads_list)
+            net.params = self.optimizer.get_updated_params(net.params,
+                                                           self.grads_list)
             net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
 
     def end_time_step(self, data):
@@ -300,13 +307,20 @@ class Simulation:
         #Monitor relevant variables
         self.update_monitors()
 
-        #Evaluate model and save if performance is best
+        #Test model at specified interval and save results for analysis
         if self.save_model_interval is not None and self.mode == 'train':
-            if self.i_t%self.save_model_interval == 0:
+            if self.i_t % self.save_model_interval == 0:
+                self.get_test_singular_vectors(data)
+
+        #Evaluate model and save if performance is best
+        if self.best_model_interval is not None and self.mode == 'train':
+            if self.i_t % self.best_model_interval == 0:
                 self.save_best_model(data)
 
         #Make report if conditions are met
-        if self.i_t%self.report_interval == 0 and self.i_t > 0 and self.verbose:
+        if (self.i_t % self.report_interval == 0 and
+            self.i_t > 0 and
+            self.verbose):
             self.report_progress(data)
 
     def report_progress(self, data):
@@ -370,7 +384,6 @@ class Simulation:
                 if feature in key:
                     attr = key.split('-')[0]
                     self.mons[key].append(func(rgetattr(self, attr)))
-                    #setattr(self, key, func(rgetattr(self, attr)))
 
     def save_best_model(self, data):
         """Runs a test simulation, compares loss to current best model, and
@@ -387,11 +400,23 @@ class Simulation:
             self.best_net = val_sim.net
             self.best_val_loss = val_loss
 
+    def get_test_singular_vectors(self, data):
+        """Runs a test simulation and saves resulting top singular vectors
+        of net.a in self.singular_vectors."""
+
+        test_sim = self.get_test_sim()
+        test_sim.run(data, mode='test',
+                     monitors=['net.a'],
+                     verbose=False)
+
+        U, S, V = np.linalg.svd(test_sim.mons['net.a'])
+        self.singular_vectors.append(V[:,:self.n_singular_vectors])
+
     def get_test_sim(self):
         """Creates what is effectively a copy of the current simulation, but
         saving on memory by omitting monitors or other large attributes."""
 
-        sim = Simulation(copy(self.net),
+        sim = Simulation(deepcopy(self.net),
                          time_steps_per_trial=self.time_steps_per_trial,
                          reset_sigma=self.reset_sigma,
                          i_job=self.i_job,
@@ -402,8 +427,10 @@ class Simulation:
         """Computes alignment matrix for different learning algorithms run
         in parallel."""
 
+        #Update learning variables for the algorithms *not* being used to train
+        #the network
         for i_alg, alg in enumerate(self.algs):
-            if i_alg > 0:
+            if i_alg > 0: #Only the comparison algorithms
                 alg.update_learning_vars()
                 alg()
             key = alg.name
@@ -415,21 +442,22 @@ class Simulation:
             for i, key_i in enumerate(self.rec_grads_dict):
                 for j, key_j in enumerate(self.rec_grads_dict):
 
-                    if 'BPTT' in key_i:
+                    #For comparison with Future_BPTT, must lag gradients by
+                    #the truncation horizon
+                    if 'F-BPTT' in key_i:
                         i_index = -1
                     else:
                         i_index = 0
-                    if 'BPTT' in key_j:
+                    if 'F-BPTT' in key_j:
                         j_index = -1
                     else:
                         j_index = 0
-                        
+
                     g_i = self.rec_grads_dict[key_i][i_index]
                     g_j = self.rec_grads_dict[key_j][j_index]
-                    #alignment = half_normalized_dot_product(g_i, g_j)
                     alignment = normalized_dot_product(g_i, g_j)
                     self.alignment_matrix[i, j] = alignment
-                    self.alignment_weights[i, j] = norm(g_i)*norm(g_j)
+                    self.alignment_weights[i, j] = norm(g_i) * norm(g_j)
 
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:
