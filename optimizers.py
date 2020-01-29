@@ -50,7 +50,7 @@ class Optimizer:
         except AttributeError:
             return self.lr_
 
-class SGD(Optimizer):
+class Stochastic_Gradient_Descent(Optimizer):
     """Implements basic stochastic gradient descent optimizer.
 
     Attributes:

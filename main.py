@@ -132,8 +132,8 @@ if params['task'] == 'Mimic':
               output=identity,
               loss=mean_squared_error)
 
-optimizer = SGD(lr=0.0001)
-SG_optimizer = SGD(lr=0.001)
+optimizer = Stochastic_Gradient_Descent(lr=0.0001)
+SG_optimizer = Stochastic_Gradient_Descent(lr=0.001)
 
 if params['algorithm'] == 'Only_Output_Weights':
     learn_alg = Only_Output_Weights(rnn)
@@ -159,7 +159,7 @@ if params['algorithm'] == 'RFLO':
 if params['algorithm'] == 'KeRNL':
     sigma_noise = 0.0000001
     kernl_lr = params['base_learning_rate']/sigma_noise
-    KeRNL_optimizer = SGD(kernl_lr)
+    KeRNL_optimizer = Stochastic_Gradient_Descent(kernl_lr)
     learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=sigma_noise)
 
 comp_algs = []

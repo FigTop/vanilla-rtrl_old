@@ -15,7 +15,7 @@ class Test_SGD(unittest.TestCase):
     @classmethod
     def setUp(cls):
 
-        cls.optimizer = SGD(lr=0.1, clip_norm=2)
+        cls.optimizer = Stochastic_Gradient_Descent(lr=0.1, clip_norm=2)
 
     def test_clip_norm(self):
 
@@ -40,7 +40,7 @@ class Test_SGD(unittest.TestCase):
 
     def test_lr_decay(self):
 
-        optimizer = SGD(lr=1, lr_decay_rate=0.9, min_lr=0.5)
+        optimizer = Stochastic_Gradient_Descent(lr=1, lr_decay_rate=0.9, min_lr=0.5)
 
         params = []
         grads = []

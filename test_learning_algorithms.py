@@ -406,7 +406,7 @@ class Test_DNI(unittest.TestCase):
 
     def test_update_learning_vars(self):
 
-        optimizer = SGD(lr=1)
+        optimizer = Stochastic_Gradient_Descent(lr=1)
         A = np.ones((2, 5))
         self.learn_alg = DNI(self.rnn, optimizer=optimizer, A=A)
         self.learn_alg.get_sg_target = MagicMock()
@@ -420,7 +420,7 @@ class Test_DNI(unittest.TestCase):
 
     def test_get_sg_target(self):
 
-        optimizer = SGD(lr=1)
+        optimizer = Stochastic_Gradient_Descent(lr=1)
         A = np.ones((2, 5))
         self.learn_alg = DNI(self.rnn, optimizer=optimizer,
                              use_approx_J=True, J_lr=1, A=A)
@@ -432,7 +432,7 @@ class Test_DNI(unittest.TestCase):
 
     def test_update_J_approx(self):
 
-        optimizer = SGD(lr=1)
+        optimizer = Stochastic_Gradient_Descent(lr=1)
         A = np.ones((2, 5))
         self.learn_alg = DNI(self.rnn, optimizer=optimizer,
                              use_approx_J=True, J_lr=1, A=A)
@@ -446,7 +446,7 @@ class Test_DNI(unittest.TestCase):
 
     def test_get_rec_grads(self):
 
-        optimizer = SGD(lr=1)
+        optimizer = Stochastic_Gradient_Descent(lr=1)
         A = np.ones((2, 5))
         self.learn_alg = DNI(self.rnn, optimizer=optimizer,
                              use_approx_J=True, J_lr=1, A=A)
@@ -665,11 +665,11 @@ class Test_Exact_Learning_Algorithms(unittest.TestCase):
                              loss=softmax_cross_entropy)
 
             lr = 0.00001
-            self.optimizer_1 = SGD(lr=lr)
+            self.optimizer_1 = Stochastic_Gradient_Descent(lr=lr)
             self.learn_alg_1 = RTRL(self.rnn_1)
-            self.optimizer_2 = SGD(lr=lr)
+            self.optimizer_2 = Stochastic_Gradient_Descent(lr=lr)
             self.learn_alg_2 = Future_BPTT(self.rnn_2, 25)
-            self.optimizer_3 = SGD(lr=lr)
+            self.optimizer_3 = Stochastic_Gradient_Descent(lr=lr)
             self.learn_alg_3 = Efficient_BPTT(self.rnn_3, 100)
 
             monitors = []
@@ -729,7 +729,7 @@ class Test_KeRNL(unittest.TestCase):
 
     def test_update_learning_vars(self):
 
-        optimizer = SGD(lr=1)
+        optimizer = Stochastic_Gradient_Descent(lr=1)
         self.learn_alg = KeRNL(self.rnn, optimizer, sigma_noise=1)
         self.learn_alg.zeta = np.array([0.1, 0.1])
         self.learn_alg.update_learning_vars()
@@ -752,7 +752,7 @@ class Test_KeRNL(unittest.TestCase):
                       [1, 2]])
         B = np.array([[1, 2],
                       [0, 2]])
-        optimizer = SGD(lr=1)
+        optimizer = Stochastic_Gradient_Descent(lr=1)
         self.learn_alg = KeRNL(self.rnn, optimizer, sigma_noise=1, A=A, B=B)
         self.learn_alg.q = np.array([0.5, 0.5])
         rec_grads = self.learn_alg.get_rec_grads()
@@ -792,12 +792,12 @@ class Test_KeRNL(unittest.TestCase):
 
         #RFLO
         np.random.seed(1)
-        self.optimizer_1 = SGD(lr=0.001)
+        self.optimizer_1 = Stochastic_Gradient_Descent(lr=0.001)
         self.learn_alg_1 = RFLO(self.rnn_1, alpha)
         #KeRNL with beta and gamma fixed to RFLO values
         np.random.seed(1)
-        self.optimizer_2 = SGD(lr=0.001)
-        self.KeRNL_optimizer = SGD(lr=0)
+        self.optimizer_2 = Stochastic_Gradient_Descent(lr=0.001)
+        self.KeRNL_optimizer = Stochastic_Gradient_Descent(lr=0)
         A = np.eye(self.rnn_2.n_h)
         alpha_i = np.ones(self.rnn_2.n_h) * alpha
         self.learn_alg_2 = KeRNL(self.rnn_2, self.KeRNL_optimizer,
