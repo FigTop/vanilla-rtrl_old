@@ -29,11 +29,11 @@ class Function:
 
 def sigmoid_(z):
 
-    return 1/(1+np.exp(-z))
+    return 1 / (1 + np.exp(-z))
 
 def sigmoid_derivative(z):
 
-    return sigmoid_(z)*(1-sigmoid_(z))
+    return sigmoid_(z) * (1 - sigmoid_(z))
 
 sigmoid = Function(sigmoid_,
                    sigmoid_derivative)
@@ -44,13 +44,13 @@ def sigmoid_cross_entropy_(z, y):
 
     p = sigmoid.f(z)
 
-    return -np.mean(y*np.log(p) + (1 - y)*np.log(1 - p))
+    return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
 
 def sigmoid_cross_entropy_derivative(z, y):
 
     p = sigmoid.f(z)
 
-    return (-y/p + (1 - y)/(1 - p))*sigmoid.f_prime(z)
+    return (-y / p + (1 - y) / (1 - p)) * sigmoid.f_prime(z)
 
 sigmoid_cross_entropy = Function(sigmoid_cross_entropy_,
                                  sigmoid_cross_entropy_derivative)
@@ -61,11 +61,11 @@ right_slope = 1
 left_slope = 0
 def relu_(h):
 
-    return np.maximum(0, right_slope*h) - np.maximum(0, left_slope*(-h))
+    return np.maximum(0, right_slope * h) - np.maximum(0, left_slope * (-h))
 
 def relu_derivative(h):
 
-    return (h>0)*(right_slope - left_slope) + left_slope
+    return (h > 0) * (right_slope - left_slope) + left_slope
 
 relu = Function(relu_,
                 relu_derivative)
@@ -78,7 +78,7 @@ def tanh_(z):
 
 def tanh_derivative(z):
 
-    return 1 - np.tanh(z)**2
+    return 1 - np.tanh(z) ** 2
 
 tanh = Function(tanh_,
                 tanh_derivative)
@@ -89,7 +89,7 @@ def softmax_(z):
 
     z = z - np.amax(z)
 
-    return np.exp(z)/np.sum(np.exp(z))
+    return np.exp(z) / np.sum(np.exp(z))
 
 def softmax_derivative(z):
 
