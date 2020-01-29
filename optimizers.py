@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from utils import *
 
 class Optimizer:
     """Parent class for gradient-based optimizers."""
