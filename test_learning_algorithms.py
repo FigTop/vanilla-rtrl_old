@@ -732,9 +732,10 @@ class Test_KeRNL(unittest.TestCase):
         optimizer = Stochastic_Gradient_Descent(lr=1)
         self.learn_alg = KeRNL(self.rnn, optimizer, sigma_noise=1)
         self.learn_alg.zeta = np.array([0.1, 0.1])
+        self.rnn.next_state(self.rnn.x)
         self.learn_alg.update_learning_vars()
 
-        noise_error = self.learn_alg.zeta - np.array([2.1, 2.1])
+        noise_error = self.learn_alg.zeta - np.array([0.1, 0.1])
         A_grads = np.multiply.outer(noise_error, self.learn_alg.zeta)
 
         correct_alpha = np.array([0.8, 0.8])

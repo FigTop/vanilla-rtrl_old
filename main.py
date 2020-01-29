@@ -8,43 +8,36 @@ Created on Mon Sep 10 16:30:58 2018
 
 import numpy as np
 from network import RNN
-from fast_weights_network import Fast_Weights_RNN
 from simulation import Simulation
-from utils import *
 from gen_data import *
 try:
     import matplotlib.pyplot as plt
 except ModuleNotFoundError:
     pass
-import time
 from optimizers import *
 from analysis_funcs import *
 from learning_algorithms import *
-from metalearning_algorithms import *
 from functions import *
 from itertools import product
 import os
 import pickle
-from copy import copy
-from state_space import State_Space_Analysis
-from pdb import set_trace
-from scipy.stats import linregress
+from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 
-if os.environ['HOME']=='/home/oem214':
-    n_seeds = 40
+if os.environ['HOME'] == '/home/oem214':
+    n_seeds = 12
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-#    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
-#                                                'UORO', 'KF-RTRL', 'R-KF-RTRL',
-#                                                'BPTT', 'DNI', 'DNIb',
-#                                                'RFLO', 'KeRNL'],
-#                                     difficulty=list(range(10)))
-    macro_configs = config_generator(algorithm=['RFLO', 'KeRNL'],
-                                     base_learning_rate=[0, 0.003, 0.01, 0.03, 0.1,
-                                                         0.3, 1, 3, 10, 30])
+    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
+                                               'UORO', 'KF-RTRL', 'R-KF-RTRL',
+                                               'BPTT', 'DNI', 'DNIb',
+                                               'RFLO', 'KeRNL'],
+                                     difficulty=list(range(0, 16, 2)))
+#    macro_configs = config_generator(algorithm=['RFLO', 'KeRNL'],
+#                                     base_learning_rate=[0, 0.003, 0.01, 0.03, 0.1,
+#                                                         0.3, 1, 3, 10, 30])
 #    macro_configs = config_generator(algorithm=['RTRL', 'Only_Output_Weights'],
 #                                     n_in=[2, 8, 32, 64],
 #                                     n_h=[2, 8, 32, 64],
@@ -53,13 +46,13 @@ if os.environ['HOME']=='/home/oem214':
 
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
-    np.random.seed(i_job + 100)
+    np.random.seed(i_job + 140)
 
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
-if os.environ['HOME']=='/Users/omarschall':
+if os.environ['HOME'] == '/Users/omarschall':
     params = {'algorithm': 'KeRNL', 'n_in': 64, 'n_h': 2, 'n_out': 32}
     params = {'algorithm': 'KeRNL', 'difficulty': 3, 'base_learning_rate': 0.001}
     i_job = 0
@@ -68,9 +61,7 @@ if os.environ['HOME']=='/Users/omarschall':
     np.random.seed(3)
 
 params['task'] = 'Coin'
-params['difficulty'] = 3
-#params['bug_fix'] = 'on'
-#params['base_learning_rate'] = 0.1
+#params['difficulty'] = 3
 
 if params['task'] == 'Mimic':
 
@@ -98,16 +89,16 @@ if params['task'] == 'Mimic':
 
 elif params['task'] == 'Coin':
 
-    n_1 = params['difficulty'] + 2
-    n_2 = params['difficulty'] + 6
-    tau_task = 1
+    n_1 = params['difficulty']
+    n_2 = params['difficulty'] + 1
+    tau_task = 2
     task = Add_Task(n_1, n_2, deterministic=True, tau_task=tau_task)
 
 data = task.gen_data(1000000, 5000)
 
-n_in     = task.n_in
+n_in = task.n_in
 n_hidden = 32
-n_out    = task.n_out
+n_out = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
 W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
@@ -116,7 +107,7 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-alpha = 1
+alpha = 0.5
 
 if params['task'] == 'Coin':
     rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
@@ -146,7 +137,7 @@ if params['algorithm'] == 'KF-RTRL':
 if params['algorithm'] == 'R-KF-RTRL':
     learn_alg = Reverse_KF_RTRL(rnn)
 if params['algorithm'] == 'BPTT':
-    learn_alg = Future_BPTT(rnn, 21)
+    learn_alg = Future_BPTT(rnn, 30)
 if params['algorithm'] == 'DNI':
     learn_alg = DNI(rnn, SG_optimizer)
 if params['algorithm'] == 'DNIb':
@@ -187,7 +178,7 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 np.random.seed(1)
 n_test = 10000
 data = task.gen_data(0, n_test)
-test_sim = copy(sim)
+test_sim = deepcopy(sim)
 test_sim.run(data,
              mode='test',
              monitors=['net.loss_'],
@@ -195,8 +186,7 @@ test_sim.run(data,
 test_loss = np.mean(test_sim.mons['net.loss_'])
 processed_data = {'test_loss': test_loss}
 
-if os.environ['HOME']=='/Users/omarschall':
-
+if os.environ['HOME'] == '/Users/omarschall':
 
     plot_filtered_signals([sim.mons['net.loss_']])
 
@@ -204,7 +194,7 @@ if os.environ['HOME']=='/Users/omarschall':
     np.random.seed(2)
     n_test = 10000
     data = task.gen_data(100, n_test)
-    test_sim = copy(sim)
+    test_sim = deepcopy(sim)
     test_sim.run(data,
                  mode='test',
                  monitors=['net.loss_', 'net.y_hat', 'net.a'],
@@ -212,16 +202,7 @@ if os.environ['HOME']=='/Users/omarschall':
     fig = plt.figure()
     plt.plot(test_sim.mons['net.y_hat'][:,0])
     plt.plot(data['test']['Y'][:,0])
-    #plt.plot(test_sim.mons['net.y_hat'][:,1])
-    #plt.plot(data['test']['Y'][:,1])
-    #plt.plot(data['test']['X'][:,0]*0.1)
-    #plt.legend(['Prediction', 'Label', 'Stimulus'])#, 'A Norm'])
-    #plt.ylim([-0.2, 0.2])
-    #for i in range(n_test//task.time_steps_per_trial):
-    #    continue
-    #    plt.axvline(x=i*task.time_steps_per_trial, color='k', linestyle='--')
     plt.xlim([9800, 10000])
-    #fig.savefig()
 
     plt.figure()
     x = test_sim.mons['net.y_hat'].flatten()
@@ -231,7 +212,7 @@ if os.environ['HOME']=='/Users/omarschall':
               [np.amin(y), np.amax(y)], 'k', linestyle='--')
     plt.axis('equal')
 
-if os.environ['HOME']=='/home/oem214':
+if os.environ['HOME'] == '/home/oem214':
 
     result = {'sim': sim, 'i_seed': i_seed, 'task': task,
               'config': params, 'i_config': i_config, 'i_job': i_job,
