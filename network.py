@@ -189,7 +189,7 @@ class RNN:
             if sigma > 0:
                 noise = np.random.normal(0, sigma, self.n_h)
                 h += noise
-            return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
+            return (1 - self.alpha)*a + self.alpha * self.activation.f(h)
 
     def z_out(self):
         """Update outputs using current state of the network."""
@@ -228,7 +228,7 @@ class RNN:
 
         #Calculate Jacobian
         D = np.diag(self.activation.f_prime(h)) #Nonlinearity derivative
-        a_J = self.alpha*D.dot(W_rec) + (1 - self.alpha)*np.eye(self.n_h)
+        a_J = self.alpha * D.dot(W_rec) + (1 - self.alpha) * np.eye(self.n_h)
 
         if update: #Update if update is True
             self.a_J = np.copy(a_J)
