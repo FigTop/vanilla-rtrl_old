@@ -434,7 +434,9 @@ class Simulation:
                 alg.update_learning_vars()
                 alg()
             key = alg.name
+            #Store the rec_grad array for each algorithm in a list
             self.rec_grads_dict[key].append(alg.rec_grads)
+        #Get array of gradient alignments
         if 'alignment_matrix' in self.mons.keys():
             n_algs = len(self.algs)
             self.alignment_matrix = np.zeros((n_algs, n_algs))
@@ -453,12 +455,17 @@ class Simulation:
                     else:
                         j_index = 0
 
+                    #Store normalized dot product for each pair of algorithms
+                    #in the alignment matrix and norm product in alignment
+                    #strength matrix.
                     g_i = self.rec_grads_dict[key_i][i_index]
                     g_j = self.rec_grads_dict[key_j][j_index]
                     alignment = normalized_dot_product(g_i, g_j)
                     self.alignment_matrix[i, j] = alignment
                     self.alignment_weights[i, j] = norm(g_i) * norm(g_j)
 
+        #Keep each list (for each algorithm) of rec_grads only as long as the
+        #truncation horizon by deleting the oldest one.
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:
                 del(self.rec_grads_dict[key][0])
