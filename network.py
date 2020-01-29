@@ -186,7 +186,7 @@ class RNN:
                       self.alpha*self.activation.f(self.h)) + self.noise
         else: #Otherwise calculate would-be next state from provided input a.
             h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
-            if sigma>0:
+            if sigma > 0:
                 noise = np.random.normal(0, sigma, self.n_h)
                 h += noise
             return (1 - self.alpha)*a + self.alpha*self.activation.f(h)
