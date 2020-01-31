@@ -10,7 +10,7 @@ import numpy as np
 import unittest
 from gen_data import *
 
-class Test_Network(unittest.TestCase):
+class Test_Gen_Data(unittest.TestCase):
     """Tests methods from the network.py module."""
 
     @classmethod
@@ -112,6 +112,21 @@ class Test_Network(unittest.TestCase):
 
             self.assertTrue(np.isclose(y, y_1).all() or
                             np.isclose(y, y_2).all())
+
+    def test_sequential_mnist(self):
+
+        task = Sequential_MNIST(28)
+        data = task.gen_data(100, 0)
+
+        self.assertTrue(len(data['train']['X']) == 84)
+        print(data['train']['Y'].shape)
+        for i in range(27):
+            self.assertTrue(np.isclose(data['train']['Y'][i,:],
+                                       data['train']['Y'][i+1,:]).all())
+        for i in range(28, 55):
+            self.assertTrue(np.isclose(data['train']['Y'][i,:],
+                                       data['train']['Y'][i+1,:]).all())
+
 
 if __name__=='__main__':
     unittest.main()
