@@ -100,9 +100,6 @@ class Test_Gen_Data(unittest.TestCase):
         y_1 = np.array([[0.5, 0.5, 1], [0.5, 0.5, 0]]).T
         y_2 = np.array([[0.5, 0.5, 0], [0.5, 0.5, 1]]).T
 
-        x_trials = [x_1, x_2]
-        y_trials = [y_1, y_2]
-
         for i in range(4):
             x = data['train']['X'][3 * i : 3 * (i + 1)]
             y = data['train']['Y'][3 * i : 3 * (i + 1)]
@@ -119,7 +116,6 @@ class Test_Gen_Data(unittest.TestCase):
         data = task.gen_data(100, 0)
 
         self.assertTrue(len(data['train']['X']) == 84)
-        print(data['train']['Y'].shape)
         for i in range(27):
             self.assertTrue(np.isclose(data['train']['Y'][i,:],
                                        data['train']['Y'][i+1,:]).all())
