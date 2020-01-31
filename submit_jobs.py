@@ -9,6 +9,7 @@ Created on Thu Oct 18 19:19:46 2018
 import subprocess
 import os
 import numpy as np
+import pickle
 
 def clear_results(job_file, data_path='/Users/omarschall/cluster_results/vanilla-rtrl/'):
 
@@ -151,7 +152,14 @@ def process_results(job_file):
 
         configs_array[key] = sorted(configs_array[key])
 
-    results_array = np.zeros([len(configs_array[key]) for key in key_order])
+    array_dims = [len(configs_array[key]) for key in key_order]
+    processed_data_example = [d for d in data['processed_data'].values()][0]
+    if len(processed_data_example) > 1:
+        #set_trace()
+        array_dims += [len(processed_data_example)]
+    results_array = np.zeros(array_dims)
+
+    #set_trace()
 
     #Put data in array
     for i_file, file in enumerate(dir_list):
@@ -167,6 +175,8 @@ def process_results(job_file):
                 index.append(data['i_seed'])
         index = tuple(index)
         #set_trace()
-        results_array[index] = data['processed_data']['test_loss']
+        processed_data = [d for d in data['processed_data'].values()][0]
+        #results_array[index] = data['processed_data']['test_loss']
+        results_array[index] = processed_data
 
     return configs_array, results_array, key_order
