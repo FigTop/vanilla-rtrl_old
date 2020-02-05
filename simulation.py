@@ -24,12 +24,12 @@ class Simulation:
     different in train and test runs. Details given in __init__ and run
     docstrings."""
 
-    def __init__(self, net, allowed_kwargs_=set(), **kwargs):
+    def __init__(self, rnn, allowed_kwargs_=set(), **kwargs):
         """Initialzes a simulation.Simulation object by specifying the
         attributes that will apply to both train and test instances.
 
         Args:
-            net (network.RNN): The specific RNN instance being simulated.
+            rnn (network.RNN): The specific RNN instance being simulated.
             allowed_kwargs_ (set): Custom allowed keyword args for development
                 of subclasses of simulation that need additional specification.
             time_steps_per_trial (int): Number of time steps in a trial, if
@@ -52,7 +52,7 @@ class Simulation:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
                                 'passed to Simulation.__init__: ' + str(k))
-        self.net = net
+        self.rnn = rnn
         self.__dict__.update(kwargs)
 
         #Set to None all unspecified attributes
@@ -91,7 +91,7 @@ class Simulation:
                 learn_alg.
             update_interval (int): Number of time steps between each parameter
                 update.
-            a_initial (numpy array): An array of shape (net.n_hidden) that
+            a_initial (numpy array): An array of shape (rnn.n_hidden) that
                 specifies the initial state of the network when running. If
                 not specified, the default initialization practice is inherited
                 from the RNN.
@@ -220,14 +220,14 @@ class Simulation:
 
         #Set a random initial state of the network
         if self.a_initial is not None:
-            self.net.reset_network(a=self.a_initial)
+            self.rnn.reset_network(a=self.a_initial)
         else:
-            self.net.reset_network()
+            self.rnn.reset_network()
 
         #To avoid errors, initialize "previous"
         #inputs/labels as the first inputs/labels
-        self.net.x_prev = self.x_inputs[0]
-        self.net.y_prev = self.y_labels[0]
+        self.rnn.x_prev = self.x_inputs[0]
+        self.rnn.y_prev = self.y_labels[0]
 
         #Track computation time
         self.start_time = time.time()
@@ -239,42 +239,42 @@ class Simulation:
         if self.i_t_trial == 0:
             self.i_trial = self.i_t//self.time_steps_per_trial
             if self.reset_sigma is not None:
-                self.net.reset_network(sigma=self.reset_sigma)
+                self.rnn.reset_network(sigma=self.reset_sigma)
                 self.learn_alg.reset_learning()
 
     def forward_pass(self, x, y):
         """Runs network forward, computes immediate losses and errors."""
 
         #Pointer for convenience
-        net = self.net
+        rnn = self.rnn
 
         #Pass data to network
-        net.x = x
-        net.y = y
+        rnn.x = x
+        rnn.y = y
 
         #Run network forwards and get predictions
-        net.next_state(net.x, sigma=self.sigma)
-        net.z_out()
+        rnn.next_state(rnn.x, sigma=self.sigma)
+        rnn.z_out()
 
         #Compare outputs with labels, get immediate loss and errors
-        net.y_hat = net.output.f(net.z)
-        net.loss_ = net.loss.f(net.z, net.y)
-        net.error = net.loss.f_prime(net.z, net.y)
+        rnn.y_hat = rnn.output.f(rnn.z)
+        rnn.loss_ = rnn.loss.f(rnn.z, rnn.y)
+        rnn.error = rnn.loss.f_prime(rnn.z, rnn.y)
 
         #Re-scale losses and errors if trial structure is provided
         if self.trial_mask is not None:
-            net.loss_ *= self.trial_mask[self.i_t_trial]
-            net.error *= self.trial_mask[self.i_t_trial]
+            rnn.loss_ *= self.trial_mask[self.i_t_trial]
+            rnn.error *= self.trial_mask[self.i_t_trial]
 
     def train_step(self):
         """Uses self.learn_alg to calculate gradients and self.optimizer to
-        apply them to self.net. Also calculates gradients from comparison
+        apply them to self.rnn. Also calculates gradients from comparison
         algorithms."""
 
         ### --- Calculate gradients --- ###
 
         #Pointer for convenience
-        net = self.net
+        rnn = self.rnn
 
         #Update learn_alg variables and get gradients
         self.learn_alg.update_learning_vars()
@@ -290,16 +290,16 @@ class Simulation:
         #Only update on schedule (default update_interval=1)
         if self.i_t%self.update_interval == 0:
             #Get updated parameters
-            net.params = self.optimizer.get_updated_params(net.params,
+            rnn.params = self.optimizer.get_updated_params(rnn.params,
                                                            self.grads_list)
-            net.W_rec, net.W_in, net.b_rec, net.W_out, net.b_out = net.params
+            rnn.W_rec, rnn.W_in, rnn.b_rec, rnn.W_out, rnn.b_out = rnn.params
 
     def end_time_step(self, data):
         """Cleans up after each time step in the time loop."""
 
         #Current inputs/labels become previous inputs/labels
-        self.net.x_prev = np.copy(self.net.x)
-        self.net.y_prev = np.copy(self.net.y)
+        self.rnn.x_prev = np.copy(self.rnn.x)
+        self.rnn.y_prev = np.copy(self.rnn.y)
 
         #Compute spectral radii if desired
         self.get_radii_and_norms()
@@ -332,23 +332,23 @@ class Simulation:
 
         summary = '\rProgress: {}% complete \nTime Elapsed: {}s \n'
 
-        if 'net.loss_' in self.mons.keys():
+        if 'rnn.loss_' in self.mons.keys():
             interval = self.report_interval
-            avg_loss = sum(self.mons['net.loss_'][-interval:])/interval
+            avg_loss = sum(self.mons['rnn.loss_'][-interval:])/interval
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
 
         if self.check_accuracy or self.check_loss:
             test_sim = self.get_test_sim()
             test_sim.run(data, mode='test',
-                         monitors=['net.y_hat', 'net.loss_'],
+                         monitors=['rnn.y_hat', 'rnn.loss_'],
                          verbose=False)
             if self.check_accuracy:
-                acc = classification_accuracy(data, test_sim.mons['net.y_hat'])
+                acc = classification_accuracy(data, test_sim.mons['rnn.y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
                 summary += accuracy
             if self.check_loss:
-                test_loss = np.mean(test_sim.mons['net.loss_'])
+                test_loss = np.mean(test_sim.mons['rnn.loss_'])
                 loss_summary = 'Test loss: {} \n'.format(test_loss)
                 summary += loss_summary
 
@@ -392,31 +392,31 @@ class Simulation:
 
         val_sim = self.get_test_sim()
         val_sim.run(data, mode='test',
-                    monitors=['net.y_hat', 'net.loss_'],
+                    monitors=['rnn.y_hat', 'rnn.loss_'],
                     verbose=False)
-        val_loss = np.mean(val_sim.mons['net.loss_'])
+        val_loss = np.mean(val_sim.mons['rnn.loss_'])
 
         if val_loss < self.best_val_loss:
-            self.best_net = val_sim.net
+            self.best_rnn = val_sim.rnn
             self.best_val_loss = val_loss
 
     def get_test_singular_vectors(self, data):
         """Runs a test simulation and saves resulting top singular vectors
-        of net.a in self.singular_vectors."""
+        of rnn.a in self.singular_vectors."""
 
         test_sim = self.get_test_sim()
         test_sim.run(data, mode='test',
-                     monitors=['net.a'],
+                     monitors=['rnn.a'],
                      verbose=False)
 
-        U, S, V = np.linalg.svd(test_sim.mons['net.a'])
+        U, S, V = np.linalg.svd(test_sim.mons['rnn.a'])
         self.singular_vectors.append(V[:,:self.n_singular_vectors])
 
     def get_test_sim(self):
         """Creates what is effectively a copy of the current simulation, but
         saving on memory by omitting monitors or other large attributes."""
 
-        sim = Simulation(deepcopy(self.net),
+        sim = Simulation(deepcopy(self.rnn),
                          time_steps_per_trial=self.time_steps_per_trial,
                          reset_sigma=self.reset_sigma,
                          i_job=self.i_job,
