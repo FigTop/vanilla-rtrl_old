@@ -123,7 +123,7 @@ class Mimic_RNN(Task):
     and the labels are the outputs of a fixed 'target' RNN that is fed these
     inputs."""
 
-    def __init__(self, rnn, p_input, tau_task=1):
+    def __init__(self, rnn, p_input, tau_task=1, latent_dim=None):
         """Initializes the task with a target RNN (instance of network.RNN),
         the probability of the Bernoulli inputs, and a time constant of change.
 
@@ -139,6 +139,9 @@ class Mimic_RNN(Task):
         self.rnn = rnn
         self.p_input = p_input
         self.tau_task = tau_task
+        self.latent_dim = latent_dim
+        if self.latent_dim is not None:
+            self.segment_length = self.n_in // self.latent_dim
 
     def gen_dataset(self, N):
         """Generates a dataset by first generating inputs randomly by the
@@ -149,7 +152,12 @@ class Mimic_RNN(Task):
         N = N // self.tau_task
         X = []
         for i in range(N):
-            x = np.random.binomial(1, self.p_input, self.n_in)
+            if self.latent_dim is not None:
+                outcomes = np.random.binomial(1, self.p_input, self.latent_dim)
+                x = [o * np.ones(self.segment_length) for o in outcomes]
+                x = np.concatenate(x)
+            else:
+                x = np.random.binomial(1, self.p_input, self.n_in)
             X.append(x)
         X = np.tile(X, self.tau_task).reshape((self.tau_task*N, self.n_in))
 
