@@ -221,8 +221,6 @@ class Simulation:
         #Set a random initial state of the network
         if self.a_initial is not None:
             self.rnn.reset_network(a=self.a_initial)
-        else:
-            self.rnn.reset_network()
 
         #To avoid errors, initialize "previous"
         #inputs/labels as the first inputs/labels
