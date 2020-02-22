@@ -110,6 +110,8 @@ def write_job_file(job_name,
             + 'SAVEPATH={}library/{}\n'.format(scratch_path, job_name)
             + 'export SAVEPATH\n'
             + 'module load python3/intel/3.6.3\n'
+            + 'cd /home/oem214/py3.6.3\n'
+            + 'source py3.6.3/bin/activate\n'
             + 'cd {}\n'.format(scratch_path)
             + 'pwd > {}.log\n'.format(log_name)
             + 'date >> {}.log\n'.format(log_name)
@@ -126,6 +128,9 @@ def process_results(job_file):
                              job_name)
     dir_list = os.listdir(data_path)
     dir_list.pop(dir_list.index('code'))
+    for file in dir_list:
+        if 'rnn' not in file:
+            del(dir_list[dir_list.index(file)])
 
     max_seed = 0
 
@@ -154,7 +159,7 @@ def process_results(job_file):
 
     array_dims = [len(configs_array[key]) for key in key_order]
     processed_data_example = [d for d in data['processed_data'].values()][0]
-    if len(processed_data_example) > 1:
+    if type(processed_data_example) != np.float64:
         #set_trace()
         array_dims += [len(processed_data_example)]
     results_array = np.zeros(array_dims)
@@ -162,21 +167,29 @@ def process_results(job_file):
     #set_trace()
 
     #Put data in array
+    rnn_dict = {}
     for i_file, file in enumerate(dir_list):
 
         with open(os.path.join(data_path, file), 'rb') as f:
             data = pickle.load(f)
 
+        rnn_dict_key = ''
         index = []
         for key in key_order:
             try:
                 index.append(configs_array[key].index(data['config'][key]))
+                rnn_dict_key += (str(data['config'][key]) + '_')
             except KeyError:
                 index.append(data['i_seed'])
+                rnn_dict_key += (str(data['i_seed']))
         index = tuple(index)
         #set_trace()
         processed_data = [d for d in data['processed_data'].values()][0]
         #results_array[index] = data['processed_data']['test_loss']
         results_array[index] = processed_data
+        try:
+            rnn_dict[rnn_dict_key] = data['sim'].rnn
+        except AttributeError:
+            pass
 
-    return configs_array, results_array, key_order
+    return configs_array, results_array, key_order, rnn_dict
