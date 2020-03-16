@@ -167,29 +167,29 @@ def process_results(job_file):
     #set_trace()
 
     #Put data in array
-    rnn_dict = {}
+    sim_dict = {}
     for i_file, file in enumerate(dir_list):
 
         with open(os.path.join(data_path, file), 'rb') as f:
             data = pickle.load(f)
 
-        rnn_dict_key = ''
+        sim_dict_key = ''
         index = []
         for key in key_order:
             try:
                 index.append(configs_array[key].index(data['config'][key]))
-                rnn_dict_key += (str(data['config'][key]) + '_')
+                sim_dict_key += (str(data['config'][key]) + '_')
             except KeyError:
                 index.append(data['i_seed'])
-                rnn_dict_key += (str(data['i_seed']))
+                sim_dict_key += (str(data['i_seed']))
         index = tuple(index)
         #set_trace()
         processed_data = [d for d in data['processed_data'].values()][0]
         #results_array[index] = data['processed_data']['test_loss']
         results_array[index] = processed_data
         try:
-            rnn_dict[rnn_dict_key] = data['sim'].rnn
+            sim_dict[sim_dict_key] = data['sim']
         except AttributeError:
             pass
 
-    return configs_array, results_array, key_order, rnn_dict
+    return configs_array, results_array, key_order, sim_dict
