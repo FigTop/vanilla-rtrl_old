@@ -306,14 +306,23 @@ class Flip_Flop_Task(Task):
 
     def __init__(self, n_bit, p_flip):
 
-        super().__init__(self, n_bit, n_bit)
+        super().__init__(n_bit, n_bit)
 
         self.p_flip = p_flip
 
     def gen_dataset(self, N):
-        #TODO: FILL IN THIS METHOD
-        pass
 
+        probability = [self.p_flip / 2, 1 - self.p_flip, self.p_flip / 2]
+        choices = [-1, 0, 1]
+        X = np.random.choice(choices, size=(N, self.n_in), p=probability)
+        Y = [np.zeros(self.n_out)]
+        for i_X in range(1, len(X)):
+            x = X[i_X]
+            Y.append((x == 0) * Y[i_X - 1] + (x != 0) * x)
+
+        Y = np.array(Y)
+
+        return X, Y
 
 
 
