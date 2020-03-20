@@ -234,3 +234,28 @@ class RNN:
             self.a_J = np.copy(a_J)
         else: #Otherwise return
             return a_J
+
+    def get_network_speed(self, a=None):
+        """Calculates and returns the (squared) 'speed' of the network given
+        its current state and parameters. Option to specify a state value."""
+
+        if a is None:
+            a = self.a
+        delta_a = self.activation.f(self.W_rec.dot(a) + self.b_rec) - a
+
+        return (self.alpha**2) * np.square(delta_a).sum()
+
+    def get_network_speed_gradient(self, a=None):
+        """Calculates and returns the gradient of the (squared) network speed
+        with respect to the state of the network."""
+
+        if a is None:
+            a = self.a
+
+        h = self.W_rec.dot(a) + self.b_rec
+        delta_a = self.activation.f(h) - a
+        ret = (delta_a * self.activation.f_prime(h)).dot(self.W_rec)
+
+        return 2 * self.alpha * ret
+
+
