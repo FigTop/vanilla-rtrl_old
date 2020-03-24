@@ -312,16 +312,15 @@ class Flip_Flop_Task(Task):
 
     def gen_dataset(self, N):
 
+        if N == 0:
+            return np.array([]), np.array([])
+
         probability = [self.p_flip / 2, 1 - self.p_flip, self.p_flip / 2]
         choices = [-1, 0, 1]
         X = np.random.choice(choices, size=(N, self.n_in), p=probability)
-        Y = [np.zeros(self.n_out)]
-        for i_X in range(1, len(X)):
-            x = X[i_X]
-            Y.append((x == 0) * Y[i_X - 1] + (x != 0) * x)
-
-        Y = np.array(Y)
-
+        Y = X.copy()
+        for k in range(int(np.ceil(np.log2(N)))):
+            Y[2 ** k:] = np.sign(Y[2 ** k:] + Y[:-2 ** k] / 2)
         return X, Y
 
 
