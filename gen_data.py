@@ -304,20 +304,24 @@ class Sensorimotor_Mapping(Task):
 class Flip_Flop_Task(Task):
     """Generates data for the N-bit flip-flop task."""
 
-    def __init__(self, n_bit, p_flip):
+    def __init__(self, n_bit, p_flip, tau_task=1):
 
         super().__init__(n_bit, n_bit)
 
         self.p_flip = p_flip
+        self.tau_task = tau_task
 
     def gen_dataset(self, N):
 
+        N = N // self.tau_task
+        
         if N == 0:
             return np.array([]), np.array([])
 
         probability = [self.p_flip / 2, 1 - self.p_flip, self.p_flip / 2]
         choices = [-1, 0, 1]
         X = np.random.choice(choices, size=(N, self.n_in), p=probability)
+        X = np.tile(X, self.tau_task).reshape((self.tau_task*N, self.n_in))
         Y = X.copy()
         for k in range(int(np.ceil(np.log2(N)))):
             Y[2 ** k:] = np.sign(Y[2 ** k:] + Y[:-2 ** k] / 2)

@@ -27,9 +27,10 @@ from sklearn import linear_model
 from state_space import State_Space_Analysis
 from dynamics import find_slow_points
 import multiprocessing as mp
+from functools import partial
 
 if os.environ['HOME'] == '/home/oem214':
-    n_seeds = 20
+    n_seeds = 30
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
@@ -71,18 +72,18 @@ test_sim.run(data,
              monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
              verbose=False)
 
+find_slow_points_ = partial(find_slow_points, N_iters=1000000, return_period=100,
+                            N_seed_2=n_seeds)
 pool = mp.Pool(mp.cpu_count())
-n_seeds = 8
-results = pool.map_async(find_slow_points, zip([test_sim]*n_seeds,
-                                               range(n_seeds), [i_job]*n_seeds))
-result = results.get()
+N_seed_1 = 20
+results = pool.map(find_slow_points_, zip([test_sim]*N_seed_1,
+                                           range(N_seed_1),
+                                           [i_job]*N_seed_1))
 pool.close()
-A = np.array([result[i][0] for i in range(n_seeds)])
-speeds = np.array([result[i][1] for i in range(n_seeds)])
-
+A = [results[i][0] for i in range(N_seed_1)]
+speeds = [results[i][1] for i in range(N_seed_1)]
+LR_drop_times = [results[i][2] for i in range(N_seed_1)]
 result = {'A': A, 'speeds': speeds}
-
-
 
 if os.environ['HOME'] == '/Users/omarschall':
 
@@ -93,8 +94,8 @@ if os.environ['HOME'] == '/Users/omarschall':
     ssa.fig.axes[0].set_zlim([-0.8, 0.8])
     for i in range(8):
         col = 'C{}'.format(i+1)
-        ssa.plot_in_state_space(A[i,:-1,:], color=col)
-        ssa.plot_in_state_space(A[i,-1,:].reshape((1,-1)), 'x', color=col)
+        ssa.plot_in_state_space(A[i][:-1,:], color=col)
+        ssa.plot_in_state_space(A[i][-1,:].reshape((1,-1)), 'x', color=col)
 
 if os.environ['HOME'] == '/home/oem214':
 
