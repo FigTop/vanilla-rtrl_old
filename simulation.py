@@ -340,7 +340,8 @@ class Simulation:
             test_sim = self.get_test_sim()
             test_sim.run(data, mode='test',
                          monitors=['rnn.y_hat', 'rnn.loss_'],
-                         verbose=False)
+                         verbose=False,
+                         a_initial=np.copy(self.rnn.a))
             if self.check_accuracy:
                 acc = classification_accuracy(data, test_sim.mons['rnn.y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
