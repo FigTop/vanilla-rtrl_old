@@ -50,7 +50,7 @@ if os.environ['HOME'] == '/Users/omarschall':
     np.random.seed(0)
 
 task = Add_Task(6, 10, deterministic=True, tau_task=1)
-data = task.gen_data(50000, 10000)
+data = task.gen_data(20000, 10000)
 
 n_in = task.n_in
 n_h = 32
@@ -75,7 +75,7 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_c_out, W_h_out,
             output=softmax,
             loss=softmax_cross_entropy)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.001)
+optimizer = Stochastic_Gradient_Descent(lr=1)
 learn_alg = RTRL_LSTM(lstm)
 comp_algs = []
 monitors = ['rnn.loss_']

@@ -80,7 +80,7 @@ class LSTM:
         """
 
 
-    def __init__(self, W_f, W_i, W_a, W_o, W_h_out, W_c_out,
+    def __init__(self, W_f, W_i, W_a, W_o, W_c_out, W_h_out,
                  b_f, b_i, b_a, b_o, b_out,
                  output, loss,
                  sigmoid = Function(sigmoid_,sigmoid_derivative),
