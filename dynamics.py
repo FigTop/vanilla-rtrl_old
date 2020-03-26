@@ -11,6 +11,8 @@ from simulation import *
 from utils import norm
 from pdb import set_trace
 from network import RNN
+from copy import deepcopy
+import time
 
 def run_autonomous_sim(rnn, N, a_initial, monitors=[]):
     """Creates and runs a test simulation with no inputs and a specified
@@ -36,8 +38,8 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
                      LR_drop_factor=10,
                      LR_criterion=10,
                      same_LR_criterion=10000):
-
-    test_sim = args[0]
+    t1 = time.time()
+    test_sim = deepcopy(args[0])
     i_seed_1 = args[1]
     i_seed_2 = args[2]
     np.random.seed(i_seed_1*N_seed_2 + i_seed_2)
@@ -46,6 +48,9 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
     n_stop = 0
     i_LR = LR_criterion - 1
     i_same_LR = 0
+    
+    for i in range(1000):
+        print(time.time() - t1)
     
     a_values = []
     i_a = np.random.randint(test_data.shape[0])
