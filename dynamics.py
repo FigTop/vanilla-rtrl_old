@@ -50,8 +50,8 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
     a_values = []
     i_a = np.random.randint(test_data.shape[0])
     rnn.reset_network(a=test_data[i_a])
-    #speeds = [rnn.get_network_speed()]
-    #norms = [norm(rnn.a)]
+    speeds = [rnn.get_network_speed()]
+    norms = [norm(rnn.a)]
     LR_drop_times = []
     for i_iter in range(N_iters):
         
