@@ -10,10 +10,10 @@ class LSTM:
     """ Long short-term memory network.
     Forward equation
     f_t = sigma (W_f h_hat_{t-1} + b_f)
-    i_t = sigma (W_i h_hat_{t-1} + b_i) 
-    a_t = tanh (W_a h_hat_{t-1} + b_a) 
+    i_t = sigma (W_i h_hat_{t-1} + b_i)
+    a_t = tanh (W_a h_hat_{t-1} + b_a)
     c_t = a_t * i_t +  f_t * c_{t-1}
-    o_t = sigma(W_o h_hat_{t-1} + b_o) 
+    o_t = sigma(W_o h_hat_{t-1} + b_o)
     h_t = tanh(c_t) * o_t
     z_t = W_h_out h_t + W_h_out h_t + b_out
 
@@ -22,7 +22,7 @@ class LSTM:
         n_h (int): Number of hidden units or cell units
         n_t (int): Total number of hidden and cell units
         n_h_hat (int): Number of hidden units + number of input dimensions
-        n_out (int): Number of output dimensions 
+        n_out (int): Number of output dimensions
         W_f (numpy array): Array of shape (n_h, n_h_hat), weights forget gate inputs.
         W_i (numpy array): Array of shape (n_h, n_h_hat), weights input gate inputs.
         W_a (numpy array): Array of shape (n_h, n_h_hat), weights activation inputs.
@@ -36,7 +36,7 @@ class LSTM:
         b_a (numpy array): Array of shape (n_h), represents the bias term in the activation update equation.
         b_o (numpy array): Array of shape (n_h), represents the bias term in the output gate update equation.
         b_out (numpy array): Array of shape (n_h), represents the bias term in the final output update equation.
-        
+
         params (list): The list of each parameter's current value, in the order
             [self.W_f, self.W_i, self.W_a, self.W_o, self.b_f, self.b_i, self.b_a, self.b_o,
             self.W_h_out, self.W_c_out, self.b_out]
@@ -83,7 +83,7 @@ class LSTM:
     def __init__(self, W_f, W_i, W_a, W_o, W_h_out, W_c_out,
                  b_f, b_i, b_a, b_o, b_out,
                  output, loss,
-                 sigmoid = Function(sigmoid_,sigmoid_derivative), 
+                 sigmoid = Function(sigmoid_,sigmoid_derivative),
                  tanh = Function(tanh_,tanh_derivative)):
         """Initializes a LSTM by specifying its initial parameter values;
         its activation(sigmoid and tanh), output, and loss functions;."""
@@ -138,11 +138,10 @@ class LSTM:
         self.tanh = tanh
         self.loss = loss
         self.output = output
-        
+
         #Number of parameters
-        self.n_h_params = (self.W_f.size + self.W_i.size + self.W_a.size +self.W_o.size + 
-                        self.b_f.size + self.b_i.size + self.b_a.size +self.b_o.size)
-                                                      
+        self.n_h_params = (self.W_f.size + self.b_f.size )
+
         self.n_params = (self.n_h_params +
                          self.W_h_out.size + self.W_c_out.size + self.b_out.size)
 
@@ -170,10 +169,10 @@ class LSTM:
             self.h = kwargs['h']
         else: #Random reset by sigma if not.
             self.h = np.random.normal(0, sigma, self.n_h)
-        
-        if 'c' in kwargs.keys(): 
+
+        if 'c' in kwargs.keys():
             self.c = kwargs['c']
-        else: 
+        else:
             self.c = np.random.normal(0, sigma, self.n_h)
 
         self.z = self.W_h_out.dot(self.h)+self.W_c_out.dot(self.c)+ self.b_out #Specify outputs from a
@@ -203,7 +202,7 @@ class LSTM:
         if update:
             self.h_prev = np.copy(self.h)
             self.x = x
-            self.h_hat_prev = np.append(self.h_prev, self.x, axis=0)            
+            self.h_hat_prev = np.append(self.h_prev, self.x, axis=0)
             self.c_prev = np.copy(self.c)
 
             self.f = self.sigmoid.f(self.W_f.dot(self.h_hat_prev)+self.b_f)
@@ -236,15 +235,15 @@ class LSTM:
 
 
     def get_a_jacobian(self, update=True, x=None, c=None, h=None):
-        """Calculates the Jacobian of the network. 
+        """Calculates the Jacobian of the network.
         J(c_k/c_i) = f_k^{t}
-        J(h_k/c_i) = o_k^{t} tanh'(c_k^{t}) * J(c_k/c_i) 
+        J(h_k/c_i) = o_k^{t} tanh'(c_k^{t}) * J(c_k/c_i)
 
         J(c_k/h_i) = w_{ki}^{a} i_k^{t} tanh'(a_k^{t}) +
                      w_{ki}^{i} a_k^{(t)} sigmoid'(i_k^{t}) +
                      w_{ki}^{f} c_k^{t-1} sigmoid'(f_k^{t})
 
-        J(h_k/h_i) = o_k^{t} tanh'(c_k^{t})J(c_k/h_i) + 
+        J(h_k/h_i) = o_k^{t} tanh'(c_k^{t})J(c_k/h_i) +
                     tanh(c_k^{t}) w^o_{ki} sigmoid'(o_k^{t})
         Args:
             update (bool): Specifies whether to update or return the Jacobian.
@@ -254,7 +253,7 @@ class LSTM:
                 the cell states to use in calculating the Jacobian.
             x (numpy array): Array of shape (n_in) that specifies what values of
                 the input value to use in calculating the Jacobian."""
-        
+
 
         #Use kwargs instead of defaults if provided
         if x == None:
@@ -263,13 +262,13 @@ class LSTM:
             c = self.c
         if h == None:
             h = self.h
-        
+
 
         h_hat_prev = np.append(h, x, axis=0)
         f = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_f)
         i = self.sigmoid.f(self.W_i.dot(h_hat_prev)+self.b_i)
         a = self.tanh.f(self.W_a.dot(h_hat_prev)+self.b_a)
-        
+
         c_prev = c
         c = a * i + f * c_prev
         o = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_o)
@@ -277,15 +276,15 @@ class LSTM:
 
 
         # Calculate four parts of Jacobian
-        c_c_J = (np.ones((self.n_h, self.n_h))*f).T
+        c_c_J = np.eye(self.n_h)*f
 
         h_c_J = (c_c_J.T * (o* self.tanh.f_prime(c))).T
 
         P_1 = i * self.tanh.f_prime(a)
         P_2 = a * self.sigmoid.f_prime(i)
-        P_3 = c_prev * self.sigmoid.f_prime(f) 
+        P_3 = c_prev * self.sigmoid.f_prime(f)
         c_h_J = (self.W_a[:,:self.n_h].T * P_1 + self.W_i[:,:self.n_h].T * P_2 + self.W_f[:,:self.n_h].T * P_3).T
-        
+
 
         P_4 = self.tanh.f(c)* self.sigmoid.f_prime(o)
         h_h_J = (c_h_J.T * (o* self.tanh.f_prime(c))).T + (self.W_o[:,:self.n_h].T * P_4).T
