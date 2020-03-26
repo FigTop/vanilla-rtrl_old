@@ -72,13 +72,13 @@ test_sim.run(data,
              monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
              verbose=False)
 
-find_slow_points_ = partial(find_slow_points, N_iters=1000000, return_period=100,
-                            N_seed_2=n_seeds)
+find_slow_points_ = partial(find_slow_points, N_iters=10000, return_period=100,
+                            N_seed_2=1)
 pool = mp.Pool(mp.cpu_count())
-N_seed_1 = 20
+N_seed_1 = 8
 results = pool.map(find_slow_points_, zip([test_sim]*N_seed_1,
-                                           range(N_seed_1),
-                                           [i_job]*N_seed_1))
+                                          range(N_seed_1),
+                                          [i_job]*N_seed_1))
 pool.close()
 A = [results[i][0] for i in range(N_seed_1)]
 speeds = [results[i][1] for i in range(N_seed_1)]

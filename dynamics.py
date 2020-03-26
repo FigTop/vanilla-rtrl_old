@@ -10,6 +10,7 @@ import numpy as np
 from simulation import *
 from utils import norm
 from pdb import set_trace
+from network import RNN
 
 def run_autonomous_sim(rnn, N, a_initial, monitors=[]):
     """Creates and runs a test simulation with no inputs and a specified
@@ -49,8 +50,8 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
     a_values = []
     i_a = np.random.randint(test_data.shape[0])
     rnn.reset_network(a=test_data[i_a])
-    speeds = [rnn.get_network_speed()]
-    norms = [norm(rnn.a)]
+    #speeds = [rnn.get_network_speed()]
+    #norms = [norm(rnn.a)]
     LR_drop_times = []
     for i_iter in range(N_iters):
         
@@ -59,7 +60,7 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
             print('Case ({}, {}) {}% done'.format(i_seed_1,
                                                   i_seed_2,
                                                   pct_complete))
-        
+            
         rnn.a -= LR * rnn.get_network_speed_gradient()
         a_values.append(np.copy(rnn.a))
 
