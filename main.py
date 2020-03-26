@@ -76,7 +76,7 @@ find_slow_points_ = partial(find_slow_points, N_iters=10000, return_period=100,
                             N_seed_2=1)
 #results = find_slow_points_([test_sim, 0, 0])
 pool = mp.Pool(mp.cpu_count())
-N_seed_1 = 1
+N_seed_1 = 8
 results = pool.map(find_slow_points_, zip([test_sim]*N_seed_1,
                                           range(N_seed_1),
                                           [i_job]*N_seed_1))

@@ -38,7 +38,7 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
                      LR_drop_factor=10,
                      LR_criterion=10,
                      same_LR_criterion=10000):
-    t1 = time.time()
+
     test_sim = deepcopy(args[0])
     i_seed_1 = args[1]
     i_seed_2 = args[2]
@@ -48,9 +48,6 @@ def find_slow_points(args, LR=1e-3, N_iters=100000,
     n_stop = 0
     i_LR = LR_criterion - 1
     i_same_LR = 0
-    
-    for i in range(1000):
-        print(time.time() - t1)
     
     a_values = []
     i_a = np.random.randint(test_data.shape[0])
