@@ -8,6 +8,8 @@ Created on Mon Sep 10 16:30:58 2018
 
 import numpy as np
 from network import RNN
+from lstm_network import LSTM
+from lstm_learning_algorithms import RTRL_LSTM
 from simulation import Simulation
 from gen_data import *
 try:
@@ -30,26 +32,7 @@ if os.environ['HOME'] == '/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-#    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
-#                                               'UORO', 'KF-RTRL', 'R-KF-RTRL',
-#                                               'BPTT', 'DNI', 'DNIb',
-#                                               'RFLO', 'KeRNL'],
-#                                     alpha=[0.5, 1],
-#                                     task=['Coin', 'Mimic'])
-    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
-                                               'UORO', 'KF-RTRL', 'R-KF-RTRL',
-                                               'BPTT', 'DNI', 'DNIb',
-                                               'RFLO', 'KeRNL'],
-                                     difficulty=[28, 49, 56, 98, 112, 196])
-#                                     difficulty=list(range(0, 16, 2)),
-#                                     n_hidden=[16, 64])
-#    macro_configs = config_generator(algorithm=['RFLO', 'KeRNL'],
-#                                     base_learning_rate=[0, 0.003, 0.01, 0.03, 0.1,
-#                                                         0.3, 1, 3, 10, 30])
-#    macro_configs = config_generator(algorithm=['RTRL', 'Only_Output_Weights'],
-#                                     n_in=[2, 8, 32, 64],
-#                                     n_h=[2, 8, 32, 64],
-#                                     n_out=[2, 8, 32, 64])
+    macro_configs = config_generator()
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -61,136 +44,43 @@ if os.environ['HOME'] == '/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {'algorithm': 'KeRNL', 'n_in': 64, 'n_h': 2, 'n_out': 32}
-    params = {'algorithm': 'KeRNL', 'difficulty': 3, 'base_learning_rate': 0.001}
-    params = {'algorithm': 'RTRL', 'alpha': 1, 'task': 'Coin'}
+    params = {}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
+    np.random.seed(0)
 
-    np.random.seed(5)
-
-#params['difficulty'] = 5
-params['task'] = 'Coin'
-params['alpha'] = 0.5
-#params['base_learning_rate'] = 0.1
-#params['difficulty'] = 3
-
-alpha = params['alpha']
-
-if params['alpha'] == 1:
-    n_1, n_2 = 5, 9
-    tau_task = 1
-if params['alpha'] == 0.5:
-    n_1, n_2 = 2, 4
-    tau_task = 2
-
-if params['task'] == 'Mimic':
-
-    n_in = 32
-    n_hidden = 32
-    n_out = 32
-
-    W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-    W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-    #W_rec_target *= (0.5 + 0.1 * params['difficulty'])
-    W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-    b_rec_target = np.random.normal(0, 0.1, n_hidden)
-    b_out_target = np.random.normal(0, 0.1, n_out)
-
-    alpha = params['alpha']
-
-    rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
-                     b_rec_target, b_out_target,
-                     activation=tanh,
-                     alpha=alpha,
-                     output=identity,
-                     loss=mean_squared_error)
-
-    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-
-elif params['task'] == 'Coin':
-
-    #n_1 = params['difficulty']
-    #n_2 = params['difficulty'] + 4
-    #tau_task = 2
-    task = Add_Task(n_1, n_2, deterministic=True, tau_task=tau_task)
-
-task = Sequential_MNIST(params['difficulty'])
-data = task.gen_data(784 * 20000 / params['difficulty'], 5000)
+task = Add_Task(6, 10, deterministic=True, tau_task=1)
+data = task.gen_data(50000, 10000)
 
 n_in = task.n_in
-n_hidden = 256
+n_h = 32
 n_out = task.n_out
+n_h_hat = n_h + n_in
+n_t = 2 * n_h
 
-W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
-b_rec = np.zeros(n_hidden)
+W_f  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+W_i  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+W_a  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+W_o  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+b_f = np.zeros(n_h)
+b_i = np.zeros(n_h)
+b_a = np.zeros(n_h)
+b_o = np.zeros(n_h)
+W_c_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
+W_h_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
 b_out = np.zeros(n_out)
 
-#alpha = 1
+lstm = LSTM(W_f, W_i, W_a, W_o, W_c_out, W_h_out,
+            b_f, b_i, b_a, b_o, b_out,
+            output=softmax,
+            loss=softmax_cross_entropy)
 
-if params['task'] == 'Coin':
-    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-              activation=tanh,
-              alpha=alpha,
-              output=softmax,
-              loss=softmax_cross_entropy)
-
-if params['task'] == 'Mimic':
-    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-              activation=tanh,
-              alpha=alpha,
-              output=identity,
-              loss=mean_squared_error)
-
-optimizer = Stochastic_Gradient_Descent(lr=0.0005)
-SG_optimizer = Stochastic_Gradient_Descent(lr=0.001)
-if params['alpha'] == 1 and params['task'] == 'Coin':
-    SG_optimizer = Stochastic_Gradient_Descent(lr=0.05)
-
-if params['algorithm'] == 'Only_Output_Weights':
-    learn_alg = Only_Output_Weights(rnn)
-if params['algorithm'] == 'RTRL':
-    learn_alg = RTRL(rnn)
-if params['algorithm'] == 'UORO':
-    learn_alg = UORO(rnn)
-if params['algorithm'] == 'KF-RTRL':
-    learn_alg = KF_RTRL(rnn)
-if params['algorithm'] == 'R-KF-RTRL':
-    learn_alg = Reverse_KF_RTRL(rnn)
-if params['algorithm'] == 'BPTT':
-    learn_alg = Future_BPTT(rnn, 784/params['difficulty'])
-if params['algorithm'] == 'DNI':
-    learn_alg = DNI(rnn, SG_optimizer)
-if params['algorithm'] == 'DNIb':
-    J_lr = 0.001
-    if params['alpha'] == 1 and params['task'] == 'Coin':
-        J_lr = 0.01
-    learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
-                    SG_label_activation=tanh, W_FB=W_FB)
-    learn_alg.name = 'DNIb'
-if params['algorithm'] == 'RFLO':
-    learn_alg = RFLO(rnn, alpha=alpha)
-if params['algorithm'] == 'KeRNL':
-    sigma_noise = 0.0000001
-    #kernl_lr = params['base_learning_rate']/sigma_noise
-    base_learning_rate = 0.01
-    kernl_lr = base_learning_rate/sigma_noise
-    KeRNL_optimizer = Stochastic_Gradient_Descent(kernl_lr)
-    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=sigma_noise)
-
-#learn_alg = Efficient_BPTT(rnn, 10)
-#learn_alg = Only_Output_Weights(rnn)
+optimizer = Stochastic_Gradient_Descent(lr=0.001)
+learn_alg = RTRL_LSTM(lstm)
 comp_algs = []
+monitors = ['rnn.loss_']
 
-monitors = ['learn_alg.A', 'learn_alg.alpha']
-monitors = ['net.loss_', 'net.y_hat']
-monitors = ['net.loss_']
-#monitors = []
-
-sim = Simulation(rnn)
+sim = Simulation(lstm)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
@@ -212,9 +102,9 @@ data = task.gen_data(0, n_test)
 test_sim = deepcopy(sim)
 test_sim.run(data,
              mode='test',
-             monitors=['net.loss_'],
+             monitors=['rnn.loss_'],
              verbose=False)
-test_loss = np.mean(test_sim.mons['net.loss_'])
+test_loss = np.mean(test_sim.mons['rnn.loss_'])
 processed_data = {'test_loss': test_loss}
 
 if os.environ['HOME'] == '/Users/omarschall':
@@ -228,16 +118,16 @@ if os.environ['HOME'] == '/Users/omarschall':
     test_sim = deepcopy(sim)
     test_sim.run(data,
                  mode='test',
-                 monitors=['net.loss_', 'net.y_hat', 'net.a'],
+                 monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
                  verbose=False)
     fig = plt.figure()
     for i in range(10):
-        plt.plot(test_sim.mons['net.y_hat'][:,i], color='C{}'.format(i))
+        plt.plot(test_sim.mons['rnn.y_hat'][:,i], color='C{}'.format(i))
         plt.plot(data['test']['Y'][:,i], color='C{}'.format(i), linestyle='--')
         plt.xlim([9800, 10000])
 
     plt.figure()
-    x = test_sim.mons['net.y_hat'].flatten()
+    x = test_sim.mons['rnn.y_hat'].flatten()
     y = data['test']['Y'].flatten()
     plt.plot(x, y, '.', alpha=0.05)
     plt.plot([np.amin(x), np.amax(x)],

@@ -98,6 +98,7 @@ class RNN:
         #Define shapes and params lists for convenience later.
         self.params = [self.W_rec, self.W_in, self.b_rec,
                        self.W_out, self.b_out]
+        self.param_names = ['W_rec', 'W_in', 'b_rec', 'W_out', 'b_out']
         self.shapes = [w.shape for w in self.params]
 
         #Activation and loss functions

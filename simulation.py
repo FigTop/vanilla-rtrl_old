@@ -288,9 +288,11 @@ class Simulation:
         #Only update on schedule (default update_interval=1)
         if self.i_t%self.update_interval == 0:
             #Get updated parameters
-            rnn.params = self.optimizer.get_updated_params(rnn.params,
+            new_params = self.optimizer.get_updated_params(rnn.params,
                                                            self.grads_list)
-            rnn.W_rec, rnn.W_in, rnn.b_rec, rnn.W_out, rnn.b_out = rnn.params
+            for name, p in zip(rnn.param_names, new_params):
+                
+                setattr(rnn, name, p)
 
     def end_time_step(self, data):
         """Cleans up after each time step in the time loop."""

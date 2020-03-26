@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from pdb import set_trace
 
 class Optimizer:
     """Parent class for gradient-based optimizers."""

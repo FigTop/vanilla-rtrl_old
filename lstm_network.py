@@ -123,15 +123,22 @@ class LSTM:
         assert self.n_h == b_o.shape[0]
         assert self.n_out == W_c_out.shape[0]
         assert self.n_out == b_out.shape[0]
-        assert self.n_h_hat == W_h_out.shape[1]
-        assert self.n_h_hat == W_c_out.shape[1]
+        assert self.n_h == W_h_out.shape[1]
+        assert self.n_h == W_c_out.shape[1]
 
         #Define shapes and params lists for convenience later.
-        self.params = [self.W_f, self.W_i, self.W_a, self.W_o,
-                    self.b_f, self.b_i, self.b_a, self.b_o,
-                    self.W_h_out, self.W_c_out, self.b_out]
+        self.params = [self.W_f, self.b_f,
+                       self.W_i, self.b_i,
+                       self.W_a, self.b_a,
+                       self.W_o, self.b_o,
+                       self.W_c_out, self.W_h_out, self.b_out]
         self.shapes = [w.shape for w in self.params]
 
+        self.param_names = ['W_f', 'b_f',
+                            'W_i', 'b_i',
+                            'W_a', 'b_a',
+                            'W_o', 'b_o',
+                            'W_c_out', 'W_h_out', 'b_out']
 
         #Activation and loss functions
         self.sigmoid = sigmoid
@@ -146,7 +153,7 @@ class LSTM:
                          self.W_h_out.size + self.W_c_out.size + self.b_out.size)
 
         #Indices of params for L2 regularization
-        self.L2_indices = [0, 1, 2, 3, 8, 9] # W_f, W_i, W_a, W_o, W_h_out.W_c_out
+        self.L2_indices = [0, 2, 4, 6, 8, 9] # W_f, W_i, W_a, W_o, W_h_out.W_c_out
 
         #Initial state values
         self.reset_network()
@@ -175,6 +182,8 @@ class LSTM:
         else:
             self.c = np.random.normal(0, sigma, self.n_h)
 
+        self.prev_h = self.h
+        self.prev_c = self.c
         self.z = self.W_h_out.dot(self.h)+self.W_c_out.dot(self.c)+ self.b_out #Specify outputs from a
 
 
@@ -224,7 +233,7 @@ class LSTM:
             o = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_o)
             h = self.tanh.f(c) * o
 
-            return (self.W_h_out.dot(h)+self.W_c_out.dot(c)+ self.b_out)
+            return np.concatenate([c, h])
 
 
     def z_out(self):
@@ -265,33 +274,36 @@ class LSTM:
 
 
         h_hat_prev = np.append(h, x, axis=0)
-        f = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_f)
-        i = self.sigmoid.f(self.W_i.dot(h_hat_prev)+self.b_i)
-        a = self.tanh.f(self.W_a.dot(h_hat_prev)+self.b_a)
+        f = self.sigmoid.f(self.W_f.dot(h_hat_prev) + self.b_f)
+        i = self.sigmoid.f(self.W_i.dot(h_hat_prev) + self.b_i)
+        a = self.tanh.f(self.W_a.dot(h_hat_prev) + self.b_a)
 
         c_prev = c
         c = a * i + f * c_prev
-        o = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_o)
+        o = self.sigmoid.f(self.W_f.dot(h_hat_prev) + self.b_o)
         h = self.tanh.f(c) * o
 
 
         # Calculate four parts of Jacobian
-        c_c_J = np.eye(self.n_h)*f
+        c_c_J = np.eye(self.n_h) * f
 
-        h_c_J = (c_c_J.T * (o* self.tanh.f_prime(c))).T
+        h_c_J = (c_c_J.T * (o * self.tanh.f_prime(c))).T
 
         P_1 = i * self.tanh.f_prime(a)
         P_2 = a * self.sigmoid.f_prime(i)
         P_3 = c_prev * self.sigmoid.f_prime(f)
-        c_h_J = (self.W_a[:,:self.n_h].T * P_1 + self.W_i[:,:self.n_h].T * P_2 + self.W_f[:,:self.n_h].T * P_3).T
+        c_h_J = (self.W_a[:,:self.n_h].T * P_1 +
+                 self.W_i[:,:self.n_h].T * P_2 +
+                 self.W_f[:,:self.n_h].T * P_3).T
 
 
         P_4 = self.tanh.f(c)* self.sigmoid.f_prime(o)
-        h_h_J = (c_h_J.T * (o* self.tanh.f_prime(c))).T + (self.W_o[:,:self.n_h].T * P_4).T
+        h_h_J = (c_h_J.T * (o* self.tanh.f_prime(c)) +
+                 (self.W_o[:,:self.n_h].T * P_4)).T
 
         # stack four parts together to get entire Jacobian
-        a_J = np.vstack(np.hstack((c_c_J,c_h_J)),
-                        np.hstack((h_c_J,h_h_J)))
+        a_J = np.vstack((np.hstack((c_c_J,c_h_J)),
+                        np.hstack((h_c_J,h_h_J))))
 
         if update: #Update if update is True
             self.a_J = np.copy(a_J)
