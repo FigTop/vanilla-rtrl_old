@@ -9,7 +9,7 @@ Created on Mon Sep 10 16:30:58 2018
 import numpy as np
 from network import RNN
 from lstm_network import LSTM
-from lstm_learning_algorithms import RTRL_LSTM
+from lstm_learning_algorithms import RTRL_LSTM, Only_Output_LSTM
 from simulation import Simulation
 from gen_data import *
 try:
@@ -75,10 +75,10 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_c_out, W_h_out,
             output=softmax,
             loss=softmax_cross_entropy)
 
-optimizer = Stochastic_Gradient_Descent(lr=1)
+optimizer = Stochastic_Gradient_Descent(lr=0.001)
 learn_alg = RTRL_LSTM(lstm)
 comp_algs = []
-monitors = ['rnn.loss_']
+monitors = ['rnn.loss_', 'rnn.h', 'rnn.c']
 
 sim = Simulation(lstm)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -121,7 +121,9 @@ if os.environ['HOME'] == '/Users/omarschall':
                  monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
                  verbose=False)
     fig = plt.figure()
-    for i in range(10):
+    plt.plot(data['test']['X'][:100,0])
+    plt.plot(data['test']['Y'][:100,0])
+    for i in range(2):
         plt.plot(test_sim.mons['rnn.y_hat'][:,i], color='C{}'.format(i))
         plt.plot(data['test']['Y'][:,i], color='C{}'.format(i), linestyle='--')
         plt.xlim([9800, 10000])

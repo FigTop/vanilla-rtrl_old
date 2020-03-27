@@ -202,3 +202,22 @@ class RTRL_LSTM(Learning_Algorithm):
         self.dadwo *= 0
         self.dadwa *= 0
         self.dadwi *= 0
+
+class Only_Output_LSTM(RTRL_LSTM):
+    
+    def __init__(self, lstm):
+        
+        super().__init__(lstm)
+    
+    def update_learning_vars(self):
+        
+        pass
+    
+    def get_rec_grads(self):
+        
+        dLdw_f = np.zeros((self.n_h, self.m))
+        dLdw_o = np.zeros((self.n_h, self.m))
+        dLdw_a = np.zeros((self.n_h, self.m))
+        dLdw_i = np.zeros((self.n_h, self.m))
+        
+        return dLdw_f, dLdw_i, dLdw_a, dLdw_o
