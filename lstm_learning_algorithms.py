@@ -185,7 +185,7 @@ class RTRL_LSTM(Learning_Algorithm):
         self.outer_grads = self.get_outer_grads()
         self.propagate_feedback_to_hidden()
         self.rec_grads = self.get_rec_grads()
-        rec_grads_list = [split_weight_matrix(rg, [self.n_h + self.n_in, 1]) for rg in self.rec_grads]
+        rec_grads_list = [split_weight_matrix(rg,[self.n_h + self.n_in, 1]) for rg in self.rec_grads]
         outer_grads_list = split_weight_matrix(self.outer_grads,
                                                [self.n_h, self.n_h, 1])
         grads_list = [g for G in rec_grads_list for g in G] + outer_grads_list
