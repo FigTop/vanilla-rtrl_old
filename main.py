@@ -30,26 +30,11 @@ if os.environ['HOME'] == '/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-#    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
-#                                               'UORO', 'KF-RTRL', 'R-KF-RTRL',
-#                                               'BPTT', 'DNI', 'DNIb',
-#                                               'RFLO', 'KeRNL'],
-#                                     alpha=[0.5, 1],
-#                                     task=['Coin', 'Mimic'])
     macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
                                                'UORO', 'KF-RTRL', 'R-KF-RTRL',
                                                'BPTT', 'DNI', 'DNIb',
                                                'RFLO', 'KeRNL'],
                                      difficulty=[28, 49, 56, 98, 112, 196])
-#                                     difficulty=list(range(0, 16, 2)),
-#                                     n_hidden=[16, 64])
-#    macro_configs = config_generator(algorithm=['RFLO', 'KeRNL'],
-#                                     base_learning_rate=[0, 0.003, 0.01, 0.03, 0.1,
-#                                                         0.3, 1, 3, 10, 30])
-#    macro_configs = config_generator(algorithm=['RTRL', 'Only_Output_Weights'],
-#                                     n_in=[2, 8, 32, 64],
-#                                     n_h=[2, 8, 32, 64],
-#                                     n_out=[2, 8, 32, 64])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -61,65 +46,17 @@ if os.environ['HOME'] == '/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {'algorithm': 'KeRNL', 'n_in': 64, 'n_h': 2, 'n_out': 32}
-    params = {'algorithm': 'KeRNL', 'difficulty': 3, 'base_learning_rate': 0.001}
-    params = {'algorithm': 'RTRL', 'alpha': 1, 'task': 'Coin'}
+    params = {}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-    np.random.seed(5)
+    #np.random.seed()
 
-#params['difficulty'] = 5
-params['task'] = 'Coin'
-params['alpha'] = 0.5
-#params['base_learning_rate'] = 0.1
-#params['difficulty'] = 3
-
-alpha = params['alpha']
-
-if params['alpha'] == 1:
-    n_1, n_2 = 5, 9
-    tau_task = 1
-if params['alpha'] == 0.5:
-    n_1, n_2 = 2, 4
-    tau_task = 2
-
-if params['task'] == 'Mimic':
-
-    n_in = 32
-    n_hidden = 32
-    n_out = 32
-
-    W_in_target  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-    W_rec_target = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
-    #W_rec_target *= (0.5 + 0.1 * params['difficulty'])
-    W_out_target = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-    b_rec_target = np.random.normal(0, 0.1, n_hidden)
-    b_out_target = np.random.normal(0, 0.1, n_out)
-
-    alpha = params['alpha']
-
-    rnn_target = RNN(W_in_target, W_rec_target, W_out_target,
-                     b_rec_target, b_out_target,
-                     activation=tanh,
-                     alpha=alpha,
-                     output=identity,
-                     loss=mean_squared_error)
-
-    task = Mimic_RNN(rnn_target, p_input=0.5, tau_task=tau_task)
-
-elif params['task'] == 'Coin':
-
-    #n_1 = params['difficulty']
-    #n_2 = params['difficulty'] + 4
-    #tau_task = 2
-    task = Add_Task(n_1, n_2, deterministic=True, tau_task=tau_task)
-
-task = Sequential_MNIST(params['difficulty'])
-data = task.gen_data(784 * 20000 / params['difficulty'], 5000)
+task = Add_Task(n_1, n_2, deterministic=True, tau_task=1)
+data = task.gen_data(100000, 5000)
 
 n_in = task.n_in
-n_hidden = 256
+n_hidden = 32
 n_out = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -129,66 +66,17 @@ W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
-#alpha = 1
+alpha = 1
+rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=softmax,
+          loss=softmax_cross_entropy)
 
-if params['task'] == 'Coin':
-    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-              activation=tanh,
-              alpha=alpha,
-              output=softmax,
-              loss=softmax_cross_entropy)
+optimizer = Stochastic_Gradient_Descent(lr=0.001)
+learn_alg = Only_Output_Weights(rnn)
 
-if params['task'] == 'Mimic':
-    rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
-              activation=tanh,
-              alpha=alpha,
-              output=identity,
-              loss=mean_squared_error)
-
-optimizer = Stochastic_Gradient_Descent(lr=0.0005)
-SG_optimizer = Stochastic_Gradient_Descent(lr=0.001)
-if params['alpha'] == 1 and params['task'] == 'Coin':
-    SG_optimizer = Stochastic_Gradient_Descent(lr=0.05)
-
-if params['algorithm'] == 'Only_Output_Weights':
-    learn_alg = Only_Output_Weights(rnn)
-if params['algorithm'] == 'RTRL':
-    learn_alg = RTRL(rnn)
-if params['algorithm'] == 'UORO':
-    learn_alg = UORO(rnn)
-if params['algorithm'] == 'KF-RTRL':
-    learn_alg = KF_RTRL(rnn)
-if params['algorithm'] == 'R-KF-RTRL':
-    learn_alg = Reverse_KF_RTRL(rnn)
-if params['algorithm'] == 'BPTT':
-    learn_alg = Future_BPTT(rnn, 784/params['difficulty'])
-if params['algorithm'] == 'DNI':
-    learn_alg = DNI(rnn, SG_optimizer)
-if params['algorithm'] == 'DNIb':
-    J_lr = 0.001
-    if params['alpha'] == 1 and params['task'] == 'Coin':
-        J_lr = 0.01
-    learn_alg = DNI(rnn, SG_optimizer, use_approx_J=True, J_lr=J_lr,
-                    SG_label_activation=tanh, W_FB=W_FB)
-    learn_alg.name = 'DNIb'
-if params['algorithm'] == 'RFLO':
-    learn_alg = RFLO(rnn, alpha=alpha)
-if params['algorithm'] == 'KeRNL':
-    sigma_noise = 0.0000001
-    #kernl_lr = params['base_learning_rate']/sigma_noise
-    base_learning_rate = 0.01
-    kernl_lr = base_learning_rate/sigma_noise
-    KeRNL_optimizer = Stochastic_Gradient_Descent(kernl_lr)
-    learn_alg = KeRNL(rnn, KeRNL_optimizer, sigma_noise=sigma_noise)
-
-#learn_alg = Efficient_BPTT(rnn, 10)
-#learn_alg = Only_Output_Weights(rnn)
-comp_algs = []
-
-monitors = ['learn_alg.A', 'learn_alg.alpha']
-monitors = ['net.loss_', 'net.y_hat']
-monitors = ['net.loss_']
-#monitors = []
+monitors = ['net.loss_', 'net.y_hat', 'net.sigma']
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -196,26 +84,8 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         monitors=monitors,
         verbose=True,
         check_accuracy=False,
-        check_loss=True)
-
-#Filter losses
-#loss = sim.mons['net.loss_']
-#downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
-#filtered_loss = uniform_filter1d(downsampled_loss, 10)
-#processed_data = {'filtered_loss': filtered_loss}
-#del(sim.mons['net.loss_'] )
-
-#Get validation losses
-np.random.seed(1)
-n_test = 10000
-data = task.gen_data(0, n_test)
-test_sim = deepcopy(sim)
-test_sim.run(data,
-             mode='test',
-             monitors=['net.loss_'],
-             verbose=False)
-test_loss = np.mean(test_sim.mons['net.loss_'])
-processed_data = {'test_loss': test_loss}
+        check_loss=True,
+        sigma=0.07)
 
 if os.environ['HOME'] == '/Users/omarschall':
 
@@ -231,7 +101,7 @@ if os.environ['HOME'] == '/Users/omarschall':
                  monitors=['net.loss_', 'net.y_hat', 'net.a'],
                  verbose=False)
     fig = plt.figure()
-    for i in range(10):
+    for i in range(2):
         plt.plot(test_sim.mons['net.y_hat'][:,i], color='C{}'.format(i))
         plt.plot(data['test']['Y'][:,i], color='C{}'.format(i), linestyle='--')
         plt.xlim([9800, 10000])
