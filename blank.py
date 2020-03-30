@@ -6,6 +6,35 @@ Created on Mon Mar 23 15:42:06 2020
 @author: omarschall
 """
 
+# Load network
+network_name = 'j_boxman'
+with open(os.path.join('notebooks/good_ones', network_name), 'rb') as f:
+    rnn = pickle.load(f)
+
+task = Flip_Flop_Task(3, 0.05)
+np.random.seed(0)
+n_test = 10000
+data = task.gen_data(0, n_test)
+#test_sim = deepcopy(sim)
+test_sim = Simulation(rnn)
+test_sim.run(data,
+             mode='test',
+             monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+             verbose=False)
+
+find_slow_points_ = partial(find_slow_points, N_iters=10000, return_period=100,
+                            N_seed_2=1)
+#results = find_slow_points_([test_sim, 0, 0])
+pool = mp.Pool(mp.cpu_count())
+N_seed_1 = 8
+results = pool.map(find_slow_points_, zip([test_sim]*N_seed_1,
+                                          range(N_seed_1),
+                                          [i_job]*N_seed_1))
+pool.close()
+A = [results[i][0] for i in range(N_seed_1)]
+speeds = [results[i][1] for i in range(N_seed_1)]
+LR_drop_times = [results[i][2] for i in range(N_seed_1)]
+result = {'A': A, 'speeds': speeds}
 
 task = Flip_Flop_Task(3, 0.05)
 np.random.seed(0)

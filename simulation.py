@@ -114,17 +114,13 @@ class Simulation:
             best_model_interval (int): Number of time steps between running
                 test simulations and saving the model if it has the lowest
                 yet validation loss.
-            save_model_interval (int): Number of time steps between running
-                test simulations and saving the top n_singular_vectors vectors
-                of V in the SVD of the hidden state.
-            n_singular_vectors (int): Number of singular vectors to keep for
-                analysis when saving test results."""
+            dynamics_analysis (dynamics.Dynamics_Analysis): A dynamics analysis
+                object for inspecting how RNN dynamics change over training."""
 
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
                           'update_interval', 'comp_algs', 'verbose',
                           'report_interval', 'check_accuracy', 'check_loss',
-                          'best_model_interval', 'save_model_interval',
-                          'n_singular_vectors'}
+                          'best_model_interval', 'dynamics_analysis'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -146,8 +142,6 @@ class Simulation:
         self.comp_algs = []
         self.report_interval = max(self.total_time_steps//10, 1)
         self.update_interval = 1
-        self.singular_vectors = []
-        self.n_singular_vectors = 3
         self.sigma = 0
 
         #Overwrite defaults with any provided keyword args
@@ -295,20 +289,16 @@ class Simulation:
     def end_time_step(self, data):
         """Cleans up after each time step in the time loop."""
 
-        #Current inputs/labels become previous inputs/labels
-        self.rnn.x_prev = np.copy(self.rnn.x)
-        self.rnn.y_prev = np.copy(self.rnn.y)
-
         #Compute spectral radii if desired
         self.get_radii_and_norms()
 
         #Monitor relevant variables
         self.update_monitors()
 
-        #Test model at specified interval and save results for analysis
-        if self.save_model_interval is not None and self.mode == 'train':
-            if self.i_t % self.save_model_interval == 0:
-                self.get_test_singular_vectors(data)
+        #Run dynamics analysis at specified intervals
+        if self.dynamics_analysis is not None and self.mode == 'train':
+            if self.i_t % self.dynamics_analysis.run_period == 0:
+                self.dynamics_analysis(self, data)
 
         #Evaluate model and save if performance is best
         if self.best_model_interval is not None and self.mode == 'train':
@@ -320,6 +310,10 @@ class Simulation:
             self.i_t > 0 and
             self.verbose):
             self.report_progress(data)
+            
+        #Current inputs/labels become previous inputs/labels
+        self.rnn.x_prev = self.rnn.x.copy()
+        self.rnn.y_prev = self.rnn.y.copy()
 
     def report_progress(self, data):
         """"Reports progress at specified interval, including test run
@@ -406,7 +400,8 @@ class Simulation:
         test_sim = self.get_test_sim()
         test_sim.run(data, mode='test',
                      monitors=['rnn.a'],
-                     verbose=False)
+                     verbose=False,
+                     a_initial=test_sim.rnn.a)
 
         U, S, V = np.linalg.svd(test_sim.mons['rnn.a'])
         self.singular_vectors.append(V[:,:self.n_singular_vectors])

@@ -25,7 +25,7 @@ from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 from sklearn import linear_model
 from state_space import State_Space_Analysis
-from dynamics import find_slow_points
+from dynamics import *
 import multiprocessing as mp
 from functools import partial
 
@@ -54,49 +54,95 @@ if os.environ['HOME'] == '/Users/omarschall':
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-    np.random.seed(1)
-
-# Load network
-network_name = 'j_boxman'
-with open(os.path.join('notebooks/good_ones', network_name), 'rb') as f:
-    rnn = pickle.load(f)
+    #np.random.seed(1)
 
 task = Flip_Flop_Task(3, 0.05)
-np.random.seed(0)
-n_test = 10000
-data = task.gen_data(0, n_test)
-#test_sim = deepcopy(sim)
+data = task.gen_data(200000, 6000)
+
+n_in = task.n_in
+n_hidden = 128
+n_out = task.n_out
+
+W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
+b_rec = np.zeros(n_hidden)
+b_out = np.zeros(n_out)
+
+alpha = 1
+
+rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=identity,
+          loss=mean_squared_error)
+
+optimizer = Stochastic_Gradient_Descent(lr=0.0001)
+learn_alg = Efficient_BPTT(rnn, 10)
+
+comp_algs = []
+monitors = ['rnn.loss_', 'learn_alg.rec_grads-norm']
+
+dynamics_analysis = Vanilla_PCA(2000, 3)
+
+sim = Simulation(rnn)
+sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+        comp_algs=comp_algs,
+        monitors=monitors,
+        verbose=True,
+        check_accuracy=False,
+        check_loss=True,
+        dynamics_analysis=dynamics_analysis)
+
 test_sim = Simulation(rnn)
 test_sim.run(data,
              mode='test',
              monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
              verbose=False)
 
-find_slow_points_ = partial(find_slow_points, N_iters=10000, return_period=100,
-                            N_seed_2=1)
-#results = find_slow_points_([test_sim, 0, 0])
-pool = mp.Pool(mp.cpu_count())
-N_seed_1 = 8
-results = pool.map(find_slow_points_, zip([test_sim]*N_seed_1,
-                                          range(N_seed_1),
-                                          [i_job]*N_seed_1))
-pool.close()
-A = [results[i][0] for i in range(N_seed_1)]
-speeds = [results[i][1] for i in range(N_seed_1)]
-LR_drop_times = [results[i][2] for i in range(N_seed_1)]
-result = {'A': A, 'speeds': speeds}
+plt.figure()
+plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
+plt.plot(data['test']['Y'][:, 0])
 
-if os.environ['HOME'] == '/Users/omarschall':
+PC_results = np.array(sim.dynamics_analysis.results['analysis'])
+Q = PC_results.reshape(PC_results.shape[0], -1)
+M = Q.dot(Q.T)
+plt.figure()
+plt.imshow(M)
+plt.figure()
+plt.plot(np.diag(M[1:,:-1]))
+
+#for i in range(0, 200, 20):
+#    
+#    test_sim = Simulation(dynamics_analysis.results['checkpoint_rnn'][i])
+#    test_sim.run(data,
+#                 mode='test',
+#                 monitors=['rnn.a'],
+#                 verbose=False)
+#    ssa = State_Space_Analysis(test_sim.mons['rnn.a'], n_PCs=3)
+#    ssa.plot_in_state_space(test_sim.mons['rnn.a'], '.', alpha=0.01)
+#    
+#filt = uniform_filter1d(sim.mons['rnn.loss_'], 1000)
+#plt.figure()
+#plt.plot(filt)
+#for i in range(10):
+#    plt.axvline(x=i*200000/10, color='k', linestyle='--')
+    
+#with open('notebooks/good_ones/first_try', 'wb') as f:
+#    pickle.dump(sim, f)
+
+if os.environ['HOME'] == '/Users/omarschall' and False:
 
     ssa = State_Space_Analysis(test_sim.mons['rnn.a'], n_PCs=3)
-    ssa.plot_in_state_space(test_sim.mons['rnn.a'], '.', alpha=0.002)
-    ssa.fig.axes[0].set_xlim([-0.6, 0.6])
-    ssa.fig.axes[0].set_ylim([-0.6, 0.6])
-    ssa.fig.axes[0].set_zlim([-0.8, 0.8])
-    for i in range(8):
-        col = 'C{}'.format(i+1)
-        ssa.plot_in_state_space(A[i][:-1,:], color=col)
-        ssa.plot_in_state_space(A[i][-1,:].reshape((1,-1)), 'x', color=col)
+    ssa.plot_in_state_space(test_sim.mons['rnn.a'], '.', alpha=0.01)
+    #ssa.fig.axes[0].set_xlim([-0.6, 0.6])
+    #ssa.fig.axes[0].set_ylim([-0.6, 0.6])
+    #ssa.fig.axes[0].set_zlim([-0.8, 0.8])
+#    for i in range(8):
+#        col = 'C{}'.format(i+1)
+#        ssa.plot_in_state_space(A[i][:-1,:], color=col)
+#        ssa.plot_in_state_space(A[i][-1,:].reshape((1,-1)), 'x', color=col)
 
 if os.environ['HOME'] == '/home/oem214':
 
