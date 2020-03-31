@@ -3,3 +3,5 @@ __pycache__/*
 .DS_Store
 .idea
 job_scripts/
+blank.py
+notebooks
