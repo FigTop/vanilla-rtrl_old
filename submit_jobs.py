@@ -61,7 +61,7 @@ def submit_job(job_file, n_array, scratch_path='/scratch/oem214/vanilla-rtrl/',
     subprocess.run(['ssh', username+'@'+domain,
                     'sbatch', '--array=1-'+str(n_array), job_name])
 
-def write_job_file(job_name,
+def write_job_file(job_name, py_file_name='main.py',
                    sbatch_path='/Users/omarschall/vanilla-rtrl/job_scripts/',
                    scratch_path='/scratch/oem214/vanilla-rtrl/',
                    nodes=1, ppn=1, mem=16, n_hours=24):
@@ -116,7 +116,7 @@ def write_job_file(job_name,
             + 'pwd > {}.log\n'.format(log_name)
             + 'date >> {}.log\n'.format(log_name)
             + 'which python >> {}.log\n'.format(log_name)
-            + 'python main.py\n'
+            + 'python {}\n'.format(py_file_name)
             )
 
     return job_file
