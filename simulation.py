@@ -105,22 +105,26 @@ class Simulation:
             report_interval (int): Number of time steps between reports, if
                 verbose. Default is 1/10 the number of total time steps, for 10
                 total progress reports.
-            check_accuracy (bool): Boolean that indicates whether to run a test
+            report_accuracy (bool): Boolean that indicates whether to run test
                 simulation during each progress report to report classification
                 accuracy, as defined by the fraction of test time steps where
                 the argmax of the outputs matches that of the labels.
-            check_loss (bool): Same as check_accuracy but with test loss. If
+            report_loss (bool): Same as report_accuracy but with test loss. If
                 both are False, no test simulation is run.
             best_model_interval (int): Number of time steps between running
                 test simulations and saving the model if it has the lowest
                 yet validation loss.
+            checkpoint_interval (int): Number of time steps between saving
+                rnn, learn_alg, optimizer, and i_t so that training can be
+                reproduced.
             dynamics_analysis (dynamics.Dynamics_Analysis): A dynamics analysis
                 object for inspecting how RNN dynamics change over training."""
 
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
                           'update_interval', 'comp_algs', 'verbose',
-                          'report_interval', 'check_accuracy', 'check_loss',
-                          'best_model_interval', 'dynamics_analysis'}
+                          'report_interval', 'report_accuracy', 'report_loss',
+                          'best_model_interval', 'dynamics_analysis',
+                          'checkpoint_interval'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -137,8 +141,8 @@ class Simulation:
 
         #Set defaults
         self.verbose = True
-        self.check_accuracy = False
-        self.check_loss = False
+        self.report_accuracy = False
+        self.report_loss = False
         self.comp_algs = []
         self.report_interval = max(self.total_time_steps//10, 1)
         self.update_interval = 1
@@ -304,6 +308,10 @@ class Simulation:
         if self.best_model_interval is not None and self.mode == 'train':
             if self.i_t % self.best_model_interval == 0:
                 self.save_best_model(data)
+                
+        if self.checkpoint_interval is not None and self.mode == 'train':
+            if self.i_t % self.checkpoint_interval == 0:
+                self.checkpoint_model()
 
         #Make report if conditions are met
         if (self.i_t % self.report_interval == 0 and
@@ -330,17 +338,17 @@ class Simulation:
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
 
-        if self.check_accuracy or self.check_loss:
+        if self.report_accuracy or self.report_loss:
             test_sim = self.get_test_sim()
             test_sim.run(data, mode='test',
                          monitors=['rnn.y_hat', 'rnn.loss_'],
                          verbose=False,
                          a_initial=np.copy(self.rnn.a))
-            if self.check_accuracy:
+            if self.report_accuracy:
                 acc = classification_accuracy(data, test_sim.mons['rnn.y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
                 summary += accuracy
-            if self.check_loss:
+            if self.report_loss:
                 test_loss = np.mean(test_sim.mons['rnn.loss_'])
                 loss_summary = 'Test loss: {} \n'.format(test_loss)
                 summary += loss_summary
@@ -392,19 +400,16 @@ class Simulation:
         if val_loss < self.best_val_loss:
             self.best_rnn = val_sim.rnn
             self.best_val_loss = val_loss
-
-    def get_test_singular_vectors(self, data):
-        """Runs a test simulation and saves resulting top singular vectors
-        of rnn.a in self.singular_vectors."""
-
-        test_sim = self.get_test_sim()
-        test_sim.run(data, mode='test',
-                     monitors=['rnn.a'],
-                     verbose=False,
-                     a_initial=test_sim.rnn.a)
-
-        U, S, V = np.linalg.svd(test_sim.mons['rnn.a'])
-        self.singular_vectors.append(V[:,:self.n_singular_vectors])
+            
+    def checkpoint_model(self):
+        """Creates copies of all relevant objects for reproducing training
+        trajectory."""
+        
+        checkpoint = {'rnn': deepcopy(self.rnn),
+                      'learn_alg': deepcopy(self.learn_alg),
+                      'optimizer': deepcopy(self.optimizer),
+                      'i_t': copy(self.i_t)}
+        self.checkpoints.append(checkpoint)
 
     def get_test_sim(self):
         """Creates what is effectively a copy of the current simulation, but
