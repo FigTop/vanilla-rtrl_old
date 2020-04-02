@@ -208,7 +208,7 @@ class RTRL(Learning_Algorithm):
 
     Eq. (2) is implemented in the get_rec_grads method."""
 
-    def __init__(self, rnn, **kwargs):
+    def __init__(self, rnn, M_decay=1, **kwargs):
         """Inits an RTRL instance by setting the initial dadw matrix to zero."""
 
         self.name = 'RTRL' #Algorithm name
@@ -217,6 +217,7 @@ class RTRL(Learning_Algorithm):
 
         #Initialize influence matrix
         self.dadw = np.zeros((self.n_h, self.rnn.n_h_params))
+        self.M_decay = M_decay
 
     def update_learning_vars(self):
         """Updates the influence matrix via Eq. (1)."""
@@ -230,7 +231,7 @@ class RTRL(Learning_Algorithm):
         self.rnn.get_a_jacobian() #Get updated network Jacobian
 
         #Update influence matrix via Eq. (1).
-        self.dadw = self.rnn.a_J.dot(self.dadw) + self.papw
+        self.dadw = self.M_decay * self.rnn.a_J.dot(self.dadw) + self.papw
 
     def get_rec_grads(self):
         """Calculates recurrent grads using Eq. (2), reshapes into original
