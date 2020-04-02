@@ -26,7 +26,7 @@ def clip_norm(z, max_norm=1.0):
     """Clips the norm of an array"""
     
     if norm(z) > max_norm:
-        z = z * (max_norm / norm(z)
+        z = z * (max_norm / norm(z))
     
     return z
 
