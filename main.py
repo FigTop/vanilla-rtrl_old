@@ -23,37 +23,40 @@ import os
 import pickle
 from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
+from sklearn import linear_model
+from state_space import State_Space_Analysis
+from dynamics import *
+import multiprocessing as mp
+from functools import partial
 
 if os.environ['HOME'] == '/home/oem214':
-    n_seeds = 15
+    n_seeds = 100
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(algorithm=['Only_Output_Weights', 'RTRL',
-                                               'UORO', 'KF-RTRL', 'R-KF-RTRL',
-                                               'BPTT', 'DNI', 'DNIb',
-                                               'RFLO', 'KeRNL'],
-                                     difficulty=[28, 49, 56, 98, 112, 196])
+    macro_configs = config_generator(mu=[0, 0.3, 0.6],
+                                     clip_norm=[0.1, 0.3],
+                                     L2_reg=[0.00001])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
-    np.random.seed(i_job)
+    np.random.seed(i_job + 20)
 
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
-
+        
 if os.environ['HOME'] == '/Users/omarschall':
     params = {}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
-    #np.random.seed()
+    #np.random.seed(1)
 
-task = Add_Task(n_1, n_2, deterministic=True, tau_task=1)
-data = task.gen_data(100000, 5000)
+task = Flip_Flop_Task(3, 0.05, tau_task=1)
+data = task.gen_data(100000, 10000)
 
 n_in = task.n_in
 n_hidden = 32
@@ -67,52 +70,64 @@ b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
 alpha = 1
+
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+          output=identity,
+          loss=mean_squared_error)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.001)
-learn_alg = Only_Output_Weights(rnn)
+optimizer = SGD_Momentum(lr=0.001, mu=0)
+learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
+#learn_alg = RFLO(rnn, alpha=alpha)
+#learn_alg = Only_Output_Weights(rnn)
+#learn_alg = RTRL(rnn, M_decay=0.7)
+#learn_alg = RFLO(rnn, alpha=alpha)
 
-monitors = ['net.loss_', 'net.y_hat', 'net.sigma']
+comp_algs = []
+#monitors = ['learn_alg.rec_grads-norm', 'rnn.loss_']
+monitors = []
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
-        check_accuracy=False,
-        check_loss=True,
-        sigma=0.07)
+        report_accuracy=False,
+        report_loss=True,
+        checkpoint_interval=None)
 
-if os.environ['HOME'] == '/Users/omarschall':
 
-    #plot_filtered_signals([sim.mons['net.loss_']])
+test_sim = Simulation(rnn)
+test_sim.run(data,
+              mode='test',
+              monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+              verbose=False)
 
-    #Test run
-    np.random.seed(2)
-    n_test = 10000
-    data = task.gen_data(100, n_test)
-    test_sim = deepcopy(sim)
-    test_sim.run(data,
-                 mode='test',
-                 monitors=['net.loss_', 'net.y_hat', 'net.a'],
-                 verbose=False)
-    fig = plt.figure()
-    for i in range(2):
-        plt.plot(test_sim.mons['net.y_hat'][:,i], color='C{}'.format(i))
-        plt.plot(data['test']['Y'][:,i], color='C{}'.format(i), linestyle='--')
-        plt.xlim([9800, 10000])
+plt.figure()
+plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
+plt.plot(data['test']['X'][:, 0])
+plt.plot(data['test']['Y'][:, 0])
+plt.xlim([0, 1000])
 
-    plt.figure()
-    x = test_sim.mons['net.y_hat'].flatten()
-    y = data['test']['Y'].flatten()
-    plt.plot(x, y, '.', alpha=0.05)
-    plt.plot([np.amin(x), np.amax(x)],
-              [np.amin(y), np.amax(y)], 'k', linestyle='--')
-    plt.axis('equal')
+if os.environ['HOME'] == '/Users/omarschall' and False:
+
+    ssa = State_Space_Analysis(test_sim.mons['rnn.a'], n_PCs=3)
+    ssa.clear_plot()
+    ssa.plot_in_state_space(test_sim.mons['rnn.a'], '.', alpha=0.01)
+    #ssa.plot_in_state_space(a_values, 'x', alpha=0.5)
+    ssa.plot_in_state_space(result['a_trajectory'], color='C6')
+    ssa.plot_in_state_space(result['a_trajectory'][-2:], 'o', color='C6')
+    x_sizes = 1/np.sqrt(KEs)
+    for i, x_size in enumerate(sizes):
+        ssa.plot_in_state_space(a_values[i].reshape(1, -1), 'x', color='C1', alpha=0.2, markersize=x_size)
+    #ssa.fig.axes[0].set_xlim([-0.6, 0.6])
+    #ssa.fig.axes[0].set_ylim([-0.6, 0.6])
+    #ssa.fig.axes[0].set_zlim([-0.8, 0.8])
+#    for i in range(8):
+#        col = 'C{}'.format(i+1)
+#        ssa.plot_in_state_space(A[i][:-1,:], color=col)
+#        ssa.plot_in_state_space(A[i][-1,:].reshape((1,-1)), 'x', color=col)
 
 if os.environ['HOME'] == '/home/oem214':
 
@@ -122,7 +137,7 @@ if os.environ['HOME'] == '/home/oem214':
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
-    save_path = os.path.join(save_dir, 'rnn_'+str(i_job))
+    save_path = os.path.join(save_dir, 'result_'+str(i_job))
 
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)

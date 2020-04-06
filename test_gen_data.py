@@ -123,6 +123,19 @@ class Test_Gen_Data(unittest.TestCase):
             self.assertTrue(np.isclose(data['train']['Y'][i,:],
                                        data['train']['Y'][i+1,:]).all())
 
+    def test_flip_flop(self):
+
+        task = Flip_Flop_Task(3, 0)
+        data = task.gen_data(40, 0)
+        self.assertTrue((data['train']['Y'] == 0).all())
+
+        task = Flip_Flop_Task(3, 1)
+        data = task.gen_data(40, 0)
+        self.assertTrue((data['train']['Y'][1:] ==
+                         data['train']['X'][1:]).all())
+
+
+
 
 if __name__=='__main__':
     unittest.main()

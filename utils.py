@@ -22,6 +22,14 @@ def norm(z):
 
     return np.sqrt(np.sum(np.square(z)))
 
+def clip_norm(z, max_norm=1.0):
+    """Clips the norm of an array"""
+    
+    if norm(z) > max_norm:
+        z = z * (max_norm / norm(z))
+    
+    return z
+
 def split_weight_matrix(A, sizes, axis=1):
     """Splits a weight matrix along the specified axis (0 for row, 1 for
     column) into a list of sub arrays of size specified by 'sizes'."""
