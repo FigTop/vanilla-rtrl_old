@@ -53,16 +53,18 @@ def Vanilla_PCA(checkpoint, test_data, n_PCs=3):
     test_a = get_test_sim_data(checkpoint, test_data)
     U, S, V = np.linalg.svd(test_a)
 
-    return V[:,:n_PCs]
+    transform = partial(np.dot, b=V[:,:n_PCs])
 
-def UMAP(checkpoint, test_data, n_components=3, **kwargs):
+    return transform
+
+def UMAP_(checkpoint, test_data, n_components=3, **kwargs):
     """Performs  UMAP with default parameters and returns component axes."""
     
     test_a = get_test_sim_data(checkpoint, test_data)
     fit = umap.UMAP(n_components=n_components, **kwargs)
     u = fit.fit_transform(test_a)
     
-    return u
+    return fit.transform
 
 def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
                    parallelize=False, **kwargs):

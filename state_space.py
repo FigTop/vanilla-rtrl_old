@@ -15,15 +15,17 @@ from mpl_toolkits.mplot3d import Axes3D
 class State_Space_Analysis:
 
     def __init__(self, checkpoint, test_data, dim_reduction_method=Vanilla_PCA,
-                 V=None, **kwargs):
+                 transform=None, **kwargs):
         """The array trajectories must have a shape of (sample, unit)"""
 
-        if V is None:
-            self.V = dim_reduction_method(checkpoint, test_data, **kwargs)
+        if transform is None:
+            self.transform = dim_reduction_method(checkpoint, test_data,
+                                                  **kwargs)
         else:
-            self.V = V
-
-        self.dim = self.V.shape[1]
+            self.transform = transform
+            
+        dummy_data = np.zeros((10, checkpoint['rnn'].n_h))
+        self.dim = self.transform(dummy_data).shape[1]
 
         self.fig = plt.figure()
         if self.dim == 2:
@@ -36,7 +38,7 @@ class State_Space_Analysis:
         """Plots given trajectories' projection onto axes as defined in
         __init__ by training data."""
 
-        projs = (self.V.T.dot(trajectories.T)).T
+        projs = self.transform(trajectories)
 
         if self.dim == 2:
             self.ax.plot(projs[:, 0], projs[:, 1], *args, **kwargs,

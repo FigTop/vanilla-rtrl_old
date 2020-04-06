@@ -77,7 +77,7 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=identity,
           loss=mean_squared_error)
 
-optimizer = SGD_Momentum(lr=0.001, mu=0)
+optimizer = SGD_Momentum(lr=0.0001, mu=0)
 learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
 #learn_alg = RFLO(rnn, alpha=alpha)
 #learn_alg = Only_Output_Weights(rnn)
@@ -112,15 +112,14 @@ plt.xlim([0, 1000])
 
 if os.environ['HOME'] == '/Users/omarschall' and False:
 
-    ssa = State_Space_Analysis(test_sim.mons['rnn.a'], n_PCs=3)
+    transform = partial(UMAP_, min_dist=0, n_neighbors=30)
+    ssa = State_Space_Analysis(sim.checkpoints[-1], data, transform)
     ssa.clear_plot()
-    ssa.plot_in_state_space(test_sim.mons['rnn.a'], '.', alpha=0.01)
-    #ssa.plot_in_state_space(a_values, 'x', alpha=0.5)
-    ssa.plot_in_state_space(result['a_trajectory'], color='C6')
-    ssa.plot_in_state_space(result['a_trajectory'][-2:], 'o', color='C6')
-    x_sizes = 1/np.sqrt(KEs)
-    for i, x_size in enumerate(sizes):
-        ssa.plot_in_state_space(a_values[i].reshape(1, -1), 'x', color='C1', alpha=0.2, markersize=x_size)
+    ssa.plot_in_state_space(test_sim.mons['rnn.a'], marker='.', alpha=0.01)
+    transform = Vanilla_PCA
+    ssa_2 = State_Space_Analysis(sim.checkpoints[-1], data, transform)
+    ssa_2.clear_plot()
+    ssa_2.plot_in_state_space(test_sim.mons['rnn.a'], marker='.', alpha=0.01)
     #ssa.fig.axes[0].set_xlim([-0.6, 0.6])
     #ssa.fig.axes[0].set_ylim([-0.6, 0.6])
     #ssa.fig.axes[0].set_zlim([-0.8, 0.8])
