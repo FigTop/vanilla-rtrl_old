@@ -956,7 +956,7 @@ class Efficient_BPTT(Learning_Algorithm):
         train and the truncation horizon. No default allowable kwargs."""
 
         self.name = 'E-BPTT'
-        allowed_kwargs_ = set()
+        allowed_kwargs_ = {'c_clip_norm'}
         super().__init__(rnn, allowed_kwargs_, **kwargs)
 
         self.T_truncation = T_truncation
@@ -997,6 +997,11 @@ class Efficient_BPTT(Learning_Algorithm):
 
             for i_BPTT in range(self.T_truncation):
 
+                #Truncate credit assignment norm                
+                if self.c_clip_norm is not None:
+                    if norm(c) > self.c_clip_norm:
+                        c = c * (self.c_clip_norm/ norm(c))
+                
                 # Access present values of h and a_hat
                 h = self.h_history.pop(0)
                 a_hat = self.a_hat_history.pop(0)

@@ -6,6 +6,122 @@ Created on Mon Mar 23 15:42:06 2020
 @author: omarschall
 """
 
+if os.environ['HOME'] == '/Users/omarschall':
+    params = {'mu': 0.8, 'clip_norm': 0.1, 'L2_reg': 0.001}
+    i_job = 0
+    save_dir = '/Users/omarschall/vanilla-rtrl/library'
+
+    #np.random.seed(1)
+
+#with open('notebooks/good_ones/another_try', 'rb') as f:
+#    sim = pickle.load(f)
+#
+#sim.checkpoint_model()
+#
+#task = Flip_Flop_Task(3, 0.05)
+#data = task.gen_data(1000, 8000)
+#
+#result = analyze_all_checkpoints(sim.checkpoints, find_KE_minima, data,
+#                                 verbose_=True, N=20, N_iters=1000)
+
+task = Flip_Flop_Task(3, 0.05, tau_task=1)
+data = task.gen_data(10000, 6000)
+
+n_in = task.n_in
+n_hidden = 128
+n_out = task.n_out
+
+W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
+b_rec = np.zeros(n_hidden)
+b_out = np.zeros(n_out)
+
+alpha = 1
+
+rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=identity,
+          loss=mean_squared_error)
+
+optimizer = SGD_Momentum(lr=0.001, mu=params['mu'],
+                         clip_norm=params['clip_norm'])
+learn_alg = Efficient_BPTT(rnn, 10, L2_reg=params['L2_reg'])
+#learn_alg = RFLO(rnn, alpha=alpha)
+#learn_alg = Only_Output_Weights(rnn)
+#learn_alg = RTRL(rnn, M_decay=0.7)
+#learn_alg = RFLO(rnn, alpha=alpha)
+
+comp_algs = []
+monitors = ['learn_alg.rec_grads-norm']
+monitors = []
+
+sim = Simulation(rnn)
+sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+        comp_algs=comp_algs,
+        monitors=monitors,
+        verbose=True,
+        report_accuracy=False,
+        report_loss=True,
+        checkpoint_interval=None)
+optimizer = SGD_Momentum(lr=0.0001, mu=params['mu'],
+                         clip_norm=params['clip_norm'])
+sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+        comp_algs=comp_algs,
+        monitors=monitors,
+        verbose=True,
+        report_accuracy=False,
+        report_loss=True,
+        checkpoint_interval=None)
+optimizer = SGD_Momentum(lr=0.00001, mu=params['mu'],
+                         clip_norm=params['clip_norm'])
+sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+        comp_algs=comp_algs,
+        monitors=monitors,
+        verbose=True,
+        report_accuracy=False,
+        report_loss=True,
+        checkpoint_interval=None)
+sim.checkpoint_model()
+
+fixed_points = find_KE_minima(sim.checkpoints[-1], data, N=20,
+                              verbose=True, parallelize=True)
+
+test_sim = Simulation(rnn)
+test_sim.run(data,
+             mode='test',
+             monitors=['rnn.loss_'],
+             verbose=False)
+test_loss = np.mean(test_sim.mons['rnn.loss_'])
+processed_data = {'test_loss': test_loss}
+
+#plt.figure()
+#x = configs_array['T_horizon']
+#mean_results = results_array.mean(-1)
+#ste_results = results_array.std(-1)/np.sqrt(20)
+#for i in range(4):
+#    col = 'C{}'.format(i)
+#    mu = mean_results[:,i]
+#    ste = ste_results[:, i]
+#    plt.plot(x, mu, color=col)
+#    plt.fill_between(x, mu - ste, mu + ste, alpha=0.3, color=col)
+#plt.legend([str(lr) for lr in configs_array['LR']])
+#plt.xticks(x)
+
+
+# test_sim = Simulation(rnn)
+# test_sim.run(data,
+#              mode='test',
+#              monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+#              verbose=False)
+
+# plt.figure()
+# plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
+# #plt.plot(data['test']['X'][:, 0])
+# plt.plot(data['test']['Y'][:, 0])
+
 # Load network
 network_name = 'j_boxman'
 with open(os.path.join('notebooks/good_ones', network_name), 'rb') as f:

@@ -243,7 +243,7 @@ class RNN:
             a = self.a
         delta_a = self.activation.f(self.W_rec.dot(a) + self.b_rec) - a
 
-        return (self.alpha**2) * np.square(delta_a).sum()
+        return (self.alpha**2 / 2) * np.square(delta_a).sum()
 
     def get_network_speed_gradient(self, a=None):
         """Calculates and returns the gradient of the (squared) network speed
@@ -253,9 +253,12 @@ class RNN:
             a = self.a
 
         h = self.W_rec.dot(a) + self.b_rec
-        delta_a = self.activation.f(h) - a
-        ret = (delta_a * self.activation.f_prime(h)).dot(self.W_rec)
+        phi = self.activation.f(h)
+        D = self.activation.f_prime(h)
+        delta_a = phi - a
+        delta_w = (D * self.W_rec.T).T - np.eye(self.n_h)
+        ret = delta_a.dot(delta_w)
 
-        return 2 * self.alpha * ret
+        return (self.alpha**2) * ret
 
 

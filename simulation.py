@@ -6,7 +6,7 @@ Created on Mon Nov  5 12:54:56 2018
 @author: omarschall
 """
 
-from copy import deepcopy
+from copy import copy, deepcopy
 import time
 from utils import (norm, classification_accuracy, normalized_dot_product,
                    get_spectral_radius, rgetattr)
@@ -116,15 +116,12 @@ class Simulation:
                 yet validation loss.
             checkpoint_interval (int): Number of time steps between saving
                 rnn, learn_alg, optimizer, and i_t so that training can be
-                reproduced.
-            dynamics_analysis (dynamics.Dynamics_Analysis): A dynamics analysis
-                object for inspecting how RNN dynamics change over training."""
+                reproduced."""
 
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
                           'update_interval', 'comp_algs', 'verbose',
                           'report_interval', 'report_accuracy', 'report_loss',
-                          'best_model_interval', 'dynamics_analysis',
-                          'checkpoint_interval'}
+                          'best_model_interval', 'checkpoint_interval'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -144,6 +141,7 @@ class Simulation:
         self.report_accuracy = False
         self.report_loss = False
         self.comp_algs = []
+        self.checkpoints = []
         self.report_interval = max(self.total_time_steps//10, 1)
         self.update_interval = 1
         self.sigma = 0
@@ -185,6 +183,9 @@ class Simulation:
 
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
+
+        #Checkpoint final model
+        self.checkpoint_model()
 
         #Delete data to save space
         del(self.x_inputs)
@@ -299,16 +300,11 @@ class Simulation:
         #Monitor relevant variables
         self.update_monitors()
 
-        #Run dynamics analysis at specified intervals
-        if self.dynamics_analysis is not None and self.mode == 'train':
-            if self.i_t % self.dynamics_analysis.run_period == 0:
-                self.dynamics_analysis(self, data)
-
         #Evaluate model and save if performance is best
         if self.best_model_interval is not None and self.mode == 'train':
             if self.i_t % self.best_model_interval == 0:
                 self.save_best_model(data)
-                
+
         if self.checkpoint_interval is not None and self.mode == 'train':
             if self.i_t % self.checkpoint_interval == 0:
                 self.checkpoint_model()
@@ -318,7 +314,7 @@ class Simulation:
             self.i_t > 0 and
             self.verbose):
             self.report_progress(data)
-            
+
         #Current inputs/labels become previous inputs/labels
         self.rnn.x_prev = self.rnn.x.copy()
         self.rnn.y_prev = self.rnn.y.copy()
@@ -400,11 +396,11 @@ class Simulation:
         if val_loss < self.best_val_loss:
             self.best_rnn = val_sim.rnn
             self.best_val_loss = val_loss
-            
+
     def checkpoint_model(self):
         """Creates copies of all relevant objects for reproducing training
         trajectory."""
-        
+
         checkpoint = {'rnn': deepcopy(self.rnn),
                       'learn_alg': deepcopy(self.learn_alg),
                       'optimizer': deepcopy(self.optimizer),
