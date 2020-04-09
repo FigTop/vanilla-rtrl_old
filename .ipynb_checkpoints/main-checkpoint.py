@@ -5,7 +5,7 @@ Created on Mon Sep 10 16:30:58 2018
 
 @author: omarschall
 """
-
+# %%
 import numpy as np
 from network import RNN
 from lstm_network import LSTM
@@ -78,7 +78,7 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_c_out, W_h_out,
 optimizer = Stochastic_Gradient_Descent(lr=0.001)
 learn_alg = RTRL_LSTM(lstm)
 comp_algs = []
-monitors = ['rnn.loss_', 'rnn.y_hat','rnn.h', 'rnn.c','grads_list','rnn.f','rnn.i','rnn.a','rnn.o']
+monitors = ['rnn.loss_', 'rnn.h', 'rnn.c']
 
 sim = Simulation(lstm)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -176,3 +176,9 @@ if os.environ['HOME'] == '/home/oem214':
 
 
 
+
+
+# %%
+test_sim.mons
+
+# %%

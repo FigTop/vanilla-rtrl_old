@@ -62,21 +62,21 @@ class RTRL_LSTM(Learning_Algorithm):
 
         # self.m = n_h_prev+1
         pcpwo = np.zeros((self.n_h, self.m * self.n_h))
-        D_o = np.diag(self.lstm.sigmoid.f_prime(self.lstm.o) * self.lstm.tanh.f(self.lstm.c))
+        D_o = np.diag((self.lstm.o-self.lstm.o**2) * self.lstm.tanh.f(self.lstm.c))
         phpwo = np.kron(self.a_hat, D_o)
         self.papwo = np.concatenate([pcpwo, phpwo])
 
-        D_a = np.diag(self.lstm.tanh.f_prime(self.lstm.a) * self.lstm.i)
+        D_a = np.diag((1-self.lstm.a**2) * self.lstm.i)
         pcpwa = np.kron(self.a_hat, D_a)
         phpwa = (pcpwa.T * r).T
         self.papwa = np.concatenate([pcpwa, phpwa])
 
-        D_i = np.diag(self.lstm.sigmoid.f_prime(self.lstm.i) * self.lstm.a)
+        D_i = np.diag((self.lstm.i-self.lstm.i**2) * self.lstm.a)
         pcpwi = np.kron(self.a_hat, D_i)
         phpwi = (pcpwi.T * r).T
         self.papwi = np.concatenate([pcpwi, phpwi])
 
-        D_f = np.diag(self.lstm.sigmoid.f_prime(self.lstm.f) * self.lstm.c_prev)
+        D_f = np.diag((self.lstm.f-self.lstm.f**2) * self.lstm.c_prev)
         pcpwf = np.kron(self.a_hat, D_f)
         phpwf = (pcpwf.T * r).T
         self.papwf = np.concatenate([pcpwf, phpwf])

@@ -289,17 +289,17 @@ class LSTM:
 
         h_c_J = (c_c_J.T * (o * self.tanh.f_prime(c))).T
 
-        P_1 = i * self.tanh.f_prime(a)
-        P_2 = a * self.sigmoid.f_prime(i)
-        P_3 = c_prev * self.sigmoid.f_prime(f)
+        P_1 = i * (1-a**2)
+        P_2 = a * (i-i**2)
+        P_3 = c_prev * (f-f**2)
         c_h_J = (self.W_a[:,:self.n_h].T * P_1 +
                  self.W_i[:,:self.n_h].T * P_2 +
                  self.W_f[:,:self.n_h].T * P_3).T
 
 
-        P_4 = self.tanh.f(c)* self.sigmoid.f_prime(o)
+        P_4 = self.tanh.f(c)* (o-o**2)
         h_h_J = (c_h_J.T * (o* self.tanh.f_prime(c)) +
-                 (self.W_o[:,:self.n_h].T * P_4)).T
+               (self.W_o[:,:self.n_h].T * P_4)).T
 
         # stack four parts together to get entire Jacobian
         a_J = np.vstack((np.hstack((c_c_J,c_h_J)),
