@@ -113,7 +113,7 @@ class RNN:
         self.n_params = (self.n_h_params +
                          self.W_out.size +
                          self.b_out.size)
-
+        self.eye = np.eye(self.n_h)
         #Params for L2 regularization
         self.L2_indices = [0, 1, 3] #W_rec, W_in, W_out
 
@@ -141,6 +141,7 @@ class RNN:
             self.h = np.random.normal(0, sigma, self.n_h)
 
         self.a = self.activation.f(self.h) #Specify activations by \phi.
+        self.a_n = self.activation.f(self.h)
 
         if 'a' in kwargs.keys(): #Override with manual activations if given.
             self.a = kwargs['a']
@@ -173,17 +174,28 @@ class RNN:
             self.x = x
             self.h_prev = np.copy(self.h)
             self.a_prev = np.copy(self.a)
+            self.a_n_prev = np.copy(self.a_n)
 
-            self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
-                      self.b_rec) #Calculate new pre-activations
+            #self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
+                      #self.b_rec) #Calculate new pre-activations
+            self.h = ((self.W_rec * self.eye).dot(self.a) +
+                      (self.W_rec * (1 - self.eye)).dot(self.a_n) +
+                      (self.W_in.dot(self.x)) +
+                      self.b_rec)
             if sigma>0: #Add noise to h if sigma is more than 0.
-                self.noise = sigma * np.random.normal(0, self.alpha, self.n_h)
+                self.noise = sigma * np.random.normal(0, np.sqrt(self.alpha), self.n_h)
+                #second noise source for RFLO-REINFORCE hybrid
+                self.noise_2 = sigma * np.random.normal(0, np.sqrt(self.alpha), self.n_h)
                 #self.h += self.noise
             else:
                 self.noise = 0
+                self.noise_2 = 0
             #Implement recurrent update equation
             self.a = ((1 - self.alpha)*self.a +
                       self.alpha*self.activation.f(self.h)) + self.noise
+            self.a_n = self.a + self.noise_2
+            #add the second layer of noise
+            
         else: #Otherwise calculate would-be next state from provided input a.
             h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
             if sigma > 0:

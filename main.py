@@ -28,8 +28,11 @@ from state_space import State_Space_Analysis
 from dynamics import *
 import multiprocessing as mp
 from functools import partial
-
-if os.environ['HOME'] == '/home/oem214':
+if os.environ['HOMEPATH'] == '\\Users\\colin':
+    params = {}
+    i_job = 0
+    save_dir = '\\Users\\colin\\Documents\\Python\\vanilla-rtrl'
+elif os.environ['HOME'] == '/home/oem214':
     n_seeds = 100
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
@@ -48,14 +51,15 @@ if os.environ['HOME'] == '/home/oem214':
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
         
-if os.environ['HOME'] == '/Users/omarschall':
+elif os.environ['HOME'] == '/Users/omarschall':
     params = {}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
     #np.random.seed(1)
 
-task = Flip_Flop_Task(3, 0.05, tau_task=1)
+task = Flip_Flop_Task(2, 0.1, tau_task=1)
+#task = Add_Task(4,6, deterministic = True)
 data = task.gen_data(100000, 10000)
 
 n_in = task.n_in
@@ -70,19 +74,27 @@ b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
 alpha = 1
-
+"""
+rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=softmax,
+          loss=softmax_cross_entropy)
+"""
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
           output=identity,
           loss=mean_squared_error)
 
-optimizer = SGD_Momentum(lr=0.001, mu=0)
-learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
+#optimizer = SGD_Momentum(lr=0.001, mu = 0)
+#optimizer = SGD_Momentum(lr=0.001, mu=0.6)
+#learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
 #learn_alg = RFLO(rnn, alpha=alpha)
 #learn_alg = Only_Output_Weights(rnn)
 #learn_alg = RTRL(rnn, M_decay=0.7)
-#learn_alg = RFLO(rnn, alpha=alpha)
+#learn_alg = REINFORCE(rnn, decay = 0.15, loss_decay = 0.01)
+learn_alg = REINFORCE_RFLO(rnn, decay = 0.1, loss_decay = 0.01)
 
 comp_algs = []
 #monitors = ['learn_alg.rec_grads-norm', 'rnn.loss_']
@@ -95,11 +107,13 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         verbose=True,
         report_accuracy=False,
         report_loss=True,
+        sigma = 0.1/np.sqrt(2),
         checkpoint_interval=None)
 
 
 test_sim = Simulation(rnn)
 test_sim.run(data,
+             sigma = 0.1/np.sqrt(2),
               mode='test',
               monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
               verbose=False)
@@ -108,9 +122,11 @@ plt.figure()
 plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
 plt.plot(data['test']['X'][:, 0])
 plt.plot(data['test']['Y'][:, 0])
-plt.xlim([0, 1000])
+plt.xlim([0, 100])
 
-if os.environ['HOME'] == '/Users/omarschall' and False:
+plt.figure()
+plt.plot(test_sim.mons['rnn.loss_'])
+if False and os.environ['HOME'] == '/Users/omarschall':
 
     ssa = State_Space_Analysis(test_sim.mons['rnn.a'], n_PCs=3)
     ssa.clear_plot()
@@ -129,7 +145,7 @@ if os.environ['HOME'] == '/Users/omarschall' and False:
 #        ssa.plot_in_state_space(A[i][:-1,:], color=col)
 #        ssa.plot_in_state_space(A[i][-1,:].reshape((1,-1)), 'x', color=col)
 
-if os.environ['HOME'] == '/home/oem214':
+if False and os.environ['HOME'] == '/home/oem214':
 
     result = {'sim': sim, 'i_seed': i_seed, 'task': task,
               'config': params, 'i_config': i_config, 'i_job': i_job,

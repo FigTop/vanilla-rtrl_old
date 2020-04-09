@@ -17,7 +17,7 @@ from network import RNN
 from copy import copy, deepcopy
 import time
 import os
-import umap
+#import umap
 
 ### --- WRAPPER METHODS --- ###
 
@@ -55,14 +55,14 @@ def Vanilla_PCA(checkpoint, test_data, n_PCs=3):
 
     return V[:,:n_PCs]
 
-def UMAP(checkpoint, test_data, n_components=3, **kwargs):
+#def UMAP(checkpoint, test_data, n_components=3, **kwargs):
     """Performs  UMAP with default parameters and returns component axes."""
     
-    test_a = get_test_sim_data(checkpoint, test_data)
-    fit = umap.UMAP(n_components=n_components, **kwargs)
-    u = fit.fit_transform(test_a)
+    #test_a = get_test_sim_data(checkpoint, test_data)
+    #fit = umap.UMAP(n_components=n_components, **kwargs)
+    #u = fit.fit_transform(test_a)
     
-    return u
+    #return u
 
 def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
                    parallelize=False, **kwargs):
