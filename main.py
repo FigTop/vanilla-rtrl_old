@@ -8,6 +8,7 @@ Created on Mon Sep 10 16:30:58 2018
 
 import numpy as np
 from network import RNN
+from network import Noisy_RNN
 from simulation import Simulation
 from gen_data import *
 try:
@@ -58,9 +59,9 @@ elif os.environ['HOME'] == '/Users/omarschall':
 
     #np.random.seed(1)
 
-task = Flip_Flop_Task(2, 0.1, tau_task=1)
-#task = Add_Task(4,6, deterministic = True)
-data = task.gen_data(100000, 10000)
+#task = Flip_Flop_Task(2, 0.1, tau_task=1)
+task = Add_Task(4,6, deterministic = True)
+data = task.gen_data(200000, 1000)
 
 n_in = task.n_in
 n_hidden = 32
@@ -81,23 +82,32 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 """
+rnn = Noisy_RNN(W_in, W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=softmax,
+          loss=softmax_cross_entropy)
+"""
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
           output=identity,
           loss=mean_squared_error)
-
+"""
+sigma = 0.5/np.sqrt(2)
 #optimizer = SGD_Momentum(lr=0.001, mu = 0)
-#optimizer = SGD_Momentum(lr=0.001, mu=0.6)
+
+optimizer = SGD_Momentum(lr=0.001, mu=0.6)
 #learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
 #learn_alg = RFLO(rnn, alpha=alpha)
 #learn_alg = Only_Output_Weights(rnn)
 #learn_alg = RTRL(rnn, M_decay=0.7)
-#learn_alg = REINFORCE(rnn, decay = 0.15, loss_decay = 0.01)
-learn_alg = REINFORCE_RFLO(rnn, decay = 0.1, loss_decay = 0.01)
+#learn_alg = REINFORCE(rnn, sigma = sigma, decay = 0.15, loss_decay = 0.01)
+learn_alg = REINFORCE_RFLO(rnn, sigma = sigma, decay = 0.15, loss_decay = 0.01)
 
 comp_algs = []
 #monitors = ['learn_alg.rec_grads-norm', 'rnn.loss_']
+#monitors = ['learn_alg.e_trace-norm']
 monitors = []
 
 sim = Simulation(rnn)
@@ -107,13 +117,13 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         verbose=True,
         report_accuracy=False,
         report_loss=True,
-        sigma = 0.1/np.sqrt(2),
+        sigma = sigma,
         checkpoint_interval=None)
 
 
 test_sim = Simulation(rnn)
 test_sim.run(data,
-             sigma = 0.1/np.sqrt(2),
+             sigma = sigma,
               mode='test',
               monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
               verbose=False)

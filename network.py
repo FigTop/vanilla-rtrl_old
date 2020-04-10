@@ -176,24 +176,17 @@ class RNN:
             self.a_prev = np.copy(self.a)
             self.a_n_prev = np.copy(self.a_n)
 
-            #self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
-                      #self.b_rec) #Calculate new pre-activations
-            self.h = ((self.W_rec * self.eye).dot(self.a) +
-                      (self.W_rec * (1 - self.eye)).dot(self.a_n) +
-                      (self.W_in.dot(self.x)) +
-                      self.b_rec)
+            self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
+                      self.b_rec) #Calculate new pre-activations
+
             if sigma>0: #Add noise to h if sigma is more than 0.
                 self.noise = sigma * np.random.normal(0, np.sqrt(self.alpha), self.n_h)
-                #second noise source for RFLO-REINFORCE hybrid
-                self.noise_2 = sigma * np.random.normal(0, np.sqrt(self.alpha), self.n_h)
                 #self.h += self.noise
             else:
                 self.noise = 0
-                self.noise_2 = 0
             #Implement recurrent update equation
             self.a = ((1 - self.alpha)*self.a +
                       self.alpha*self.activation.f(self.h)) + self.noise
-            self.a_n = self.a + self.noise_2
             #add the second layer of noise
             
         else: #Otherwise calculate would-be next state from provided input a.
@@ -272,5 +265,52 @@ class RNN:
         ret = delta_a.dot(delta_w)
 
         return (self.alpha**2) * ret
+
+class Noisy_RNN(RNN):
+    def next_state(self, x, a=None, update=True, sigma=0):
+        """Advances the network forward by one time step.
+
+        Accepts as argument the current time step's input x and updates
+        the state of the RNN, while storing the previous state h
+        and activatation a. Can either update the network (if update=True)
+        or return what the update would be.
+
+        Args:
+            x (numpy array): Input provided to the network, of shape (n_in).
+            update (bool): Specifies whether to update the network using the
+                current network state (if True) or return the would-be next
+                network state using a provided "current" network state a.
+            a (numpy array): Recurrent inputs used to drive the network, to be
+                provided only if update is False.
+            sigma (float): Standard deviation of white noise added to pre-
+                activations before applying \phi.
+
+        Returns:
+            Updates self.x, self.h, self.a, and self.*_prev, or returns the
+            would-be update from given previous state a."""
+
+        self.x = x
+        self.h_prev = np.copy(self.h)
+        self.a_prev = np.copy(self.a)
+        self.a_n_prev = np.copy(self.a_n)
+
+        self.h = ((self.W_rec * self.eye).dot(self.a) +
+                  (self.W_rec * (1 - self.eye)).dot(self.a_n) +
+                  (self.W_in.dot(self.x)) +
+                  self.b_rec)
+        if sigma>0: #Add noise to h if sigma is more than 0.
+            self.noise = sigma * np.random.normal(0, np.sqrt(self.alpha), self.n_h)
+            #second noise source for RFLO-REINFORCE hybrid
+            self.noise_2 = sigma * np.random.normal(0, np.sqrt(self.alpha), self.n_h)
+            #self.h += self.noise
+        else:
+            self.noise = 0
+            self.noise_2 = 0
+        #Implement recurrent update equation
+        self.a = ((1 - self.alpha)*self.a +
+                  self.alpha*self.activation.f(self.h)) + self.noise
+        self.a_n = self.a + self.noise_2
+        #add the second layer of noise
+
 
 
