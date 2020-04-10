@@ -8,16 +8,18 @@ Created on Fri Mar 20 13:48:33 2020
 
 import numpy as np
 from simulation import *
-from utils import norm
+from utils import *
 import multiprocessing as mp
-from submit_jobs import write_job_file
 from functools import partial
 from pdb import set_trace
-from network import RNN
+from network import *
 from copy import copy, deepcopy
 import time
 import os
-import umap
+try:
+    import umap
+except ModuleNotFoundError:
+    pass
 
 ### --- WRAPPER METHODS --- ###
 
@@ -39,9 +41,8 @@ def analyze_all_checkpoints(checkpoints, func, test_data, **kwargs):
     Uses multiprocessing to apply the analysis independently."""
 
     func_ = partial(func, test_data=test_data, **kwargs)
-    pool = mp.Pool(mp.cpu_count())
-    results = pool.map(func_, checkpoints)
-    pool.close()
+    with mp.Pool(mp.cpu_count()) as pool:
+        results = pool.map(func_, checkpoints)
 
     return results
 
@@ -85,10 +86,9 @@ def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
             RNNs.append(rnn)
 
         func_ = partial(find_KE_minimum, **kwargs)
-        pool = mp.Pool(mp.cpu_count())
-        results = pool.map(func_, RNNs)
-        pool.close()
-
+        with mp.Pool(mp.cpu_count()) as pool:
+                results = pool.map(func_, RNNs)
+                
     if not parallelize:
         for i in range(N):
 
@@ -109,13 +109,13 @@ def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
 
     return results
 
-def find_KE_minimum(rnn, LR=1e-3, N_iters=1000000,
+def find_KE_minimum(rnn, LR=1e-2, N_iters=1000000,
                     return_whole_optimization=False,
                     return_period=100,
                     N_KE_increase=3,
                     LR_drop_factor=5,
-                    LR_drop_criterion=12,
-                    same_LR_criterion=np.inf,
+                    LR_drop_criterion=10,
+                    same_LR_criterion=100000,
                     verbose=False,
                     calculate_linearization=False):
     """For a given RNN, performs gradient descent with adaptive learning rate

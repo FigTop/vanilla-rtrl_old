@@ -7,8 +7,8 @@ Created on Mon Sep 10 16:30:58 2018
 """
 
 import numpy as np
-from network import RNN
-from simulation import Simulation
+from network import *
+from simulation import *
 from gen_data import *
 try:
     import matplotlib.pyplot as plt
@@ -24,42 +24,69 @@ import pickle
 from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 from sklearn import linear_model
-from state_space import State_Space_Analysis
+from state_space import *
 from dynamics import *
 import multiprocessing as mp
 from functools import partial
 
 if os.environ['HOME'] == '/home/oem214':
-    n_seeds = 100
+    n_seeds = 1
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(mu=[0, 0.3, 0.6],
-                                     clip_norm=[0.1, 0.3],
-                                     L2_reg=[0.00001])
+    macro_configs = config_generator(algorithm=['E-BPTT', 'RFLO'])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
-    np.random.seed(i_job + 20)
+    np.random.seed(i_job)
 
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
         
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {}
+    params = {'algorithm': 'RFLO'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
     #np.random.seed(1)
 
+# with open('notebooks/good_ones/sim_006', 'rb') as f:
+#     sim = pickle.load(f)
+
+
+# checkpoint = sim.checkpoints[params['i_checkpoint']]
+
 task = Flip_Flop_Task(3, 0.05, tau_task=1)
-data = task.gen_data(100000, 10000)
+data = task.gen_data(50000, 10000)
+
+
+# result = find_KE_minima(checkpoint, data, N=50, parallelize=True,
+#                         N_iters=1000000, verbose=True)
+
+# rnn = deepcopy(checkpoint['rnn'])
+
+# transform = Vanilla_PCA
+# #ssa = State_Space_Analysis(checkpoint, data, transform)
+
+# test_sim = Simulation(rnn)
+# test_sim.run(data,
+#               mode='test',
+#               monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+#               verbose=False)
+
+
+#ssa.clear_plot()
+#ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], marker='.', alpha=0.01)
+#ssa.plot_in_state_space(results['a_trajectory'], color='C1')
+
+# rnn.reset_network()
+# results = find_KE_minimum()
 
 n_in = task.n_in
-n_hidden = 32
+n_hidden = 64
 n_out = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -77,8 +104,11 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=identity,
           loss=mean_squared_error)
 
-optimizer = SGD_Momentum(lr=0.0001, mu=0)
-learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
+optimizer = SGD_Momentum(lr=0.001, mu=0.6, clip_norm=0.3)
+if params['algorithm'] == 'E-BPTT':
+    learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
+elif params['algorithm'] == 'RFLO':
+    learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001)
 #learn_alg = RFLO(rnn, alpha=alpha)
 #learn_alg = Only_Output_Weights(rnn)
 #learn_alg = RTRL(rnn, M_decay=0.7)
@@ -95,20 +125,110 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         verbose=True,
         report_accuracy=False,
         report_loss=True,
-        checkpoint_interval=None)
+        checkpoint_interval=500)
+
+# with open('notebooks/good_ones/current_fave', 'wb') as f:
+#     pickle.dump(sim, f)
+
+# with open('notebooks/good_ones/current_fave', 'rb') as f:
+#     sim = pickle.load(f)
+#     rnn = sim.rnn
+    
+# with open('/Users/omarschall/cluster_results/vanilla-rtrl/rflo_bptt/result_0', 'rb') as f:
+#     result = pickle.load(f)
+#     sim = result['sim']
+#     rnn = sim.rnn
+
+for i_checkpoint in [20, 40, 80]:
+
+#i_checkpoint = 0
+
+    fixed_points = find_KE_minima(sim.checkpoints[i_checkpoint], data, N=20,
+                                  N_iters=300000, parallelize=True, verbose=True,
+                                  same_LR_criterion=200000)
+    
+    # with open('notebooks/good_ones/current_fave_FPs', 'wb') as f:
+    #     pickle.dump(fixed_points, f)
+    
+    
+    rnn = sim.checkpoints[i_checkpoint]['rnn']
+    test_sim = Simulation(rnn)
+    test_sim.run(data,
+                  mode='test',
+                  monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+                  verbose=False)
+    
+    A = np.array([d['a_final'] for d in fixed_points])
+    KE = np.array([d['KE_final'] for d in fixed_points])
+    
+    A_eigs = []
+    for i in range(A.shape[0]):
+        
+        rnn.reset_network(a=A[i])
+        a_J = rnn.get_a_jacobian(update=False)
+        A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
+    A_eigs = np.array(A_eigs)
+    
+    transform = Vanilla_PCA
+    ssa = State_Space_Analysis(sim.checkpoints[i_checkpoint], data, transform)
+    ssa.clear_plot()
+    ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.03)
+    ssa.plot_in_state_space(A[A_eigs>1], False, 'C1', '*', alpha=1)
+    ssa.plot_in_state_space(A[A_eigs<1], False, 'C2', '*', alpha=1)
+    
+    for i in range(2, 6):
+        rnn.reset_network(a=test_sim.mons['rnn.a'][i*100])
+        result = find_KE_minimum(rnn, return_whole_optimization=True, verbose=True,
+                                 N_iters=300000, same_LR_crtierion=200000)
+        ssa.plot_in_state_space(result['a_trajectory'], True, 'C{}'.format(i), '-', alpha=1)
 
 
-test_sim = Simulation(rnn)
-test_sim.run(data,
-              mode='test',
-              monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
-              verbose=False)
+    ssa.fig.suptitle('Checkpoint {}'.format(i_checkpoint))
 
-plt.figure()
-plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
-plt.plot(data['test']['X'][:, 0])
-plt.plot(data['test']['Y'][:, 0])
-plt.xlim([0, 1000])
+    fig = plt.figure()
+    plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
+    plt.plot(data['test']['X'][:, 0])
+    plt.plot(data['test']['Y'][:, 0])
+    plt.xlim([2000, 3000])
+    plt.title('Checkpoint {}'.format(i_checkpoint))
+    
+#ssa.fig
+
+# rnn_copy = deepcopy(rnn)
+# rnn_copy.reset_network(a=A[28]+np.random.normal(0,0.3,64))
+# result = find_KE_minimum(rnn_copy, return_whole_optimization=True, verbose=True)
+
+A_eigs = []
+for i in range(A.shape[0]):
+    
+    rnn.reset_network(a=A[i])
+    a_J = rnn.get_a_jacobian(update=False)
+    A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
+A_eigs = np.array(A_eigs)
+# test_sim = Simulation(rnn)
+# test_sim.run(data,
+#              mode='test',
+#              monitors=['rnn.loss_'],
+#              verbose=False)
+# test_loss = np.mean(test_sim.mons['rnn.loss_'])
+# processed_data = {'test_loss': test_loss}
+
+#fixed_points = find_KE_minima(sim.checkpoints[-1], data, N=200, parallelize=True,
+#                              N_iters=100000, verbose=True)
+
+# test_sim = Simulation(rnn)
+# test_sim.run(data,
+#               mode='test',
+#               monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+#               verbose=False)
+
+# plt.figure()
+# plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
+# plt.plot(data['test']['X'][:, 0])
+# plt.plot(data['test']['Y'][:, 0])
+# plt.xlim([0, 1000])
+
+processed_data = {}
 
 if os.environ['HOME'] == '/Users/omarschall' and False:
 

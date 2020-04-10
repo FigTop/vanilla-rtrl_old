@@ -24,6 +24,21 @@ if os.environ['HOME'] == '/Users/omarschall':
 #result = analyze_all_checkpoints(sim.checkpoints, find_KE_minima, data,
 #                                 verbose_=True, N=20, N_iters=1000)
 
+random_FPs = [np.random.normal(0, 1, (128)) for _ in range(8)]
+noisy_points = np.array([random_FPs[np.random.randint(8)] + np.random.normal(0, 0.3, (128)) for _ in range(1000)])
+random_FPs = np.array(random_FPs)
+U, S, V = np.linalg.svd(noisy_points)
+PCs = V[:,:3]
+proj = random_FPs.dot(PCs)
+noisy_proj = noisy_points.dot(PCs)
+fig = plt.figure(); ax = fig.add_subplot(111, projection='3d')
+ax.plot(proj[:,0], proj[:,1], proj[:,2], '.')
+ax.plot(noisy_proj[:,0], noisy_proj[:,1], noisy_proj[:,2], '.', alpha=0.2)
+for x in proj:
+    for y in proj:
+        
+        ax.plot([x[0], y[0]], [x[1], y[1]], [x[2], y[2]], color='C0', alpha=0.1)
+
 task = Flip_Flop_Task(3, 0.05, tau_task=1)
 data = task.gen_data(10000, 6000)
 

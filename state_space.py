@@ -33,7 +33,7 @@ class State_Space_Analysis:
         if self.dim == 3:
             self.ax = self.fig.add_subplot(111, projection='3d')
 
-    def plot_in_state_space(self, trajectories, mark_start_and_end=True,
+    def plot_in_state_space(self, trajectories, mark_start_and_end=False,
                             color='C0', *args, **kwargs):
         """Plots given trajectories' projection onto axes as defined in
         __init__ by training data."""
@@ -51,9 +51,9 @@ class State_Space_Analysis:
                          *args, **kwargs, color=color)
             if mark_start_and_end:
                 self.ax.plot([projs[0, 0]], [projs[0, 1]], [projs[0, 2]],
-                             '*', color=color)
-                self.ax.plot([projs[-1, 0]], [projs[-1, 1]], [projs[-1, 1]],
                              'x', color=color)
+                self.ax.plot([projs[-1, 0]], [projs[-1, 1]], [projs[-1, 2]],
+                             '*', color=color)
 
     def clear_plot(self):
         """Clears all plots from figure"""
