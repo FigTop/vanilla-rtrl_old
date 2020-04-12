@@ -28,6 +28,7 @@ from state_space import *
 from dynamics import *
 import multiprocessing as mp
 from functools import partial
+from sklearn.cluster import DBSCAN
 
 if os.environ['HOME'] == '/home/oem214':
     n_seeds = 1
@@ -47,7 +48,7 @@ if os.environ['HOME'] == '/home/oem214':
         os.mkdir(save_dir)
         
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {'algorithm': 'RFLO'}
+    params = {'algorithm': 'E-BPTT'}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
@@ -60,7 +61,8 @@ if os.environ['HOME'] == '/Users/omarschall':
 # checkpoint = sim.checkpoints[params['i_checkpoint']]
 
 task = Flip_Flop_Task(3, 0.05, tau_task=1)
-data = task.gen_data(50000, 10000)
+#data = task.gen_data(3000000, 10000)
+data = task.gen_data(30, 10000)
 
 
 # result = find_KE_minima(checkpoint, data, N=50, parallelize=True,
@@ -104,7 +106,7 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=identity,
           loss=mean_squared_error)
 
-optimizer = SGD_Momentum(lr=0.001, mu=0.6, clip_norm=0.3)
+optimizer = SGD_Momentum(lr=0.0005, mu=0.6, clip_norm=0.3)
 if params['algorithm'] == 'E-BPTT':
     learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
 elif params['algorithm'] == 'RFLO':
@@ -125,31 +127,24 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         verbose=True,
         report_accuracy=False,
         report_loss=True,
-        checkpoint_interval=500)
+        checkpoint_interval=500000)
 
 # with open('notebooks/good_ones/current_fave', 'wb') as f:
 #     pickle.dump(sim, f)
 
-# with open('notebooks/good_ones/current_fave', 'rb') as f:
-#     sim = pickle.load(f)
-#     rnn = sim.rnn
+with open('notebooks/good_ones/current_fave', 'rb') as f:
+    sim = pickle.load(f)
+    rnn = sim.rnn
     
 # with open('/Users/omarschall/cluster_results/vanilla-rtrl/rflo_bptt/result_0', 'rb') as f:
 #     result = pickle.load(f)
 #     sim = result['sim']
 #     rnn = sim.rnn
 
-for i_checkpoint in [20, 40, 80]:
+N_iters = 10000
+same_LR_criterion = 4000
 
-#i_checkpoint = 0
-
-    fixed_points = find_KE_minima(sim.checkpoints[i_checkpoint], data, N=20,
-                                  N_iters=300000, parallelize=True, verbose=True,
-                                  same_LR_criterion=200000)
-    
-    # with open('notebooks/good_ones/current_fave_FPs', 'wb') as f:
-    #     pickle.dump(fixed_points, f)
-    
+for i_checkpoint in [1, 3, -1]:
     
     rnn = sim.checkpoints[i_checkpoint]['rnn']
     test_sim = Simulation(rnn)
@@ -158,8 +153,25 @@ for i_checkpoint in [20, 40, 80]:
                   monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
                   verbose=False)
     
+    transform = Vanilla_PCA
+    ssa = State_Space_Analysis(sim.checkpoints[i_checkpoint], data, transform)
+    V = ssa.transform(np.eye(n_hidden))
+
+    fixed_points, initial_states = find_KE_minima(sim.checkpoints[i_checkpoint], data, N=300,
+                                                  PCs=V, sigma_pert=0, N_iters=N_iters, LR=1,
+                                                  weak_input=0, parallelize=True,
+                                                  verbose=True, same_LR_criterion=same_LR_criterion)
+    
+    # with open('notebooks/good_ones/current_fave_FPs', 'wb') as f:
+    #     pickle.dump(fixed_points, f)
+    
     A = np.array([d['a_final'] for d in fixed_points])
+    A_init = np.array(initial_states)
     KE = np.array([d['KE_final'] for d in fixed_points])
+    
+    dbscan = DBSCAN(eps=0.5)
+    dbscan.fit(A)
+    dbscan.labels_
     
     A_eigs = []
     for i in range(A.shape[0]):
@@ -169,42 +181,79 @@ for i_checkpoint in [20, 40, 80]:
         A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
     A_eigs = np.array(A_eigs)
     
-    transform = Vanilla_PCA
-    ssa = State_Space_Analysis(sim.checkpoints[i_checkpoint], data, transform)
+
     ssa.clear_plot()
-    ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.03)
+    ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.05)
     ssa.plot_in_state_space(A[A_eigs>1], False, 'C1', '*', alpha=1)
     ssa.plot_in_state_space(A[A_eigs<1], False, 'C2', '*', alpha=1)
+    ssa.plot_in_state_space(A_init, False, 'C3', 'x', alpha=1)
     
-    for i in range(2, 6):
-        rnn.reset_network(a=test_sim.mons['rnn.a'][i*100])
-        result = find_KE_minimum(rnn, return_whole_optimization=True, verbose=True,
-                                 N_iters=300000, same_LR_crtierion=200000)
-        ssa.plot_in_state_space(result['a_trajectory'], True, 'C{}'.format(i), '-', alpha=1)
+    cluster_idx = np.unique(dbscan.labels_)
+    n_clusters = len(cluster_idx) - (-1 in cluster_idx)
+    cluster_means = np.zeros((n_clusters, n_hidden))
+    for i in np.unique(dbscan.labels_):
+        
+        if i == -1:
+            color = 'k'
+            continue
+        else:
+            color = 'C{}'.format(i+1)
+            cluster_means[i] = A[dbscan.labels_ == i].mean(0)
+            
+        
+        ssa.plot_in_state_space(A[dbscan.labels_ == i], False, color,
+                                '*', alpha=0.5)
+    
+    ssa.plot_in_state_space(cluster_means, False, 'k', 'X')
+    
+    cluster_eigs = []
+    for i in range(cluster_means.shape[0]):
+        
+        rnn.reset_network(a=cluster_means[i])
+        a_J = rnn.get_a_jacobian(update=False)
+        cluster_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
+    cluster_eigs = np.array(cluster_eigs)
+    
+    plt.figure()
+    plt.hist(cluster_eigs)
+    plt.title('Checkpoint {}'.format(i_checkpoint))
+    # for i in range(2, 6):
+    #     rnn.reset_network(a=test_sim.mons['rnn.a'][i*100])
+    #     result = find_KE_minimum(rnn, return_whole_optimization=True, verbose=True,
+    #                               N_iters=N_iters, same_LR_criterion=same_LR_criterion)
+    #     ssa.plot_in_state_space(result['a_trajectory'], True, 'C{}'.format(i), '-', alpha=1)
 
 
     ssa.fig.suptitle('Checkpoint {}'.format(i_checkpoint))
 
-    fig = plt.figure()
-    plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
-    plt.plot(data['test']['X'][:, 0])
-    plt.plot(data['test']['Y'][:, 0])
-    plt.xlim([2000, 3000])
+
+
+    # fig = plt.figure()
+    # plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
+    # #plt.plot(data['test']['X'][:, 0])
+    # plt.plot(data['test']['Y'][:, 0])
+    # plt.xlim([2000, 3000])
+    # plt.title('Checkpoint {}'.format(i_checkpoint))
+        
+    plt.figure()
+    plt.hist(np.log10(KE), bins=20, color='C1')
     plt.title('Checkpoint {}'.format(i_checkpoint))
-    
+    plt.figure()
+    plt.hist(A_eigs, bins=20, color='C2')
+    plt.title('Checkpoint {}'.format(i_checkpoint))
 #ssa.fig
 
 # rnn_copy = deepcopy(rnn)
 # rnn_copy.reset_network(a=A[28]+np.random.normal(0,0.3,64))
 # result = find_KE_minimum(rnn_copy, return_whole_optimization=True, verbose=True)
 
-A_eigs = []
-for i in range(A.shape[0]):
+# A_eigs = []
+# for i in range(A.shape[0]):
     
-    rnn.reset_network(a=A[i])
-    a_J = rnn.get_a_jacobian(update=False)
-    A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
-A_eigs = np.array(A_eigs)
+#     rnn.reset_network(a=A[i])
+#     a_J = rnn.get_a_jacobian(update=False)
+#     A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
+# A_eigs = np.array(A_eigs)
 # test_sim = Simulation(rnn)
 # test_sim.run(data,
 #              mode='test',
@@ -222,11 +271,14 @@ A_eigs = np.array(A_eigs)
 #               monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
 #               verbose=False)
 
-# plt.figure()
-# plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
-# plt.plot(data['test']['X'][:, 0])
-# plt.plot(data['test']['Y'][:, 0])
-# plt.xlim([0, 1000])
+plt.figure()
+plt.plot(test_sim.mons['rnn.y_hat'][:, 1])
+#plt.plot(data['test']['X'][:, 1])
+plt.plot(data['test']['Y'][:, 1])
+plt.xlim([0, 1000])
+
+plt.figure()
+plt.hist(np.log10(KE), bins=20)
 
 processed_data = {}
 

@@ -68,46 +68,55 @@ def UMAP_(checkpoint, test_data, n_components=3, **kwargs):
     return fit.transform
 
 def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
-                   parallelize=False, **kwargs):
+                   parallelize=False, sigma_pert=0, PCs=None, weak_input=None,
+                   **kwargs):
     """Find many KE minima for a given checkpoint of training. Includes option
     to parallelize or not."""
 
     test_a = get_test_sim_data(checkpoint, test_data)
     results = []
+    initial_states = []
 
+    RNNs = []
+    for i in range(N):
+        
+        #Set up initial conditions
+        rnn = deepcopy(checkpoint['rnn'])
+        i_a = np.random.randint(test_a.shape[0])
+        u_pert = np.random.normal(0, sigma_pert, rnn.n_h)
+        if PCs is not None:
+            PC_pert = np.random.binomial(0, 0.2, PCs.shape[1]) * sigma_pert
+            u_pert = PCs.dot(PC_pert)
+        a_init = test_a[i_a] + u_pert
+        rnn.reset_network(a=a_init)
+        if weak_input is not None:
+            x = np.random.binomial(0, 0.2, rnn.n_in) * weak_input
+            rnn.next_state(x)
+        RNNs.append(rnn)
+        initial_states.append(rnn.a.copy())
+        
     if parallelize:
-
-        RNNs = []
-        for i in range(N):
-            rnn = deepcopy(checkpoint['rnn'])
-            i_a = np.random.randint(test_a.shape[0])
-            a_init = test_a[i_a]
-            rnn.reset_network(a=a_init)
-            RNNs.append(rnn)
-
+        
         func_ = partial(find_KE_minimum, **kwargs)
         with mp.Pool(mp.cpu_count()) as pool:
                 results = pool.map(func_, RNNs)
                 
     if not parallelize:
+        
         for i in range(N):
-
+            
+            #Report progress
             if i % (N // 10) == 0 and verbose_:
                 print('{}% done'.format(i * 10 / N))
-
-            #Pick random test state as starting point
-            i_a = np.random.randint(test_a.shape[0])
-            a_init = test_a[i_a]
-
-            #Start new network object and reset state to starting point
-            rnn = deepcopy(checkpoint['rnn'])
-            rnn.reset_network(a=a_init)
-
+                
+            #Select RNN (and starting point)
+            rnn = RNNs[i]
+            
             #Calculate final result
             result = find_KE_minimum(rnn, **kwargs)
             results.append(result)
 
-    return results
+    return results, initial_states
 
 def find_KE_minimum(rnn, LR=1e-2, N_iters=1000000,
                     return_whole_optimization=False,
