@@ -6,7 +6,10 @@ Created on Tue Feb 12 17:18:46 2019
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    pass
 from utils import *
 from dynamics import *
 from mpl_toolkits.mplot3d import Axes3D
@@ -59,3 +62,52 @@ class State_Space_Analysis:
         """Clears all plots from figure"""
 
         self.fig.axes[0].clear()
+        
+def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
+                            plot_fixed_points=False, plot_cluster_means=False,
+                            plot_uncategorized_points=False, plot_init_points=False,
+                            eig_norm_color=False):
+    
+    rnn = checkpoint['rnn']
+    test_sim = Simulation(rnn)
+    test_sim.run(data,
+                  mode='test',
+                  monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+                  verbose=False)
+    
+    A_init = checkpoint['A_init']
+    fixed_points = checkpoint['fixed_points']
+    labels = checkpoint['cluster_labels']
+    cluster_means = checkpoint['cluster_means']
+    cluster_eigs = checkpoint['cluster_eigs']
+    
+    if ssa is None:
+        transform = partial(np.dot, b=checkpoint['V'])
+        ssa = State_Space_Analysis(checkpoint, data, transform=transform)
+    ssa.clear_plot()
+    if plot_test_points:
+        ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.05)
+    if plot_init_points:
+        ssa.plot_in_state_space(A_init, False, 'C9', 'x', alpha=1)
+    
+    cluster_idx = np.unique(labels)
+    n_clusters = len(cluster_idx) - (-1 in cluster_idx)
+    for i in cluster_idx:
+        
+        if i == -1:
+            color = 'k'
+            if not plot_uncategorized_points:
+                continue
+        else:
+            color = 'C{}'.format(i+1)
+        if plot_fixed_points:
+            ssa.plot_in_state_space(fixed_points[labels == i], False, color, '*', alpha=0.5)
+    
+    if plot_cluster_means:
+        if eig_norm_color:
+            ssa.plot_in_state_space(cluster_means[cluster_eigs<1], False, 'k', 'X', alpha=0.3)
+            ssa.plot_in_state_space(cluster_means[cluster_eigs>1], False, 'k', 'o', alpha=0.3)
+        else:
+            ssa.plot_in_state_space(cluster_means, False, 'k', 'X', alpha=0.3)
+            
+    return ssa

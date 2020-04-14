@@ -16,6 +16,7 @@ from network import *
 from copy import copy, deepcopy
 import time
 import os
+from sklearn.cluster import DBSCAN
 try:
     import umap
 except ModuleNotFoundError:
@@ -45,6 +46,66 @@ def analyze_all_checkpoints(checkpoints, func, test_data, **kwargs):
         results = pool.map(func_, checkpoints)
 
     return results
+
+def analyze_checkpoint(checkpoint, data, N_iters=8000,
+                       same_LR_criterion=5000, N=200, **kwargs):
+    
+    print('Analyzing checkpoint {}...'.format(checkpoint['i_t']))
+    
+    rnn = checkpoint['rnn']
+    test_sim = Simulation(rnn)
+    test_sim.run(data,
+                  mode='test',
+                  monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
+                  verbose=False)
+    
+    transform = Vanilla_PCA(checkpoint, data)
+    V = transform(np.eye(rnn.n_h))
+
+    fixed_points, initial_states = find_KE_minima(checkpoint, data, N=N,
+                                                  N_iters=N_iters, LR=10,
+                                                  same_LR_criterion=same_LR_criterion,
+                                                  **kwargs)
+    
+    A = np.array([d['a_final'] for d in fixed_points])
+    A_init = np.array(initial_states)
+    KE = np.array([d['KE_final'] for d in fixed_points])
+    
+    dbscan = DBSCAN(eps=0.5)
+    dbscan.fit(A)
+    dbscan.labels_
+    
+    cluster_idx = np.unique(dbscan.labels_)
+    n_clusters = len(cluster_idx) - (-1 in cluster_idx)
+    cluster_means = np.zeros((n_clusters, rnn.n_h))
+    for i in cluster_idx:
+        
+        if i == -1:
+            continue
+        else:
+            cluster_means[i] = A[dbscan.labels_ == i].mean(0)
+    
+    cluster_eigs = []
+    cluster_KEs = []
+    for cluster_mean in cluster_means:
+        checkpoint['rnn'].reset_network(a=cluster_mean)
+        a_J = checkpoint['rnn'].get_a_jacobian(update=False)
+        cluster_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
+        KE = checkpoint['rnn'].get_network_speed()
+        cluster_KEs.append(KE)
+    cluster_eigs = np.array(cluster_eigs)
+    cluster_KEs = np.array(cluster_KEs)
+    
+    #Save results
+    checkpoint['fixed_points'] = A
+    checkpoint['KE'] = KE
+    checkpoint['cluster_means'] = cluster_means
+    checkpoint['cluster_labels'] = dbscan.labels_
+    checkpoint['V'] = V
+    checkpoint['A_init'] = A_init
+    checkpoint['cluster_eigs'] = cluster_eigs
+    checkpoint['cluster_KEs'] = cluster_KEs
+    checkpoint['test_loss'] = test_sim.mons['rnn.loss_'].mean()
 
 ### --- ANALYSIS METHODS --- ###
 

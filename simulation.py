@@ -121,7 +121,8 @@ class Simulation:
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
                           'update_interval', 'comp_algs', 'verbose',
                           'report_interval', 'report_accuracy', 'report_loss',
-                          'best_model_interval', 'checkpoint_interval'}
+                          'best_model_interval', 'checkpoint_interval',
+                          'overwrite_checkpoints', 'i_start', 'i_end'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -141,9 +142,10 @@ class Simulation:
         self.report_accuracy = False
         self.report_loss = False
         self.comp_algs = []
-        self.checkpoints = []
         self.report_interval = max(self.total_time_steps//10, 1)
         self.update_interval = 1
+        self.i_start = 0
+        self.i_end = self.total_time_steps
         self.sigma = 0
 
         #Overwrite defaults with any provided keyword args
@@ -158,7 +160,7 @@ class Simulation:
 
         self.initialize_run()
 
-        for i_t in range(self.total_time_steps):
+        for i_t in range(self.i_start, self.i_end):
 
             self.i_t = i_t
 
@@ -196,6 +198,10 @@ class Simulation:
 
         #Initial best validation loss is infinite
         self.best_val_loss = np.inf
+
+        #Set up checkpoints dict if doesn't already exist from previous run
+        if not hasattr(self, 'checkpoints'):
+            self.checkpoints = {}
 
         #Initialize rec_grads_dicts
         if self.mode == 'train':
@@ -306,8 +312,12 @@ class Simulation:
                 self.save_best_model(data)
 
         if self.checkpoint_interval is not None and self.mode == 'train':
-            if self.i_t % self.checkpoint_interval == 0:
-                self.checkpoint_model()
+            if type(self.checkpoint_interval) is int:
+                if self.i_t % self.checkpoint_interval == 0:
+                    self.checkpoint_model()
+            if type(self.checkpoint_interval) is list:
+                if self.i_t in self.checkpoint_interval:
+                    self.checkpoint_model()
 
         #Make report if conditions are met
         if (self.i_t % self.report_interval == 0 and
@@ -405,7 +415,9 @@ class Simulation:
                       'learn_alg': deepcopy(self.learn_alg),
                       'optimizer': deepcopy(self.optimizer),
                       'i_t': copy(self.i_t)}
-        self.checkpoints.append(checkpoint)
+        if (self.i_t not in self.checkpoints.keys() or 
+            self.overwrite_checkpoints):
+            self.checkpoints[self.i_t] = checkpoint
 
     def get_test_sim(self):
         """Creates what is effectively a copy of the current simulation, but
@@ -464,16 +476,33 @@ class Simulation:
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:
                 del(self.rec_grads_dict[key][0])
+                
+    def resume_sim_at_checkpoint(self, data, i_checkpoint, N=None,
+                                 checkpoint_interval=None,
+                                 overwrite_checkpoints=False,
+                                 **kwargs):
 
+        checkpoint = self.checkpoints[i_checkpoint]
+        
+        rnn = deepcopy(checkpoint['rnn'])
+        learn_alg = deepcopy(checkpoint['learn_alg'])
+        optimizer = deepcopy(checkpoint['optimizer'])
 
-
-
-
-
-
-
-
-
+        if N is None:
+            i_checkpoints = sorted(self.checkpoints.keys())
+            j = i_checkpoints.index(i_checkpoint) + 1
+            N = i_checkpoints[j] - i_checkpoints[j-1]
+            
+        if checkpoint_interval is None:
+            checkpoint_interval = N // 10
+        
+        self.rnn = rnn
+        self.run(data, learn_alg=learn_alg, optimizer=optimizer,
+                 checkpoint_interval=checkpoint_interval,
+                 i_start=i_checkpoint + 1,
+                 i_end=i_checkpoint + N,
+                 overwrite_checkpoints=overwrite_checkpoints,
+                 **kwargs)
 
 
 
