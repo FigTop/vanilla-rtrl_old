@@ -36,7 +36,8 @@ if os.environ['HOME'] == '/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(i_start=list(range(10000, 30000, 100)))
+    macro_configs = config_generator(i_start=list(range(0, 100000, 1000)),
+                                     algorithm=['E-BPTT', 'RFLO'])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -48,26 +49,43 @@ if os.environ['HOME'] == '/home/oem214':
         os.mkdir(save_dir)
         
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {'i_start': 13100}
+    params = {'algorithm': 'RFLO', 'i_start': 45000}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
     #np.random.seed(1)
 
-np.random.seed(0)
-task = Flip_Flop_Task(3, 0.05, tau_task=1)
-N_train = 100000
-N_test = 10000
-data = task.gen_data(N_train, N_test)
-with open('notebooks/good_ones/bptt_fave', 'rb') as f:
-    sim = pickle.load(f)
-result = {}
-for i_checkpoint in range(params['i_start'], params['i_start'] + 100, 10):
-    analyze_checkpoint(sim.checkpoints[i_checkpoint], data, verbose=False,
-                        sigma_pert=0.5, N=600, parallelize=False,
-                        N_iters=8000, same_LR_criterion=7000)
+# np.random.seed(0)
+# task = Flip_Flop_Task(3, 0.05, tau_task=1)
+# N_train = 100
+# N_test = 10000
+# data = task.gen_data(N_train, N_test)
+# with open('notebooks/good_ones/{}_net'.format(params['algorithm']), 'rb') as f:
+#     sim = pickle.load(f)
     
-    result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
+# sim.resume_sim_at_checkpoint(data, 99999, N=100001, checkpoint_interval=100)
+
+file_exists = True
+try:
+    with open('library/bptt_rflo/result_{}'.format(i_job), 'rb') as f:
+        result = pickle.load(f)
+except FileNotFoundError:
+    file_exists = False
+    
+if file_exists:
+    for i_checkpoint in range(params['i_start'],
+                              params['i_start'] + 1000, 100):
+        get_graph_structure(result['checkpoint_{}'.format(i_checkpoint)],
+                            N=100, time_steps=5, parallelize=False)
+    
+
+# result = {}
+# for i_checkpoint in range(params['i_start'], params['i_start'] + 1000, 100):
+#     analyze_checkpoint(sim.checkpoints[i_checkpoint], data, verbose=False,
+#                         sigma_pert=0.5, N=600, parallelize=False,
+#                         N_iters=8000, same_LR_criterion=7000)
+    
+#     result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
     
 # np.random.seed(i_job)
 
@@ -98,7 +116,7 @@ for i_checkpoint in range(params['i_start'], params['i_start'] + 100, 10):
 #     learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001)
 
 # comp_algs = []
-# monitors = ['rnn.a']
+# monitors = []
 
 # sim = Simulation(rnn)
 # sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -107,13 +125,43 @@ for i_checkpoint in range(params['i_start'], params['i_start'] + 100, 10):
 #         verbose=True,
 #         report_accuracy=False,
 #         report_loss=True,
-#         checkpoint_interval=list(range(10000, 30000, 10)))
+#         checkpoint_interval=10000)
+#         #checkpoint_interval=list(range(10000, 30000, 10)))
 
-# with open('notebooks/good_ones/bptt_fave', 'wb') as f:
+# # with open('notebooks/good_ones/RFLO_net_prezzy', 'rb') as f:
+# #     sim = pickle.load(f)
+# # #result = {}
+# # # for i_checkpoint in range(0, 100000, 10000):
+# analyze_checkpoint(sim.checkpoints[0], data, verbose=False,
+#                     sigma_pert=0.5, N=600, parallelize=True,
+#                     N_iters=8000, same_LR_criterion=7000)
+    
+# plot_checkpoint_results(sim.checkpoints[0], data, plot_test_points=True,
+#                         plot_cluster_means=True)
+
+# #     #result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
+
+# # plot_checkpoint_results(sim.checkpoints[99999], data,
+# #                         plot_cluster_means=True)
+
+# with open('notebooks/good_ones/{}_net_prezzy'.format(params['algorithm']), 'wb') as f:
 #     pickle.dump(sim, f)
 
 if os.environ['HOME'] == '/Users/omarschall':
 
+    plt.figure()
+    n_filter = 2000
+    filtered_loss = uniform_filter1d(sim.mons['rnn.loss_'], n_filter)
+    rec_grad_norms = uniform_filter1d(sim.mons['learn_alg.rec_grads-norm'], n_filter)
+    rec_grad_norms *= (np.amax(filtered_loss) / np.amax(rec_grad_norms))
+    plt.plot(filtered_loss)
+    plt.plot(rec_grad_norms)
+    plt.xticks(list(range(0, 100000, 10000)))
+    
+    plt.figure()
+    plt.plot(sim.mons['rnn.loss_'], sim.mons['learn_alg.rec_grads-norm'], '.', alpha=0.08)
+    
+    rnn = sim.checkpoints[0]['rnn']
     test_sim = Simulation(rnn)
     test_sim.run(data,
                   mode='test',
@@ -121,11 +169,20 @@ if os.environ['HOME'] == '/Users/omarschall':
                   verbose=False)
     
     plt.figure()
-    plt.plot(test_sim.mons['rnn.y_hat'][:, 0])
-    plt.plot(data['test']['Y'][:, 0])
+    plt.plot(data['test']['X'][:, 0] + 2.5, (str(0.6)), linestyle='--')
+    plt.plot(data['test']['Y'][:, 0] + 2.5, 'C0')
+    plt.plot(test_sim.mons['rnn.y_hat'][:, 0] + 2.5, 'C3')
+    plt.plot(data['test']['X'][:, 1], (str(0.6)), linestyle='--')
+    plt.plot(data['test']['Y'][:, 1], 'C0')
+    plt.plot(test_sim.mons['rnn.y_hat'][:, 1], 'C3')
+    plt.plot(data['test']['X'][:, 2] - 2.5, (str(0.6)), linestyle='--')
+    plt.plot(data['test']['Y'][:, 2] - 2.5, 'C0')
+    plt.plot(test_sim.mons['rnn.y_hat'][:, 2] - 2.5, 'C3')
     plt.xlim([0, 1000])
+    plt.yticks([])
+    plt.xlabel('time steps')
 
-if os.environ['HOME'] == '/home/oem214':
+if os.environ['HOME'] == '/home/oem214' and file_exists:
 
     # result = {'sim': sim, 'i_seed': i_seed, 'task': task,
     #           'config': params, 'i_config': i_config, 'i_job': i_job,

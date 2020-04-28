@@ -47,8 +47,8 @@ class State_Space_Analysis:
             self.ax.plot(projs[:, 0], projs[:, 1], *args, **kwargs,
                          color=color)
             if mark_start_and_end:
-                self.ax.plot([projs[0, 0]], [projs[0, 1]], '*', color=color)
-                self.ax.plot([projs[-1, 0]], [projs[-1, 1]], 'x', color=color)
+                self.ax.plot([projs[0, 0]], [projs[0, 1]], 'x', color=color)
+                self.ax.plot([projs[-1, 0]], [projs[-1, 1]], 'o', color=color)
         if self.dim == 3:
             self.ax.plot(projs[:, 0], projs[:, 1], projs[:, 2],
                          *args, **kwargs, color=color)
@@ -56,7 +56,7 @@ class State_Space_Analysis:
                 self.ax.plot([projs[0, 0]], [projs[0, 1]], [projs[0, 2]],
                              'x', color=color)
                 self.ax.plot([projs[-1, 0]], [projs[-1, 1]], [projs[-1, 2]],
-                             '*', color=color)
+                             'o', color=color)
 
     def clear_plot(self):
         """Clears all plots from figure"""
@@ -65,8 +65,9 @@ class State_Space_Analysis:
         
 def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
                             plot_fixed_points=False, plot_cluster_means=False,
-                            plot_uncategorized_points=False, plot_init_points=False,
-                            eig_norm_color=False):
+                            plot_uncategorized_points=False,
+                            plot_init_points=False, eig_norm_color=False,
+                            plot_graph_structure=False):
     
     rnn = checkpoint['rnn']
     test_sim = Simulation(rnn)
@@ -86,7 +87,7 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
         ssa = State_Space_Analysis(checkpoint, data, transform=transform)
     ssa.clear_plot()
     if plot_test_points:
-        ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.05)
+        ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.009)
     if plot_init_points:
         ssa.plot_in_state_space(A_init, False, 'C9', 'x', alpha=1)
     
@@ -110,4 +111,16 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
         else:
             ssa.plot_in_state_space(cluster_means, False, 'k', 'X', alpha=0.3)
             
+    if plot_graph_structure:
+        
+        graph = checkpoint['adjacency_matrix']
+        for i, j in zip(*np.where(graph != 0)):
+            
+            if i == j:
+                continue
+            
+            weight = graph[i, j]
+            line = np.array([cluster_means[i], cluster_means[j]])
+            ssa.plot_in_state_space(line, True, color='k', alpha=weight)
+        
     return ssa

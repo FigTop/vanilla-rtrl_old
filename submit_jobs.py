@@ -110,7 +110,6 @@ def write_job_file(job_name, py_file_name='main.py',
             + 'SAVEPATH={}library/{}\n'.format(scratch_path, job_name)
             + 'export SAVEPATH\n'
             + 'module load python3/intel/3.6.3\n'
-            + 'scikit-learn/intel/0.18.1\n'
             + 'cd /home/oem214/py3.6.3\n'
             + 'source py3.6.3/bin/activate\n'
             + 'cd {}\n'.format(scratch_path)

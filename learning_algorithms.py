@@ -123,6 +123,24 @@ class Learning_Algorithm:
         self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
         return grads
 
+    def maintain_sparsity(self, grads):
+        """"If called, modifies gradient to make 0 any parameters that are
+        already 0 (only for L2 params).
+        
+        Args:
+            grads (list): List of numpy arrays representing gradients before L2
+                regularization is applied.
+        Returns:
+            A new list of grads with L2 regularization applied."""
+            
+        #Get parameters affected by L2 regularization
+        L2_params = [self.rnn.params[i] for i in self.rnn.L2_indices]
+        #AMultiply each gradient by 0 if it the corresponding weight is
+        #already 0
+        for i_L2, W in zip(self.rnn.L2_indices, L2_params):
+            grads[i_L2] *= (W != 0)
+        return grads
+
     def __call__(self):
         """Calculates the final list of grads for this time step.
 

@@ -17,6 +17,7 @@ from copy import copy, deepcopy
 import time
 import os
 from sklearn.cluster import DBSCAN
+from scipy.spatial import distance
 try:
     import umap
 except ModuleNotFoundError:
@@ -265,19 +266,82 @@ def find_KE_minimum(rnn, LR=1e-2, N_iters=1000000,
 
     return results
 
-def run_autonomous_sim(rnn, N, a_initial, monitors=[]):
-   """Creates and runs a test simulation with no inputs and a specified
-   initial state of the network."""
+def run_autonomous_sim(a_initial, rnn, N, monitors=[],
+                       return_final_state=False):
+    """Creates and runs a test simulation with no inputs and a specified
+    initial state of the network.""" 
 
-   #Create empty data array
-   data = {'test': {'X': np.zeros((N, rnn.n_in)),
-                    'Y': np.zeros((N, rnn.n_out))}}
-   sim = Simulation(rnn)
-   sim.run(data, mode='test', monitors=monitors,
-           a_initial=a_initial,
-           verbose=True,
-           check_accuracy=False,
-           check_loss=False)
+    #Create empty data array
+    data = {'test': {'X': np.zeros((N, rnn.n_in)),
+                     'Y': np.zeros((N, rnn.n_out))}}
+    sim = Simulation(rnn)
+    sim.run(data, mode='test', monitors=monitors,
+            a_initial=a_initial,
+            verbose=False)
 
-   return sim
+    if return_final_state:
+        return sim.rnn.a.copy()
+    else:
+        return sim
 
+def get_graph_structure(checkpoint, N=100, time_steps=50, epsilon=0.01,
+                        parallelize=True):
+    """For each fixed point cluster, runs an autonomous simulation with
+    initial condition in small small neighborhood of a point and evaluates
+    where it ends up."""
+
+    cluster_means = checkpoint['cluster_means']
+    n_clusters = cluster_means.shape[0]
+    adjacency_matrix = np.zeros((n_clusters, n_clusters))
+    rnn = checkpoint['rnn']
+    
+    
+    if parallelize:
+        for i in range(n_clusters):
+            a_init = [(cluster_means[i] +
+                      np.random.normal(0, epsilon, rnn.n_h))
+                      for _ in range(N)]  
+            func_ = partial(run_autonomous_sim, rnn=rnn, N=N,
+                            monitors=[], return_final_state=True)
+            #set_trace()
+            with mp.Pool(mp.cpu_count()) as pool:
+                final_states = pool.map(func_, a_init)
+        
+            final_states = np.array(final_states)
+            
+            distances = distance.cdist(cluster_means, final_states)
+            i_clusters = np.argmin(distances, axis=0)
+            bins = list(np.arange(-0.5, n_clusters, 1))
+            transition_probs, _ = np.histogram(i_clusters,
+                                               bins=bins,
+                                               density=True)
+            #set_trace()
+            adjacency_matrix[i] = transition_probs
+    
+    if not parallelize:
+        for i in range(n_clusters):
+            a_init = [(cluster_means[i] +
+                      np.random.normal(0, epsilon, rnn.n_h))
+                      for _ in range(N)]  
+            func_ = partial(run_autonomous_sim, rnn=rnn, N=N,
+                            monitors=[], return_final_state=True)
+            #set_trace()
+            final_states = []
+            for a_init_ in a_init:
+                final_states.append(func_(a_init_))
+        
+            final_states = np.array(final_states)
+            
+            distances = distance.cdist(cluster_means, final_states)
+            i_clusters = np.argmin(distances, axis=0)
+            bins = list(np.arange(-0.5, n_clusters, 1))
+            transition_probs, _ = np.histogram(i_clusters,
+                                               bins=bins,
+                                               density=True)
+            #set_trace()
+            adjacency_matrix[i] = transition_probs
+            
+    checkpoint['adjacency_matrix'] = adjacency_matrix
+    
+    
+    
