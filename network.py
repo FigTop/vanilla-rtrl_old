@@ -22,15 +22,15 @@ class RNN:
         n_in (int): Number of input dimensions
         n_h (int): Number of hidden units
         n_out (int): Number of output dimensions
-        W_in (numpy array): Array of shape (n_h, n_in), weights task inputs.
-        W_rec (numpy array): Array of shape (n_h, n_h), weights recurrent
+        n_h_hat (int): Number of rec units + number of input dimensions
+        W_rec (numpy array): Array of shape (n_h, n_h_hat), weights recurrent
             inputs.
         W_out (numpy array): Array of shape (n_out, n_h), provides hidden-to-
             output-layer weights.
         b_rec (numpy array): Array of shape (n_h), represents the bias term
             in the recurrent update equation.
         params (list): The list of each parameter's current value, in the order
-            [W_rec, W_in, b_rec, W_out, b_out].
+            [W_rec, b_rec, W_out, b_out].
         shapes (list): The shape of each trainable set of parameters, in the
             same order.
         n_params (int): Number of total trainable parameters.
@@ -70,35 +70,35 @@ class RNN:
             of the network at current time, based on the equation (in TeX)
             J_{ij} = \alpha\phi'(h_i) W_{rec,ij} + (1 - \alpha)\delta_{ij}."""
 
-    def __init__(self, W_in, W_rec, W_out, b_rec, b_out,
+    def __init__(self, W_rec, W_out, b_rec, b_out,
                  activation, alpha, output, loss):
         """Initializes an RNN by specifying its initial parameter values;
         its activation, output, and loss functions; and alpha."""
 
         #Initial parameter values
-        self.W_in = W_in
         self.W_rec = W_rec
         self.W_out = W_out
         self.b_rec = b_rec
         self.b_out = b_out
 
         #Network dimensions
-        self.n_in = W_in.shape[1]
-        self.n_h = W_in.shape[0]
+        self.n_h_hat = W_rec.shape[1]
+        self.n_in = W_rec.shape[1] - W_rec.shape[0]
+        self.n_h = W_rec.shape[0]
         self.n_out = W_out.shape[0]
+        self.n_t = W_rec.shape[0]
 
         #Check dimension consistency.
         assert self.n_h == W_rec.shape[0]
-        assert self.n_h == W_rec.shape[1]
-        assert self.n_h == W_in.shape[0]
+        assert self.n_h_hat == W_rec.shape[1]
         assert self.n_h == W_out.shape[1]
         assert self.n_h == b_rec.shape[0]
         assert self.n_out == b_out.shape[0]
 
         #Define shapes and params lists for convenience later.
-        self.params = [self.W_rec, self.W_in, self.b_rec,
+        self.params = [self.W_rec, self.b_rec,
                        self.W_out, self.b_out]
-        self.param_names = ['W_rec', 'W_in', 'b_rec', 'W_out', 'b_out']
+        self.param_names = ['W_rec', 'b_rec', 'W_out', 'b_out']
         self.shapes = [w.shape for w in self.params]
 
         #Activation and loss functions
@@ -109,14 +109,13 @@ class RNN:
 
         #Number of parameters
         self.n_h_params = (self.W_rec.size +
-                           self.W_in.size +
                            self.b_rec.size)
         self.n_params = (self.n_h_params +
                          self.W_out.size +
                          self.b_out.size)
 
         #Params for L2 regularization
-        self.L2_indices = [0, 1, 3] #W_rec, W_in, W_out
+        self.L2_indices = [0, 1, 3] #W_rec,  W_out
 
         #Initial state values
         self.reset_network()
@@ -146,9 +145,10 @@ class RNN:
         if 'a' in kwargs.keys(): #Override with manual activations if given.
             self.a = kwargs['a']
 
-        self.z = self.W_out.dot(self.a) + self.b_out #Specify outputs from a
+        self.state = self.a
+        self.z = self.W_out.dot(self.state) + self.b_out #Specify outputs from a
 
-    def next_state(self, x, a=None, update=True, sigma=0):
+    def next_state(self, x, state=None, update=True, sigma=0):
         """Advances the network forward by one time step.
 
         Accepts as argument the current time step's input x and updates
@@ -161,21 +161,23 @@ class RNN:
             update (bool): Specifies whether to update the network using the
                 current network state (if True) or return the would-be next
                 network state using a provided "current" network state a.
-            a (numpy array): Recurrent inputs used to drive the network, to be
+            state (numpy array): Recurrent inputs used to drive the network, to be
                 provided only if update is False.
             sigma (float): Standard deviation of white noise added to pre-
                 activations before applying \phi.
 
         Returns:
-            Updates self.x, self.h, self.a, and self.*_prev, or returns the
+            Updates self.x, self.h, self.state, and self.*_prev, or returns the
             would-be update from given previous state a."""
 
         if update: #Update network if update is True
             self.x = x
             self.h_prev = np.copy(self.h)
-            self.a_prev = np.copy(self.a)
+            self.state_prev = np.copy(self.state)
 
-            self.h = (self.W_rec.dot(self.a) + self.W_in.dot(self.x) +
+            self.h_hat_prev = np.concatenate([self.state_prev,self.x])
+
+            self.h = (self.W_rec.dot(self.h_hat_prev) +
                       self.b_rec) #Calculate new pre-activations
             if sigma>0: #Add noise to h if sigma is more than 0.
                 self.noise = sigma * np.random.normal(0, self.alpha, self.n_h)
@@ -183,20 +185,22 @@ class RNN:
             else:
                 self.noise = 0
             #Implement recurrent update equation
-            self.a = ((1 - self.alpha)*self.a +
+            self.state = ((1 - self.alpha)*self.state +
                       self.alpha*self.activation.f(self.h)) + self.noise
         else: #Otherwise calculate would-be next state from provided input a.
-            h = self.W_rec.dot(a) + self.W_in.dot(x) + self.b_rec
+            
+            h_hat_prev = np.concatenate([state,x])
+            h = self.W_rec.dot(h_hat_prev) + self.b_rec
             if sigma > 0:
                 noise = np.random.normal(0, sigma, self.n_h)
                 h += noise
-            return (1 - self.alpha)*a + self.alpha * self.activation.f(h)
+            return (1 - self.alpha)*state + self.alpha * self.activation.f(h)
 
     def z_out(self):
         """Update outputs using current state of the network."""
 
         self.z_prev = np.copy(self.z)
-        self.z = self.W_out.dot(self.a) + self.b_out
+        self.z = self.W_out.dot(self.state) + self.b_out
 
     def get_a_jacobian(self, update=True, **kwargs):
         """Calculates the Jacobian of the network.
@@ -229,9 +233,19 @@ class RNN:
 
         #Calculate Jacobian
         D = np.diag(self.activation.f_prime(h)) #Nonlinearity derivative
-        a_J = self.alpha * D.dot(W_rec) + (1 - self.alpha) * np.eye(self.n_h)
+        a_J = self.alpha * D.dot(W_rec[:,:self.n_h]) + (1 - self.alpha) * np.eye(self.n_h)
 
         if update: #Update if update is True
             self.a_J = np.copy(a_J)
         else: #Otherwise return
             return a_J
+    
+
+    def update_M_immediate(self):
+
+        #Get relevant values and derivatives from network.
+        self.state_hat = np.concatenate([self.state_prev,
+                                     self.x,
+                                     np.array([1])])
+        D = np.diag(self.activation.f_prime(self.h))
+        self.papw = np.kron(self.state_hat, D) #Calculate M_immediate

@@ -28,7 +28,7 @@ class Learning_Algorithm:
             alignment (Lillicrap et al. 2016).
         L2_reg (float or None): Strength of L2 regularization parameter on the
             network weights.
-        a_ (numpy array): Array of shape (n_h + 1) that is the concatenation of
+        state_ (numpy array): Array of shape (n_t + 1) that is the concatenation of
             the network's state and the constant 1, used to calculate the output
             errors.
         q (numpy array): The immediate loss derivative of the network state
@@ -64,9 +64,10 @@ class Learning_Algorithm:
         self.rnn = rnn
         self.n_in = self.rnn.n_in
         self.n_h = self.rnn.n_h
+        self.n_t = self.rnn.n_t
         self.n_out = self.rnn.n_out
         self.m = self.n_h + self.n_in + 1
-        self.q = np.zeros(self.n_h)
+        self.q = np.zeros(self.n_t)
 
     def get_outer_grads(self):
         """Calculates the derivative of the loss with respect to the output
@@ -77,12 +78,13 @@ class Learning_Algorithm:
         output (the hidden state and constant 1).
 
         Returns:
-            A numpy array of shape (rnn.n_out, self.n_h + 1) containing the
+            A numpy array of shape (rnn.n_out, self.n_t + 1) containing the
                 concatenation (along column axis) of the derivative of the loss
                 w.r.t. rnn.W_out and w.r.t. rnn.b_out."""
 
-        self.a_ = np.concatenate([self.rnn.a, np.array([1])])
-        return np.multiply.outer(self.rnn.error, self.a_)
+        self.state_ = np.concatenate([self.rnn.state, np.array([1])])
+        return np.multiply.outer(self.rnn.error, self.state_)
+
 
     def propagate_feedback_to_hidden(self):
         """Performs one step of backpropagation from the outer-layer errors to
@@ -104,6 +106,7 @@ class Learning_Algorithm:
         else:
             self.q = self.rnn.error.dot(self.W_FB)
 
+
     def L2_regularization(self, grads):
         """Adds L2 regularization to the gradient.
 
@@ -122,6 +125,7 @@ class Learning_Algorithm:
         #Calculate L2 loss for monitoring purposes
         self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
         return grads
+        
 
     def __call__(self):
         """Calculates the final list of grads for this time step.
@@ -144,9 +148,9 @@ class Learning_Algorithm:
         self.propagate_feedback_to_hidden()
         self.rec_grads = self.get_rec_grads()
         rec_grads_list = split_weight_matrix(self.rec_grads,
-                                             [self.n_h, self.n_in, 1])
+                                             [self.n_h + self.n_in, 1])
         outer_grads_list = split_weight_matrix(self.outer_grads,
-                                               [self.n_h, 1])
+                                               [self.n_t, 1])
         grads_list = rec_grads_list + outer_grads_list
 
         if self.L2_reg is not None:
@@ -159,6 +163,8 @@ class Learning_Algorithm:
         simulation includes a trial structure). Default is to do nothing."""
 
         pass
+
+
 
 class Only_Output_Weights(Learning_Algorithm):
     """Updates only the output weights W_out and b_out"""
@@ -220,17 +226,12 @@ class RTRL(Learning_Algorithm):
 
     def update_learning_vars(self):
         """Updates the influence matrix via Eq. (1)."""
-
-        #Get relevant values and derivatives from network.
-        self.a_hat = np.concatenate([self.rnn.a_prev,
-                                     self.rnn.x,
-                                     np.array([1])])
-        D = np.diag(self.rnn.activation.f_prime(self.rnn.h))
-        self.papw = np.kron(self.a_hat, D) #Calculate M_immediate
+        
+        self.rnn.update_M_immediate()
         self.rnn.get_a_jacobian() #Get updated network Jacobian
-
+        
         #Update influence matrix via Eq. (1).
-        self.dadw = self.rnn.a_J.dot(self.dadw) + self.papw
+        self.dadw = self.rnn.a_J.dot(self.dadw) + self.rnn.papw
 
     def get_rec_grads(self):
         """Calculates recurrent grads using Eq. (2), reshapes into original
@@ -242,6 +243,8 @@ class RTRL(Learning_Algorithm):
         """Resets learning algorithm by setting influence matrix to 0."""
 
         self.dadw *= 0
+
+        
 
 class Stochastic_Algorithm(Learning_Algorithm):
 
@@ -324,7 +327,7 @@ class UORO(Stochastic_Algorithm):
                 get_influence_estimate."""
 
         #Get relevant values and derivatives from network
-        self.a_hat = np.concatenate([self.rnn.a_prev,
+        self.a_hat = np.concatenate([self.rnn.state_prev,
                                      self.rnn.x,
                                      np.array([1])])
         D = self.rnn.activation.f_prime(self.rnn.h)
@@ -357,13 +360,13 @@ class UORO(Stochastic_Algorithm):
         if self.epsilon is not None: #Forward differentiation method
             eps = self.epsilon
             #Get perturbed state in direction of A
-            self.a_perturbed = self.rnn.a_prev + eps * self.A
+            self.a_perturbed = self.rnn._prev + eps * self.A
             #Get hypothetical next states from this perturbation
             self.a_perturbed_next = self.rnn.next_state(self.rnn.x,
                                                         self.a_perturbed,
                                                         update=False)
             #Get forward-propagated A
-            self.A_forwards = (self.a_perturbed_next - self.rnn.a) / eps
+            self.A_forwards = (self.a_perturbed_next - self.rnn.state) / eps
             #Calculate scaling factors
             B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
@@ -473,7 +476,7 @@ class KF_RTRL(Stochastic_Algorithm):
                 get_influence_estimate."""
 
         #Get relevant values and derivatives from network
-        self.a_hat = np.concatenate([self.rnn.a_prev,
+        self.a_hat = np.concatenate([self.rnn.state_prev,
                                      self.rnn.x,
                                      np.array([1])])
         self.D = np.diag(self.rnn.activation.f_prime(self.rnn.h))
@@ -598,7 +601,7 @@ class Reverse_KF_RTRL(Stochastic_Algorithm):
                 get_influence_estimate."""
 
         #Get relevant values and derivatives from network
-        self.a_hat = np.concatenate([self.rnn.a_prev,
+        self.a_hat = np.concatenate([self.rnn.state_prev,
                                      self.rnn.x,
                                      np.array([1])])
         self.D = self.rnn.activation.f_prime(self.rnn.h)
@@ -711,7 +714,7 @@ class RFLO(Learning_Algorithm):
         time constant alpha (see Eq. 1)."""
 
         #Get relevant values and derivatives from network
-        self.a_hat = np.concatenate([self.rnn.a_prev,
+        self.a_hat = np.concatenate([self.rnn.state_prev,
                                      self.rnn.x,
                                      np.array([1])])
         self.D = self.rnn.activation.f_prime(self.rnn.h)
@@ -825,7 +828,7 @@ class DNI(Learning_Algorithm):
         #Compute synthetic gradient estimate of credit assignment at previous
         #time step. This is NOT used to drive learning in W but rather to drive
         #learning in A.
-        self.a_tilde_prev = np.concatenate([self.rnn.a_prev,
+        self.a_tilde_prev = np.concatenate([self.rnn.state_prev,
                                             self.rnn.y_prev,
                                             np.array([1])])
         self.sg = self.synthetic_grad(self.a_tilde_prev)
@@ -866,7 +869,7 @@ class DNI(Learning_Algorithm):
         #Get latest q value, slide current q value to q_prev.
         self.propagate_feedback_to_hidden()
 
-        self.a_tilde = np.concatenate([self.rnn.a,
+        self.a_tilde = np.concatenate([self.rnn.state,
                                        self.rnn.y,
                                        np.array([1])])
 
@@ -891,10 +894,10 @@ class DNI(Learning_Algorithm):
 
         dJ_loss/dJ_{ij} = (J a_prev - a)_i a_prev_j              (7)."""
 
-        self.J_error = self.J_approx.dot(self.rnn.a_prev) - self.rnn.a
+        self.J_error = self.J_approx.dot(self.rnn.state_prev) - self.rnn.state
         self.J_loss = 0.5 * np.square(self.J_error).mean()
         self.J_approx -= self.J_lr * np.multiply.outer(self.J_error,
-                                                       self.rnn.a_prev)
+                                                       self.rnn.state_prev)
 
     def synthetic_grad(self, a_tilde):
         """Computes the synthetic gradient using current values of A.
@@ -933,7 +936,7 @@ class DNI(Learning_Algorithm):
         D = self.rnn.activation.f_prime(self.rnn.h)
         self.sg_scaled = self.sg * self.rnn.alpha * D
 
-        self.a_hat = np.concatenate([self.rnn.a_prev,
+        self.a_hat = np.concatenate([self.rnn.state_prev,
                                      self.rnn.x,
                                      np.array([1])])
         #Final result of Eq. (2)
@@ -970,7 +973,7 @@ class Efficient_BPTT(Learning_Algorithm):
         variables for running E-BPTT."""
 
         # Add latest values to list
-        self.a_hat_history.insert(0, np.concatenate([self.rnn.a_prev,
+        self.a_hat_history.insert(0, np.concatenate([self.rnn.state_prev,
                                                      self.rnn.x,
                                                      np.array([1])]))
         self.h_history.insert(0, self.rnn.h)
@@ -1055,7 +1058,7 @@ class Future_BPTT(Learning_Algorithm):
         step, adding the result to each previous credit assignment estimate."""
 
         #Update history
-        self.a_hat_history.insert(0, np.concatenate([self.rnn.a_prev,
+        self.a_hat_history.insert(0, np.concatenate([self.rnn.state_prev,
                                                      self.rnn.x,
                                                      np.array([1])]))
         self.h_history.insert(0, self.rnn.h)
@@ -1201,7 +1204,7 @@ class KeRNL(Learning_Algorithm):
 
         #Update eligibility trace (Eq. 1)
         self.D = self.rnn.activation.f_prime(self.rnn.h)
-        self.a_hat = np.concatenate([self.rnn.a_prev,
+        self.a_hat = np.concatenate([self.rnn.state_prev,
                                      self.rnn.x,
                                      np.array([1])])
         self.papw = self.rnn.alpha * np.multiply.outer(self.D, self.a_hat)
@@ -1209,7 +1212,7 @@ class KeRNL(Learning_Algorithm):
 
         #Get error in predicting perturbations effect (see Pseudocode)
         self.error_prediction = self.A.dot(self.Omega)
-        self.error_observed = self.noisy_rnn.a - self.rnn.a
+        self.error_observed = self.noisy_rnn.a - self.rnn.state
         self.noise_loss = np.square(self.error_prediction -
                                     self.error_observed).sum()
         self.noise_error = self.error_prediction - self.error_observed
@@ -1233,7 +1236,7 @@ class KeRNL(Learning_Algorithm):
         """Resets learning variables to 0 and resets the perturbed network
         to the state of the primary network."""
 
-        self.noisy_rnn.a = np.copy(self.rnn.a)
+        self.noisy_rnn.a = np.copy(self.rnn.state)
         self.Omega = np.zeros_like(self.Omega)
         self.Gamma = np.zeros_like(self.Gamma)
         self.B = np.zeros_like(self.B)

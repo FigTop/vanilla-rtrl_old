@@ -15,21 +15,19 @@ class LSTM:
     c_t = a_t * i_t +  f_t * c_{t-1}
     o_t = sigma(W_o h_hat_{t-1} + b_o)
     h_t = tanh(c_t) * o_t
-    z_t = W_h_out h_t + W_h_out h_t + b_out
+    z_t = W_h_out h_t + W_c_out c_t + b_out
 
     Attributes:
         n_in (int): Number of input dimensions
         n_h (int): Number of hidden units or cell units
-        n_t (int): Total number of hidden and cell units
+        n_t (int): Total number of hidden and cell units =2n_h
         n_h_hat (int): Number of hidden units + number of input dimensions
         n_out (int): Number of output dimensions
         W_f (numpy array): Array of shape (n_h, n_h_hat), weights forget gate inputs.
         W_i (numpy array): Array of shape (n_h, n_h_hat), weights input gate inputs.
         W_a (numpy array): Array of shape (n_h, n_h_hat), weights activation inputs.
         W_o (numpy array): Array of shape (n_h, n_h_hat), weights output gate inputs.
-        W_h_out (numpy array): Array of shape (n_out, n_h), provides hidden-to-
-            output-layer weights.
-        W_c_out (numpy array): Array of shape (n_out, n_h), provides cell-to-
+        W_out (numpy array): Array of shape (n_out, n_t), provides [hidden,cell]-to-
             output-layer weights.
         b_f (numpy array): Array of shape (n_h), represents the bias term in the forget gate update equation.
         b_i (numpy array): Array of shape (n_h), represents the bias term in the input gate update equation.
@@ -39,7 +37,7 @@ class LSTM:
 
         params (list): The list of each parameter's current value, in the order
             [self.W_f, self.W_i, self.W_a, self.W_o, self.b_f, self.b_i, self.b_a, self.b_o,
-            self.W_h_out, self.W_c_out, self.b_out]
+            self.W_out, self.b_out]
         shapes (list): The shape of each trainable set of parameters, in the
             same order.
         n_params (int): Number of total trainable parameters.
@@ -80,7 +78,7 @@ class LSTM:
         """
 
 
-    def __init__(self, W_f, W_i, W_a, W_o, W_c_out, W_h_out,
+    def __init__(self, W_f, W_i, W_a, W_o, W_out,
                  b_f, b_i, b_a, b_o, b_out,
                  output, loss,
                  sigmoid = Function(sigmoid_,sigmoid_derivative),
@@ -89,8 +87,7 @@ class LSTM:
         its activation(sigmoid and tanh), output, and loss functions;."""
 
         #Initial parameter values
-        self.W_h_out = W_h_out
-        self.W_c_out = W_c_out
+        self.W_out = W_out
         self.b_out = b_out
 
         self.W_f = W_f
@@ -107,7 +104,7 @@ class LSTM:
         self.n_h = W_f.shape[0]
         self.n_t = 2 * self.n_h
         self.n_in = W_f.shape[1] - W_f.shape[0]
-        self.n_out = W_h_out.shape[0]
+        self.n_out = W_out.shape[0]
 
         #Check dimension consistency.
         assert self.n_h == W_a.shape[0]
@@ -121,24 +118,23 @@ class LSTM:
         assert self.n_h == b_i.shape[0]
         assert self.n_h == b_a.shape[0]
         assert self.n_h == b_o.shape[0]
-        assert self.n_out == W_c_out.shape[0]
+        assert self.n_out == W_out.shape[0]
         assert self.n_out == b_out.shape[0]
-        assert self.n_h == W_h_out.shape[1]
-        assert self.n_h == W_c_out.shape[1]
+
 
         #Define shapes and params lists for convenience later.
         self.params = [self.W_f, self.b_f,
                        self.W_i, self.b_i,
                        self.W_a, self.b_a,
                        self.W_o, self.b_o,
-                       self.W_c_out, self.W_h_out, self.b_out]
+                       self.W_out, self.b_out]
         self.shapes = [w.shape for w in self.params]
 
         self.param_names = ['W_f', 'b_f',
                             'W_i', 'b_i',
                             'W_a', 'b_a',
                             'W_o', 'b_o',
-                            'W_c_out', 'W_h_out', 'b_out']
+                            'W_out', 'b_out']
 
         #Activation and loss functions
         self.sigmoid = sigmoid
@@ -147,13 +143,20 @@ class LSTM:
         self.output = output
 
         #Number of parameters
-        self.n_h_params = (self.W_f.size + self.b_f.size )
+        self.n_h_params = (self.W_f.size + self.b_f.size )*4
 
         self.n_params = (self.n_h_params +
-                         self.W_h_out.size + self.W_c_out.size + self.b_out.size)
+                         self.W_out.size + self.b_out.size)
 
         #Indices of params for L2 regularization
-        self.L2_indices = [0, 2, 4, 6, 8, 9] # W_f, W_i, W_a, W_o, W_h_out.W_c_out
+        self.L2_indices = [0, 2, 4, 6, 8, 9] # W_f, W_i, W_a, W_o, W_out
+
+        #Initialize influence matrix
+        self.papwf = np.zeros((self.n_t, int(self.n_h_params/4)))
+        self.papwi = np.zeros((self.n_t, int(self.n_h_params/4)))
+        self.papwa = np.zeros((self.n_t, int(self.n_h_params/4)))
+        self.papwo = np.zeros((self.n_t, int(self.n_h_params/4)))
+
 
         #Initial state values
         self.reset_network()
@@ -182,9 +185,11 @@ class LSTM:
         else:
             self.c = np.random.normal(0, sigma, self.n_h)
 
+        self.state = np.concatenate([self.c,self.h])
+
         self.prev_h = self.h
         self.prev_c = self.c
-        self.z = self.W_h_out.dot(self.h)+self.W_c_out.dot(self.c)+ self.b_out #Specify outputs from a
+        self.z = self.W_out.dot(self.state)+ self.b_out #Specify outputs from a
 
 
     def next_state(self, x, c=None, h= None, update=True, sigma=0):
@@ -221,6 +226,7 @@ class LSTM:
             self.c = self.a * self.i + self.f * self.c_prev
             self.o = self.sigmoid.f(self.W_f.dot(self.h_hat_prev)+self.b_o)
             self.h = self.tanh.f(self.c) * self.o
+            self.state = np.concatenate([self.c,self.h])
 
         else:
             h_hat_prev = np.append(h, self.x, axis=0)
@@ -240,7 +246,7 @@ class LSTM:
         """Update outputs using current state of the network."""
 
         self.z_prev = np.copy(self.z)
-        self.z = self.W_h_out.dot(self.h)+self.W_c_out.dot(self.c)+ self.b_out
+        self.z = self.W_out.dot(self.state)+ self.b_out
 
 
     def get_a_jacobian(self, update=True, x=None, c=None, h=None):
@@ -309,3 +315,35 @@ class LSTM:
             self.a_J = np.copy(a_J)
         else: #Otherwise return
             return a_J
+
+    def update_M_immediate(self):
+        """Updates the influence matrix via Eq. (1)."""
+
+        self.state_hat = np.concatenate([self.h_hat_prev, np.array([1])])
+        
+        #Calculate M_immediate
+        
+        r = self.o * self.tanh.f_prime(self.c)
+
+        # self.m = n_h_prev+1
+        pcpwo = np.zeros((self.n_h, (self.n_h_hat+1) * self.n_h))
+        D_o = np.diag((self.o-self.o**2) * self.tanh.f(self.c))
+        phpwo = np.kron(self.state_hat, D_o)
+        self.papwo = np.concatenate([pcpwo, phpwo])
+
+        D_a = np.diag((1-self.a**2) * self.i)
+        pcpwa = np.kron(self.state_hat, D_a)
+        phpwa = (pcpwa.T * r).T
+        self.papwa = np.concatenate([pcpwa, phpwa])
+
+        D_i = np.diag((self.i-self.i**2) * self.a)
+        pcpwi = np.kron(self.state_hat, D_i)
+        phpwi = (pcpwi.T * r).T
+        self.papwi = np.concatenate([pcpwi, phpwi])
+
+        D_f = np.diag((self.f-self.f**2) * self.c_prev)
+        pcpwf = np.kron(self.state_hat, D_f)
+        phpwf = (pcpwf.T * r).T
+        self.papwf = np.concatenate([pcpwf, phpwf])
+
+        self.papw = np.concatenate([self.papwf,self.papwi,self.papwa,self.papwo],axis=1)

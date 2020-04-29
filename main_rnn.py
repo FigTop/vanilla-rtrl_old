@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Sep 10 16:30:58 2018
+
 @author: omarschall
 """
 
 import numpy as np
 from network import RNN
 from lstm_network import LSTM
-from lstm_learning_algorithms import RTRL_LSTM, Only_Output_LSTM
+from lstm_learning_algorithms import RTRL_LSTM, Only_Output_LSTM, UORO_LSTM
 from simulation import Simulation
 from gen_data import *
 try:
@@ -51,41 +52,84 @@ if os.environ['HOME'] == '/Users/yanqixu':
 task = Add_Task(6, 10, deterministic=True, tau_task=1)
 data = task.gen_data(20000, 10000)
 
-n_in = task.n_in
-n_h = 32
-n_out = task.n_out
-n_h_hat = n_h + n_in
-n_t = 2 * n_h
+# n_in = task.n_in
+# n_h = 32
+# n_out = task.n_out
+# n_h_hat = n_h + n_in
+# n_t = 2 * n_h
 
-W_f  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
-W_i  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
-W_a  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
-W_o  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
-b_f = np.zeros(n_h)
-b_i = np.zeros(n_h)
-b_a = np.zeros(n_h)
-b_o = np.zeros(n_h)
-W_out = np.random.normal(0, np.sqrt(1/(n_t)), (n_out, n_t))
+# W_f  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+# W_i  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+# W_a  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+# W_o  = np.random.normal(0, np.sqrt(1/(n_h_hat)), (n_h, n_h_hat))
+# b_f = np.zeros(n_h)
+# b_i = np.zeros(n_h)
+# b_a = np.zeros(n_h)
+# b_o = np.zeros(n_h)
+# W_c_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
+# W_h_out = np.random.normal(0, np.sqrt(1/(n_h)), (n_out, n_h))
+# b_out = np.zeros(n_out)
+
+# lstm = LSTM(W_f, W_i, W_a, W_o, W_c_out, W_h_out,
+#             b_f, b_i, b_a, b_o, b_out,
+#             output=softmax,
+#             loss=softmax_cross_entropy)
+
+# optimizer = Stochastic_Gradient_Descent(lr=0.001)
+# learn_alg = UORO_LSTM(lstm)
+# comp_algs = []
+# monitors = ['rnn.loss_', 'rnn.y_hat','rnn.h', 'rnn.c','grads_list','rnn.f','rnn.i','rnn.a','rnn.o']
+
+# sim = Simulation(lstm)
+# sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
+#         comp_algs=comp_algs,
+#         monitors=monitors,
+#         verbose=True,
+#         check_accuracy=False,
+#         check_loss=True)
+
+
+n_in = task.n_in
+n_hidden = 64
+n_out = task.n_out
+
+W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
+W_rec = np.concatenate([np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0],
+        W_in],axis=1)
+W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
+W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
+
+b_rec = np.zeros(n_hidden)
 b_out = np.zeros(n_out)
 
+alpha = 1
 
-lstm = LSTM(W_f, W_i, W_a, W_o, W_out, 
-            b_f, b_i, b_a, b_o, b_out,
-            output=softmax,
-            loss=softmax_cross_entropy)
+rnn = RNN(W_rec, W_out, b_rec, b_out,
+          activation=tanh,
+          alpha=alpha,
+          output=identity,
+          loss=mean_squared_error)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.001)
-learn_alg = RTRL_LSTM(lstm)
+optimizer =  Stochastic_Gradient_Descent(lr=0.001)
+
+learn_alg = RTRL(rnn)
+
 comp_algs = []
-monitors = ['rnn.loss_', 'rnn.y_hat','rnn.h', 'rnn.c','grads_list','rnn.f','rnn.i','rnn.a','rnn.o']
+monitors = []
 
-sim = Simulation(lstm)
+sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
         check_accuracy=False,
         check_loss=True)
+
+
+
+
+
+
 
 #Filter losses
 #loss = sim.mons['net.loss_']
@@ -154,41 +198,20 @@ if os.environ['HOME'] == '/home/oem214':
 
 
 
-# n_in = task.n_in
-# n_hidden = 64
-# n_out = task.n_out
 
-# W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-# W_rec = np.concatenate([np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0],
-#         W_in],axis=1)
-# W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-# W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 
-# b_rec = np.zeros(n_hidden)
-# b_out = np.zeros(n_out)
 
-# alpha = 1
 
-# rnn = RNN(W_rec, W_out, b_rec, b_out,
-#           activation=tanh,
-#           alpha=alpha,
-#           output=identity,
-#           loss=mean_squared_error)
 
-# optimizer =  Stochastic_Gradient_Descent(lr=0.001)
 
-# learn_alg = RTRL(rnn)
 
-# comp_algs = []
-# monitors = []
 
-# sim = Simulation(rnn)
-# sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
-#         comp_algs=comp_algs,
-#         monitors=monitors,
-#         verbose=True,
-#         check_accuracy=False,
-#         check_loss=True)
+
+
+
+
+
+
 
 
 
