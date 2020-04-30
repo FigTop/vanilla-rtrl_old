@@ -105,6 +105,7 @@ class LSTM:
         self.n_t = 2 * self.n_h
         self.n_in = W_f.shape[1] - W_f.shape[0]
         self.n_out = W_out.shape[0]
+        self.m = (self.n_h_hat+1)*4
 
         #Check dimension consistency.
         assert self.n_h == W_a.shape[0]

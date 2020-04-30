@@ -8,7 +8,7 @@ Created on Mon Sep 10 16:30:58 2018
 import numpy as np
 from network import RNN
 from lstm_network import LSTM
-from lstm_learning_algorithms import RTRL_LSTM, Only_Output_LSTM
+from lstm_learning_algorithms import Only_Output_LSTM
 from simulation import Simulation
 from gen_data import *
 try:
@@ -75,7 +75,7 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_out,
             loss=softmax_cross_entropy)
 
 optimizer = Stochastic_Gradient_Descent(lr=0.001)
-learn_alg = RTRL_LSTM(lstm)
+learn_alg = RTRL(lstm)
 comp_algs = []
 monitors = ['rnn.loss_', 'rnn.y_hat','rnn.h', 'rnn.c','grads_list','rnn.f','rnn.i','rnn.a','rnn.o']
 

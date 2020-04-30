@@ -66,7 +66,7 @@ class Learning_Algorithm:
         self.n_h = self.rnn.n_h
         self.n_t = self.rnn.n_t
         self.n_out = self.rnn.n_out
-        self.m = self.n_h + self.n_in + 1
+        self.m = self.rnn.m
         self.q = np.zeros(self.n_t)
 
     def get_outer_grads(self):
@@ -147,8 +147,18 @@ class Learning_Algorithm:
         self.outer_grads = self.get_outer_grads()
         self.propagate_feedback_to_hidden()
         self.rec_grads = self.get_rec_grads()
-        rec_grads_list = split_weight_matrix(self.rec_grads,
-                                             [self.n_h + self.n_in, 1])
+        
+        if self.rec_grads.shape[1] == self.n_h + self.n_in + 1:
+            rec_grads_list = split_weight_matrix(self.rec_grads,
+                                                [self.n_h + self.n_in, 1])        
+        else:
+            rec_grads_list = split_weight_matrix(self.rec_grads,
+                                            [self.n_h + self.n_in, 1,
+                                            self.n_h + self.n_in, 1,
+                                            self.n_h + self.n_in, 1,
+                                            self.n_h + self.n_in, 1])
+
+        
         outer_grads_list = split_weight_matrix(self.outer_grads,
                                                [self.n_t, 1])
         grads_list = rec_grads_list + outer_grads_list
@@ -222,7 +232,7 @@ class RTRL(Learning_Algorithm):
         super().__init__(rnn, allowed_kwargs_, **kwargs)
 
         #Initialize influence matrix
-        self.dadw = np.zeros((self.n_h, self.rnn.n_h_params))
+        self.dadw = np.zeros((self.n_t, self.rnn.n_h_params))
 
     def update_learning_vars(self):
         """Updates the influence matrix via Eq. (1)."""
@@ -237,7 +247,8 @@ class RTRL(Learning_Algorithm):
         """Calculates recurrent grads using Eq. (2), reshapes into original
         matrix form."""
 
-        return self.q.dot(self.dadw).reshape((self.n_h, self.m), order='F')
+        dLdw = self.q.dot(self.dadw).reshape((self.n_h, self.m), order='F')
+        return dLdw
 
     def reset_learning(self):
         """Resets learning algorithm by setting influence matrix to 0."""

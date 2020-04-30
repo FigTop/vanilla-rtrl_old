@@ -87,6 +87,7 @@ class RNN:
         self.n_h = W_rec.shape[0]
         self.n_out = W_out.shape[0]
         self.n_t = W_rec.shape[0]
+        self.m = self.n_h_hat + 1
 
         #Check dimension consistency.
         assert self.n_h == W_rec.shape[0]

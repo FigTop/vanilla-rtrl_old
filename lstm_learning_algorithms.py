@@ -11,94 +11,12 @@ from pdb import set_trace
 from utils import *
 from functions import *
 from copy import deepcopy
-from learning_algorithms import Learning_Algorithm, Stochastic_Algorithm
+from learning_algorithms import Learning_Algorithm, Stochastic_Algorithm,RTRL
 
 
 
-class RTRL_LSTM(Learning_Algorithm):
-    
-    def __init__(self, rnn, **kwargs):
-        """Inits an RTRL instance by setting the initial dadw matrix to zero."""
 
-        self.name = 'RTRL_LSTM' #Algorithm name
-        allowed_kwargs_ = set() #No special kwargs for RTRL
-        super().__init__(rnn, allowed_kwargs_, **kwargs)
-
-        #Initialize influence matrix
-        self.dadw = np.zeros((self.n_t, self.rnn.n_h_params))
-    
-
-    def update_learning_vars(self):
-        """Updates the influence matrix via Eq. (1)."""
-        
-        #Update M_immediate
-
-        self.rnn.update_M_immediate()
-
-        self.rnn.get_a_jacobian() #Get updated network Jacobian
-
-        #Update influence matrix via Eq. (1).
-        """dimension of dadwf (n_t, m * n_h)"""
-        self.dadw = self.rnn.a_J.dot(self.dadw) + self.rnn.papw
-
-    def get_rec_grads(self):
-        """Calculates recurrent grads using Eq. (2), reshapes into original
-        matrix form."""
-
-        """ dL/dw = dL/da * da/dw
-            dimension of q : n_t
-            dimension of da/dw : (n_t, m * n_h)
-        """
-
-        dLdw = self.q.dot(self.dadw).reshape((self.n_h, self.m*4), order='F')
-        # dLdw_o = self.q.dot(self.dadwo).reshape((self.n_h, self.m), order='F')
-        # dLdw_a = self.q.dot(self.dadwa).reshape((self.n_h, self.m), order='F')
-        # dLdw_i = self.q.dot(self.dadwi).reshape((self.n_h, self.m), order='F')
-        
-        return dLdw
-
-    def __call__(self):
-        """Calculates the final list of grads for this time step.
-
-        Assumes the user has already called self.update_learning_vars, a
-        method specific to each child class of Real_Time_Learning_Algorithm
-        that updates internal learning variables, e.g. the influence matrix of
-        RTRL. Then calculates the outer grads (gradients of W_out and b_out),
-        updates q using propagate_feedback_to_hidden, and finally calling the
-        get_rec_grads method (specific to each child class) to get the gradients
-        of W_rec, W_in, and b_rec as one numpy array with shape (n_h, m). Then
-        these gradients are split along the column axis into a list of 5
-        gradients for W_rec, W_in, b_rec, W_out, b_out. L2 regularization is
-        applied if L2_reg parameter is not None.
-
-        Returns:
-            List of gradients for W_rec, W_in, b_rec, W_out, b_out."""
-
-        self.outer_grads = self.get_outer_grads()
-        self.propagate_feedback_to_hidden()
-        self.rec_grads = self.get_rec_grads()
-        rec_grads_list = split_weight_matrix(self.rec_grads,
-                                             [self.n_h + self.n_in, 1,
-                                             self.n_h + self.n_in, 1,
-                                             self.n_h + self.n_in, 1,
-                                             self.n_h + self.n_in, 1])
-        outer_grads_list = split_weight_matrix(self.outer_grads,
-                                               [self.n_t, 1])
-        grads_list = rec_grads_list + outer_grads_list
-
-        if self.L2_reg is not None:
-            grads_list = self.L2_regularization(grads_list)
-
-        return grads_list
-
-
-    def reset_learning(self):
-        """Resets learning algorithm by setting influence matrix to 0."""
-        self.dadw *= 0
-
-
-
-class Only_Output_LSTM(RTRL_LSTM):
+class Only_Output_LSTM(RTRL):
     
     def __init__(self, rnn):
         
@@ -110,13 +28,9 @@ class Only_Output_LSTM(RTRL_LSTM):
     
     def get_rec_grads(self):
         
-        dLdw_f = np.zeros((self.n_h, self.m))
-        dLdw_o = np.zeros((self.n_h, self.m))
-        dLdw_a = np.zeros((self.n_h, self.m))
-        dLdw_i = np.zeros((self.n_h, self.m))
+        dLdw = np.zeros((self.n_h, self.m))
         
-        return dLdw_f, dLdw_i, dLdw_a, dLdw_o
-
+        return dLdw
 
 class Stochastic_Algorithm(Learning_Algorithm):
 
