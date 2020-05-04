@@ -6,9 +6,91 @@ Created on Mon Mar 23 15:42:06 2020
 @author: omarschall
 """
 
+# with open('notebooks/good_ones/sparsity_friend', 'rb') as f:
+#     sim = pickle.load(f)
+# result = {}
+# for i_checkpoint in range(params['i_start'], params['i_start'] + 1000, 100):
+#     analyze_checkpoint(sim.checkpoints[i_checkpoint], data, verbose=False,
+#                         sigma_pert=0.5, N=600, parallelize=False,
+#                         N_iters=8000, same_LR_criterion=7000)
+
+#     get_graph_structure(sim.checkpoints[i_checkpoint], parallelize=False)
+
+#     result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
+# with open('notebooks/good_ones/{}_net'.format(params['algorithm']), 'rb') as f:
+#     sim = pickle.load(f)
+
+# sim.resume_sim_at_checkpoint(data, 99999, N=100001, checkpoint_interval=100)
+
+### --- GET CHECKPOINTS --- ###
+
+# rflo_checkpoints = {}
+# bptt_checkpoints = {}
+# N_jobs = 200
+# for i in range(N_jobs):
+#     try:
+#         # with open('library/bptt_rflo/result_{}'.format(i_job), 'rb') as f:
+#         #     old_result = pickle.load(f)
+#         with open('/Users/omarschall/cluster_results/vanilla-rtrl/bptt_rflo/result_{}'.format(i), 'rb') as f:
+#             old_result = pickle.load(f)
+#     except FileNotFoundError:
+#         continue
+#
+#     # if file_exists:
+#     #     for i_checkpoint in range(params['i_start'],
+#     #                               params['i_start'] + 1000, 100):
+#     #         get_graph_structure(result['checkpoint_{}'.format(i_checkpoint)],
+#     #                             N=100, time_steps=5, parallelize=False)
+#
+#     if old_result['config']['algorithm'] == 'RFLO':
+#         rflo_checkpoints.update(old_result)
+#
+#     if old_result['config']['algorithm'] == 'E-BPTT':
+#         bptt_checkpoints.update(old_result)
+#
+#
+# i_rflo = sorted([int(k.split('_')[-1]) for k in rflo_checkpoints.keys() if 'checkpoint' in k])
+# i_bptt = sorted([int(k.split('_')[-1]) for k in bptt_checkpoints.keys() if 'checkpoint' in k])
+#
+# ### --- ANALYZE CHECKPOINTS --- ###
+#
+# rflo_distances = []
+# for i in i_rflo[:-1]:
+#
+#     try:
+#         checkpoint_1 = rflo_checkpoints['checkpoint_{}'.format(i)]
+#         checkpoint_2 = rflo_checkpoints['checkpoint_{}'.format(i + 100)]
+#     except KeyError:
+#         continue
+#
+#     distance = SVCCA_distance(checkpoint_1, checkpoint_2, data)
+#     rflo_distances.append(distance)
+#
+# bptt_distances = []
+# for i in i_bptt[:-1]:
+#
+#     try:
+#         checkpoint_1 = bptt_checkpoints['checkpoint_{}'.format(i)]
+#         checkpoint_2 = bptt_checkpoints['checkpoint_{}'.format(i + 100)]
+#     except KeyError:
+#         continue
+#
+#     distance = SVCCA_distance(checkpoint_1, checkpoint_2, data)
+#     bptt_distances.append(distance)
+#
+# result = {'rflo_distances': rflo_distances,
+#           'bptt_distances': bptt_distances}
+# result = {}
+# for i_checkpoint in range(params['i_start'], params['i_start'] + 1000, 100):
+#     analyze_checkpoint(sim.checkpoints[i_checkpoint], data, verbose=False,
+#                         sigma_pert=0.5, N=600, parallelize=False,
+#                         N_iters=8000, same_LR_criterion=7000)
+
+#     result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
+
 with open('notebooks/good_ones/current_fave', 'rb') as f:
     sim = pickle.load(f)
-    
+
 # with open('/Users/omarschall/cluster_results/vanilla-rtrl/rflo_bptt/result_0', 'rb') as f:
 #     result = pickle.load(f)
 #     sim = result['sim']
@@ -23,17 +105,17 @@ same_LR_criterion = 3000
 #for j in range(len(sim.checkpoints.keys())):
 for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
 #for j in range(5):
-    
+
     #i_checkpoint = [_ for _ in sim.checkpoints.keys()][j]
     print('Analyzing checkpoint {}...'.format(i_checkpoint))
-    
+
     rnn = sim.checkpoints[i_checkpoint]['rnn']
     test_sim = Simulation(rnn)
     test_sim.run(data,
                   mode='test',
                   monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
                   verbose=False)
-    
+
     transform = Vanilla_PCA(sim.checkpoints[i_checkpoint], data)
     V = transform(np.eye(rnn.n_h))
     # ssa = State_Space_Analysis(sim.checkpoints[i_checkpoint], data, transform)
@@ -43,66 +125,66 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
                                                   PCs=None, sigma_pert=0, N_iters=N_iters, LR=1,
                                                   weak_input=0, parallelize=False,
                                                   verbose=False, same_LR_criterion=same_LR_criterion)
-    
+
     # with open('notebooks/good_ones/current_fave_FPs', 'wb') as f:
         #pickle.dump(fixed_points, f)
-    
+
     A = np.array([d['a_final'] for d in fixed_points])
     A_init = np.array(initial_states)
     KE = np.array([d['KE_final'] for d in fixed_points])
-    
+
     dbscan = DBSCAN(eps=0.5)
     dbscan.fit(A)
     dbscan.labels_
-    
+
     # A_eigs = []
     # for i in range(A.shape[0]):
-        
+
     #     rnn.reset_network(a=A[i])
     #     a_J = rnn.get_a_jacobian(update=False)
     #     A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
     # A_eigs = np.array(A_eigs)
-    
+
 
     # ssa.clear_plot()
     # ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0', '.', alpha=0.05)
     # ssa.plot_in_state_space(A[A_eigs>1], False, 'C1', '*', alpha=1)
     # ssa.plot_in_state_space(A[A_eigs<1], False, 'C2', '*', alpha=1)
     # ssa.plot_in_state_space(A_init, False, 'C3', 'x', alpha=1)
-    
+
     cluster_idx = np.unique(dbscan.labels_)
     n_clusters = len(cluster_idx) - (-1 in cluster_idx)
     cluster_means = np.zeros((n_clusters, rnn.n_h))
     for i in np.unique(dbscan.labels_):
-        
+
         if i == -1:
             color = 'k'
             continue
         else:
             color = 'C{}'.format(i+1)
             cluster_means[i] = A[dbscan.labels_ == i].mean(0)
-            
-        
+
+
         # ssa.plot_in_state_space(A[dbscan.labels_ == i], False, color,
         #                         '*', alpha=0.5)
-    
+
     # ssa.plot_in_state_space(cluster_means, False, 'k', 'X')
-    
+
     #Saev results
     sim.checkpoints[i_checkpoint]['fixed_points'] = A
     sim.checkpoints[i_checkpoint]['KE'] = KE
     sim.checkpoints[i_checkpoint]['cluster_means'] = cluster_means
     sim.checkpoints[i_checkpoint]['cluster_labels'] = dbscan.labels_
     sim.checkpoints[i_checkpoint]['V'] = V
-    
+
     # cluster_eigs = []
     # for i in range(cluster_means.shape[0]):
-        
+
     #     rnn.reset_network(a=cluster_means[i])
     #     a_J = rnn.get_a_jacobian(update=False)
     #     cluster_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
     # cluster_eigs = np.array(cluster_eigs)
-    
+
     # plt.figure()
     # plt.hist(cluster_eigs)
     # plt.title('Checkpoint {}'.format(i_checkpoint))
@@ -120,7 +202,7 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
 
 # all_means = []
 # for i_checkpoint in range(12000, 13000, 50):
-    
+
 #     #i_checkpoint = [_ for _ in sim.checkpoints.keys()][j]
 #     print('Analyzing checkpoint {}...'.format(i_checkpoint))
 
@@ -130,7 +212,7 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
 #     FPs = checkpoint['fixed_points']
 #     cluster_means = checkpoint['cluster_means']
 #     all_means.append(cluster_means)
-    
+
 
 #     rnn = sim.checkpoints[i_checkpoint]['rnn']
 #     test_sim = Simulation(rnn)
@@ -138,13 +220,13 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
 #                   mode='test',
 #                   monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
 #                   verbose=False)
-    
+
     # transform = partial(np.dot, b=checkpoint['V'])
     # ssa = State_Space_Analysis(checkpoint, data, transform=transform)
     # ssa.plot_in_state_space(all_means, False, 'k', 'X', alpha=0.3)
-    
+
 #     for i in np.unique(checkpoint['cluster_labels']):
-        
+
 #         if i == -1:
 #             color = 'k'
 #             mark = 'o'
@@ -152,8 +234,8 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
 #         else:
 #             color = 'C{}'.format(i+1)
 #             mark = '*'
-            
-        
+
+
 #         ssa.plot_in_state_space(FPs[labels == i], False, color,
 #                                 mark, alpha=0.5)
 #     ssa.plot_in_state_space(cluster_means, False, 'k', 'X', alpha=0.3)
@@ -164,7 +246,7 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
     # plt.plot(data['test']['Y'][:, 0])
     # plt.xlim([2000, 3000])
     # plt.title('Checkpoint {}'.format(i_checkpoint))
-        
+
     # plt.figure()
     # plt.hist(np.log10(KE), bins=20, color='C1')
     # plt.title('Checkpoint {}'.format(i_checkpoint))
@@ -179,7 +261,7 @@ for i_checkpoint in range(params['segment'], params['segment'] + 1000, 50):
 
 # A_eigs = []
 # for i in range(A.shape[0]):
-    
+
 #     rnn.reset_network(a=A[i])
 #     a_J = rnn.get_a_jacobian(update=False)
 #     A_eigs.append(np.abs(np.linalg.eig(a_J)[0][0]))
@@ -247,7 +329,7 @@ ax.plot(proj[:,0], proj[:,1], proj[:,2], '.')
 ax.plot(noisy_proj[:,0], noisy_proj[:,1], noisy_proj[:,2], '.', alpha=0.2)
 for x in proj:
     for y in proj:
-        
+
         ax.plot([x[0], y[0]], [x[1], y[1]], [x[2], y[2]], color='C0', alpha=0.1)
 
 task = Flip_Flop_Task(3, 0.05, tau_task=1)
@@ -413,7 +495,7 @@ for i_job in range(30):
         slowness = np.minimum(1/np.sqrt(result['speeds'][i][-1]), 4)
         ssa.plot_in_state_space(A[i][-1,:].reshape((1,-1)), 'x', color=col, alpha=0.3,
                                 markersize=slowness)
-    
+
 
 
 #task = Flip_Flop_Task(3, 0.5)

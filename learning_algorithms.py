@@ -45,7 +45,8 @@ class Learning_Algorithm:
                 common to all child classes of Learning_Algorithm, 'W_FB' and
                 'L2_reg'."""
 
-        allowed_kwargs = {'W_FB', 'L2_reg'}.union(allowed_kwargs_)
+        allowed_kwargs = {'W_FB', 'L1_reg', 'L2_reg',
+                          'maintain_sparsity'}.union(allowed_kwargs_)
 
         for k in kwargs:
             if k not in allowed_kwargs:
@@ -120,10 +121,30 @@ class Learning_Algorithm:
         for i_L2, W in zip(self.rnn.L2_indices, L2_params):
             grads[i_L2] += self.L2_reg * W
         #Calculate L2 loss for monitoring purposes
-        self.L2_loss = 0.5*sum([norm(p) for p in L2_params])
+        self.L2_loss = 0.5 * sum([norm(p)**2 for p in L2_params])
+        return grads
+    
+    def L1_regularization(self, grads):
+        """Adds L1 regularization to the gradient.
+
+        Args:
+            grads (list): List of numpy arrays representing gradients before L1
+                regularization is applied.
+        Returns:
+            A new list of grads with L1 regularization applied."""
+
+        #Get parameters affected by L1 regularization
+        #(identical as those affected by L2)
+        L1_params = [self.rnn.params[i] for i in self.rnn.L2_indices]
+        #Add to each grad the sign of the corresponding parameter weighted
+        #by L1 reg strength
+        for i_L1, W in zip(self.rnn.L2_indices, L1_params):
+            grads[i_L1] += self.L1_reg * np.sign(W)
+        #Calculate L2 loss for monitoring purposes
+        self.L1_loss = sum([norm(p) for p in L1_params])
         return grads
 
-    def maintain_sparsity(self, grads):
+    def apply_sparsity_to_grads(self, grads):
         """"If called, modifies gradient to make 0 any parameters that are
         already 0 (only for L2 params).
         
@@ -167,8 +188,14 @@ class Learning_Algorithm:
                                                [self.n_h, 1])
         grads_list = rec_grads_list + outer_grads_list
 
+        if self.L1_reg is not None:
+            grads_list = self.L1_regularization(grads_list)
+
         if self.L2_reg is not None:
             grads_list = self.L2_regularization(grads_list)
+
+        if self.maintain_sparsity:
+            grads_list = self.apply_sparsity_to_grads(grads_list)
 
         return grads_list
 

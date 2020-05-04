@@ -18,6 +18,7 @@ import time
 import os
 from sklearn.cluster import DBSCAN
 from scipy.spatial import distance
+from sklearn.cross_decomposition import CCA
 try:
     import umap
 except ModuleNotFoundError:
@@ -344,4 +345,20 @@ def get_graph_structure(checkpoint, N=100, time_steps=50, epsilon=0.01,
     checkpoint['adjacency_matrix'] = adjacency_matrix
     
     
+def SVCCA_distance(checkpoint_1, checkpoint_2, data, R=3):
+    """Compute the singular-value canonical correlation analysis distance
+    between two different networks."""
+    
+    A_1 = get_test_sim_data(checkpoint_1, data)
+    A_2 = get_test_sim_data(checkpoint_1, data)
+    
+    cca = CCA(n_components=R)
+    cca.fit(A_1, A_2)
+    
+    return cca.score(A_1, A_2)
+    
+def train_VAE(checkpoint, data, T=100):
+    
+    A = get_test_sim_data(checkpoint, data)
+    A.reshape((-1, T * checkpoint['rnn'].n_h))
     
