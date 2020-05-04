@@ -23,6 +23,7 @@ try:
     import umap
 except ModuleNotFoundError:
     pass
+from vae import encoder, decoder, VAE
 
 ### --- WRAPPER METHODS --- ###
 
@@ -51,16 +52,16 @@ def analyze_all_checkpoints(checkpoints, func, test_data, **kwargs):
 
 def analyze_checkpoint(checkpoint, data, N_iters=8000,
                        same_LR_criterion=5000, N=200, **kwargs):
-    
+
     print('Analyzing checkpoint {}...'.format(checkpoint['i_t']))
-    
+
     rnn = checkpoint['rnn']
     test_sim = Simulation(rnn)
     test_sim.run(data,
                   mode='test',
                   monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
                   verbose=False)
-    
+
     transform = Vanilla_PCA(checkpoint, data)
     V = transform(np.eye(rnn.n_h))
 
@@ -68,25 +69,25 @@ def analyze_checkpoint(checkpoint, data, N_iters=8000,
                                                   N_iters=N_iters, LR=10,
                                                   same_LR_criterion=same_LR_criterion,
                                                   **kwargs)
-    
+
     A = np.array([d['a_final'] for d in fixed_points])
     A_init = np.array(initial_states)
     KE = np.array([d['KE_final'] for d in fixed_points])
-    
+
     dbscan = DBSCAN(eps=0.5)
     dbscan.fit(A)
     dbscan.labels_
-    
+
     cluster_idx = np.unique(dbscan.labels_)
     n_clusters = len(cluster_idx) - (-1 in cluster_idx)
     cluster_means = np.zeros((n_clusters, rnn.n_h))
     for i in cluster_idx:
-        
+
         if i == -1:
             continue
         else:
             cluster_means[i] = A[dbscan.labels_ == i].mean(0)
-    
+
     cluster_eigs = []
     cluster_KEs = []
     for cluster_mean in cluster_means:
@@ -97,7 +98,7 @@ def analyze_checkpoint(checkpoint, data, N_iters=8000,
         cluster_KEs.append(KE)
     cluster_eigs = np.array(cluster_eigs)
     cluster_KEs = np.array(cluster_KEs)
-    
+
     #Save results
     checkpoint['fixed_points'] = A
     checkpoint['KE'] = KE
@@ -123,11 +124,11 @@ def Vanilla_PCA(checkpoint, test_data, n_PCs=3):
 
 def UMAP_(checkpoint, test_data, n_components=3, **kwargs):
     """Performs  UMAP with default parameters and returns component axes."""
-    
+
     test_a = get_test_sim_data(checkpoint, test_data)
     fit = umap.UMAP(n_components=n_components, **kwargs)
     u = fit.fit_transform(test_a)
-    
+
     return fit.transform
 
 def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
@@ -142,7 +143,7 @@ def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
 
     RNNs = []
     for i in range(N):
-        
+
         #Set up initial conditions
         rnn = deepcopy(checkpoint['rnn'])
         i_a = np.random.randint(test_a.shape[0])
@@ -157,24 +158,24 @@ def find_KE_minima(checkpoint, test_data, N=1000, verbose_=False,
             rnn.next_state(x)
         RNNs.append(rnn)
         initial_states.append(rnn.a.copy())
-        
+
     if parallelize:
-        
+
         func_ = partial(find_KE_minimum, **kwargs)
         with mp.Pool(mp.cpu_count()) as pool:
                 results = pool.map(func_, RNNs)
-                
+
     if not parallelize:
-        
+
         for i in range(N):
-            
+
             #Report progress
             if i % (N // 10) == 0 and verbose_:
                 print('{}% done'.format(i * 10 / N))
-                
+
             #Select RNN (and starting point)
             rnn = RNNs[i]
-            
+
             #Calculate final result
             result = find_KE_minimum(rnn, **kwargs)
             results.append(result)
@@ -270,7 +271,7 @@ def find_KE_minimum(rnn, LR=1e-2, N_iters=1000000,
 def run_autonomous_sim(a_initial, rnn, N, monitors=[],
                        return_final_state=False):
     """Creates and runs a test simulation with no inputs and a specified
-    initial state of the network.""" 
+    initial state of the network."""
 
     #Create empty data array
     data = {'test': {'X': np.zeros((N, rnn.n_in)),
@@ -295,21 +296,21 @@ def get_graph_structure(checkpoint, N=100, time_steps=50, epsilon=0.01,
     n_clusters = cluster_means.shape[0]
     adjacency_matrix = np.zeros((n_clusters, n_clusters))
     rnn = checkpoint['rnn']
-    
-    
+
+
     if parallelize:
         for i in range(n_clusters):
             a_init = [(cluster_means[i] +
                       np.random.normal(0, epsilon, rnn.n_h))
-                      for _ in range(N)]  
+                      for _ in range(N)]
             func_ = partial(run_autonomous_sim, rnn=rnn, N=N,
                             monitors=[], return_final_state=True)
             #set_trace()
             with mp.Pool(mp.cpu_count()) as pool:
                 final_states = pool.map(func_, a_init)
-        
+
             final_states = np.array(final_states)
-            
+
             distances = distance.cdist(cluster_means, final_states)
             i_clusters = np.argmin(distances, axis=0)
             bins = list(np.arange(-0.5, n_clusters, 1))
@@ -318,21 +319,21 @@ def get_graph_structure(checkpoint, N=100, time_steps=50, epsilon=0.01,
                                                density=True)
             #set_trace()
             adjacency_matrix[i] = transition_probs
-    
+
     if not parallelize:
         for i in range(n_clusters):
             a_init = [(cluster_means[i] +
                       np.random.normal(0, epsilon, rnn.n_h))
-                      for _ in range(N)]  
+                      for _ in range(N)]
             func_ = partial(run_autonomous_sim, rnn=rnn, N=N,
                             monitors=[], return_final_state=True)
             #set_trace()
             final_states = []
             for a_init_ in a_init:
                 final_states.append(func_(a_init_))
-        
+
             final_states = np.array(final_states)
-            
+
             distances = distance.cdist(cluster_means, final_states)
             i_clusters = np.argmin(distances, axis=0)
             bins = list(np.arange(-0.5, n_clusters, 1))
@@ -341,24 +342,69 @@ def get_graph_structure(checkpoint, N=100, time_steps=50, epsilon=0.01,
                                                density=True)
             #set_trace()
             adjacency_matrix[i] = transition_probs
-            
+
     checkpoint['adjacency_matrix'] = adjacency_matrix
-    
-    
+
+
 def SVCCA_distance(checkpoint_1, checkpoint_2, data, R=3):
     """Compute the singular-value canonical correlation analysis distance
     between two different networks."""
-    
+
     A_1 = get_test_sim_data(checkpoint_1, data)
     A_2 = get_test_sim_data(checkpoint_1, data)
-    
+
     cca = CCA(n_components=R)
     cca.fit(A_1, A_2)
-    
+
     return cca.score(A_1, A_2)
-    
-def train_VAE(checkpoint, data, T=100):
-    
+
+def train_VAE(checkpoint, data, T=20):
+
+    #Generate data
     A = get_test_sim_data(checkpoint, data)
-    A.reshape((-1, T * checkpoint['rnn'].n_h))
-    
+    train_data = A.reshape((-1, T * checkpoint['rnn'].n_h))
+
+    input_dim = A.shape[1]
+    hidden_dim = 128
+    latent_dim = 10
+
+    #Define objects
+    encoder = Encoder(INPUT_DIM, HIDDEN_DIM, LATENT_DIM)
+    decoder = Decoder(LATENT_DIM, HIDDEN_DIM, INPUT_DIM)
+    model = VAE(encoder, decoder)
+
+    # optimizer
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    # set the train mode
+    model.train()
+
+    # loss of the epoch
+    train_loss = 0
+
+    for i, (x, _) in enumerate(train_iterator):
+        # reshape the data into [batch_size, 784]
+        x = x.view(-1, 28 * 28)
+        x = x.to(device)
+
+        # update the gradients to zero
+        optimizer.zero_grad()
+
+        # forward pass
+        x_sample, z_mu, z_var = model(x)
+
+        # reconstruction loss
+        recon_loss = F.binary_cross_entropy(x_sample, x, size_average=False)
+
+        # kl divergence loss
+        kl_loss = 0.5 * torch.sum(torch.exp(z_var) + z_mu ** 2 - 1.0 - z_var)
+
+        # total loss
+        loss = recon_loss + kl_loss
+
+        # backward pass
+        loss.backward()
+        train_loss += loss.item()
+
+        # update the weights
+        optimizer.step()
