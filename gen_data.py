@@ -302,9 +302,22 @@ class Sensorimotor_Mapping(Task):
         return X, Y
 
 class Flip_Flop_Task(Task):
-    """Generates data for the N-bit flip-flop task."""
+    """Class for the N-bit flip-flop task.
+
+    For n independent dimensions, an input stream of 0, -1 and 1 is provided,
+    and the output is persistently either -1 or 1, flipping to the other only
+    if the corresponding input is the opposite. Most inputs are 0, as
+    specified by the "p_flip" parameter."""
 
     def __init__(self, n_bit, p_flip, tau_task=1):
+    """Initiates an instance of the n-bit flip flop task by specifying the
+    probability of a nonzero input and timescale of the task.
+
+    Args:
+        n_bit (int): The number of independent task dimensions.
+        p_flip (float): The probability of an input being nonzero.
+        tau_task (int): The factor by which we temporally "stretch" the task
+            (similar to Add Task)."""
 
         super().__init__(n_bit, n_bit)
 
@@ -312,6 +325,7 @@ class Flip_Flop_Task(Task):
         self.tau_task = tau_task
 
     def gen_dataset(self, N):
+        """Generates a dataset for the flip-flop task."""
 
         N = N // self.tau_task
 
@@ -328,10 +342,34 @@ class Flip_Flop_Task(Task):
         return X, Y
 
 class Sine_Wave(Task):
+    """Class for the sine wave task.
+
+    There are two input dimensions, one of which specifies whether the sine wave
+    is "on" (1) or "off" (0). The second dimension specifies the period of
+    the sine wave (in time steps) to be produced by the network."""
 
     def __init__(self, p_transition, periods, never_off=False, **kwargs):
+        """Initializes an instance of sine wave task by specifying transition
+        probability (between on and off states) and periods to sample from.
 
-        allowed_kwargs = {'p_frequencies', 'amplitude', 'method'}
+        Args:
+            p_transition (float): The probability of switching between on and off
+                modes.
+            periods (list): The sine wave periods to sample from, by default
+                uniformly.
+            never_off (bool): If true, the is no "off" period, and the network
+                simply switches from period to period.
+        Keyword args:
+            p_periods (list): Must be same length as periods, specifying probability
+                for each sine wave period.
+            amplitude (float): Amplitude of all sine waves, by default 0.1 if
+                not specified.
+            method (string): Must be either "random" or "regular", the former for
+                transitions randomly sampled according to p_transition and the
+                latter for deterministic transitions every 1 / p_transition
+                time steps."""
+
+        allowed_kwargs = {'p_periods', 'amplitude', 'method'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -348,6 +386,7 @@ class Sine_Wave(Task):
         self.__dict__.update(kwargs)
 
     def gen_dataset(self, N):
+        """Generates a dataset for the sine wave task."""
 
         X = np.zeros((N, 2))
         Y = np.zeros((N, 2))
@@ -387,8 +426,10 @@ class Sine_Wave(Task):
 
                 t += 1
                 X[i, :] = X[i - 1, :]
-                Y[i, 0] = self.amplitude * np.cos(2 * np.pi / X[i, 0] * t) * (active or self.never_off)
-                Y[i, 1] = self.amplitude * np.sin(2 * np.pi / X[i, 0] * t) * (active or self.never_off)
+                theta = 2 * np.pi / X[i, 0] * t
+                on_off = (active or self.never_off)
+                Y[i, 0] = self.amplitude * np.cos(theta) * on_off
+                Y[i, 1] = self.amplitude * np.sin(theta) * on_off
 
             self.switch_cond = False
 
