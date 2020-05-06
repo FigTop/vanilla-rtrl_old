@@ -60,12 +60,12 @@ elif os.environ['HOME'] == '/Users/omarschall':
 
     #np.random.seed(1)
 
-#task = Flip_Flop_Task(2, 0.1, tau_task=1)
-task = Add_Task(4,6, deterministic = True)
+task = Flip_Flop_Task(3, 0.05, tau_task=1)
+#task = Add_Task(4,6, deterministic = True)
 data = task.gen_data(200000, 1000)
 
 n_in = task.n_in
-n_hidden = 32
+n_hidden = 128
 n_out = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -80,13 +80,15 @@ alpha = 1
 rnn = Noisy_RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=softmax,
-          loss=softmax_cross_entropy)
+          output=identity,
+          loss=mean_squared_error)
 
-sigma = 0.5/np.sqrt(2)
+#sigma = 0.6/np.sqrt(2)
+sigma = 0.4/np.sqrt(2)
 optimizer = SGD_Momentum(lr=0.001, mu = 0.6)
 #learn_alg = REINFORCE(rnn, sigma = sigma, decay = 0.15, loss_decay = 0.01)
 learn_alg = REINFORCE_RFLO(rnn, sigma = sigma, decay = 0.15, loss_decay = 0.01)
+#learn_alg = RFLO(rnn, alpha=alpha)
 
 comp_algs = []
 #monitors = ['learn_alg.rec_grads-norm', 'rnn.loss_']
