@@ -23,7 +23,11 @@ try:
     import umap
 except ModuleNotFoundError:
     pass
-from vae import encoder, decoder, VAE
+from vae import Encoder, Decoder, VAE
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+import torch.nn.functional as F
+import torch
 
 ### --- WRAPPER METHODS --- ###
 
@@ -358,53 +362,89 @@ def SVCCA_distance(checkpoint_1, checkpoint_2, data, R=3):
 
     return cca.score(A_1, A_2)
 
-def train_VAE(checkpoint, data, T=20):
+def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01):
 
     #Generate data
     A = get_test_sim_data(checkpoint, data)
-    train_data = A.reshape((-1, T * checkpoint['rnn'].n_h))
+    train_data = torch.tensor(A.reshape((-1, T * checkpoint['rnn'].n_h)))
 
-    input_dim = A.shape[1]
+    input_dim = train_data.shape[1]
     hidden_dim = 128
     latent_dim = 10
 
+    #set_trace()
+
     #Define objects
-    encoder = Encoder(INPUT_DIM, HIDDEN_DIM, LATENT_DIM)
-    decoder = Decoder(LATENT_DIM, HIDDEN_DIM, INPUT_DIM)
+    encoder = Encoder(input_dim, hidden_dim, latent_dim)
+    decoder = Decoder(latent_dim, hidden_dim, input_dim)
     model = VAE(encoder, decoder)
 
     # optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
+    #set_trace()
+
     # set the train mode
     model.train()
 
-    # loss of the epoch
-    train_loss = 0
+    losses = []
 
-    for i, (x, _) in enumerate(train_iterator):
-        # reshape the data into [batch_size, 784]
-        x = x.view(-1, 28 * 28)
-        x = x.to(device)
+    for i_epoch in range(n_epochs):
 
-        # update the gradients to zero
-        optimizer.zero_grad()
+        # loss of the epoch
+        train_loss = 0
+        print('starting epoch {}'.format(i_epoch))
+        train_iterator = DataLoader(TensorDataset(train_data),
+                                    batch_size=20,
+                                    shuffle=True)
 
-        # forward pass
-        x_sample, z_mu, z_var = model(x)
+        #set_trace()
 
-        # reconstruction loss
-        recon_loss = F.binary_cross_entropy(x_sample, x, size_average=False)
+        for i, x in enumerate(train_iterator):
+            # reshape the data into [batch_size, 784]
+            x = x[0].view(-1, input_dim).type(torch.FloatTensor)
 
-        # kl divergence loss
-        kl_loss = 0.5 * torch.sum(torch.exp(z_var) + z_mu ** 2 - 1.0 - z_var)
+            #set_trace()
 
-        # total loss
-        loss = recon_loss + kl_loss
+            # update the gradients to zero
+            optimizer.zero_grad()
 
-        # backward pass
-        loss.backward()
-        train_loss += loss.item()
+            # forward pass
+            x_sample, z_mu, z_var = model(x)
 
-        # update the weights
-        optimizer.step()
+            # reconstruction loss
+            recon_loss = F.mse_loss(x_sample, x, size_average=False)
+
+            # kl divergence loss
+            kl_loss = 0.5 * torch.sum(torch.exp(z_var) +
+                                      z_mu ** 2 - 1.0 - z_var)
+
+            # total loss
+            loss = recon_loss + kl_loss
+
+            losses.append(loss.detach().numpy())
+
+            # backward pass
+            loss.backward()
+            train_loss += loss.item()
+
+            # update the weights
+            optimizer.step()
+
+        checkpoint['VAE'] = model
+        checkpoint['VAE_T'] = T
+        checkpoint['VAE_train_losses'] = losses
+
+def sample_from_VAE(checkpoint):
+
+    model = checkpoint['VAE']
+    T = checkpoint['VAE_T']
+    # sample and generate a image
+
+    z = torch.randn(1, model.dec.linear.in_features)
+
+    # run only the decoder
+    reconstructed_traj = model.dec(z)
+    traj = reconstructed_traj.view(T, -1).data
+
+    return traj

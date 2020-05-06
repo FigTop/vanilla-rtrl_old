@@ -310,14 +310,14 @@ class Flip_Flop_Task(Task):
     specified by the "p_flip" parameter."""
 
     def __init__(self, n_bit, p_flip, tau_task=1):
-    """Initiates an instance of the n-bit flip flop task by specifying the
-    probability of a nonzero input and timescale of the task.
+        """Initiates an instance of the n-bit flip flop task by specifying the
+        probability of a nonzero input and timescale of the task.
 
-    Args:
-        n_bit (int): The number of independent task dimensions.
-        p_flip (float): The probability of an input being nonzero.
-        tau_task (int): The factor by which we temporally "stretch" the task
-            (similar to Add Task)."""
+        Args:
+            n_bit (int): The number of independent task dimensions.
+            p_flip (float): The probability of an input being nonzero.
+            tau_task (int): The factor by which we temporally "stretch" the task
+                (similar to Add Task)."""
 
         super().__init__(n_bit, n_bit)
 

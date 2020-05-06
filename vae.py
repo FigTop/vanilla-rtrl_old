@@ -48,7 +48,7 @@ class Decoder(nn.Module):
         hidden = F.relu(self.linear(x))
         # hidden is of shape [batch_size, hidden_dim]
 
-        predicted = torch.sigmoid(self.out(hidden))
+        predicted = self.out(hidden)
         # predicted is of shape [batch_size, output_dim]
 
         return predicted
