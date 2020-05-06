@@ -49,7 +49,7 @@ if os.environ['HOME'] == '/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {'algorithm': 'E-BPTT', 'i_start': 45000}
+    params = {'algorithm': 'RFLO', 'i_start': 45000}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
@@ -58,7 +58,7 @@ if os.environ['HOME'] == '/Users/omarschall':
 np.random.seed(0)
 task = Flip_Flop_Task(3, 0.05, tau_task=1)
 #task = Sine_Wave(0.05, [7, 12], method='regular')
-N_train = 100000
+N_train = 500000
 N_test = 10000
 data = task.gen_data(N_train, N_test)
 
@@ -84,10 +84,10 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
 
 optimizer = SGD_Momentum(lr=0.001, mu=0.6, clip_norm=0.3)
 if params['algorithm'] == 'E-BPTT':
-    learn_alg = Efficient_BPTT(rnn, 20, L2_reg=0.0001)
+    learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
 elif params['algorithm'] == 'RFLO':
-    learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001, L1_reg = 0.001)
-learn_alg = Only_Output_Weights(rnn)
+    learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001, L1_reg=0.0001)
+#learn_alg = Only_Output_Weights(rnn)
 
 comp_algs = []
 monitors = []
@@ -107,27 +107,33 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 
 # with open('notebooks/good_ones/sparsity_friend', 'wb') as f:
 #     pickle.dump(sim, f)
-with open('notebooks/good_ones/sparsity_friend', 'rb') as f:
-    sim = pickle.load(f)
+# with open('notebooks/good_ones/sparsity_friend', 'rb') as f:
+#     sim = pickle.load(f)
 # # #result = {}
 # # # for i_checkpoint in range(0, 100000, 10000):
-analyze_checkpoint(sim.checkpoints[99999], data, verbose=False,
+analyze_checkpoint(sim.checkpoints[499999], data, verbose=False,
                     sigma_pert=0.5, N=600, parallelize=True,
                     N_iters=8000, same_LR_criterion=7000)
+
+get_graph_structure(sim.checkpoints[499999])
+
+big_data = task.gen_data(100, 500000)
+
+train_VAE(sim.checkpoints[499999], big_data, T=10, latent_dim=5)
 
 # plot_checkpoint_results(sim.checkpoints[0], data, plot_test_points=True,
 #                         plot_cluster_means=True)
 
 # #     #result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
 
-plot_checkpoint_results(sim.checkpoints[99999], data,
+plot_checkpoint_results(sim.checkpoints[499999], data,
                         plot_cluster_means=False,
                         plot_test_points=True,
-                        plot_graph_structure=False,
+                        plot_graph_structure=True,
                         plot_vae_sample=True,
                         plot_test_sample=True)
 
-# get_graph_structure(sim.checkpoints[99999])
+
 
 # with open('notebooks/good_ones/{}_net_prezzy'.format(params['algorithm']), 'wb') as f:
 #     pickle.dump(sim, f)
@@ -146,7 +152,7 @@ if os.environ['HOME'] == '/Users/omarschall':
     #plt.figure()
     #plt.plot(sim.mons['rnn.loss_'], sim.mons['learn_alg.rec_grads-norm'], '.', alpha=0.08)
 
-    rnn = sim.checkpoints[299999]['rnn']
+    rnn = sim.checkpoints[499999]['rnn']
     #rnn = sim.checkpoints[99999]['rnn']
     test_sim = Simulation(rnn)
     test_sim.run(data,

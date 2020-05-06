@@ -97,6 +97,20 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
         t_start = np.random.randint(0, T_total - T)
         ssa.plot_in_state_space(test_sim.mons['rnn.a'][t_start:t_start + T],
                                 False, 'C0', alpha=0.7)
+        plt.figure()
+        plt.plot(data['test']['X'][:, 0] + 2.5, (str(0.6)), linestyle='--')
+        plt.plot(data['test']['Y'][:, 0] + 2.5, 'C0')
+        plt.plot(test_sim.mons['rnn.y_hat'][:, 0] + 2.5, 'C3')
+        plt.plot(data['test']['X'][:, 1], (str(0.6)), linestyle='--')
+        plt.plot(data['test']['Y'][:, 1], 'C0')
+        plt.plot(test_sim.mons['rnn.y_hat'][:, 1], 'C3')
+        plt.plot(data['test']['X'][:, 2] - 2.5, (str(0.6)), linestyle='--')
+        plt.plot(data['test']['Y'][:, 2] - 2.5, 'C0')
+        plt.plot(test_sim.mons['rnn.y_hat'][:, 2] - 2.5, 'C3')
+        plt.xlim([t_start, t_start + T])
+        plt.yticks([])
+        plt.xlabel('time steps')
+
     if plot_init_points:
         ssa.plot_in_state_space(A_init, False, 'C9', 'x', alpha=1)
 

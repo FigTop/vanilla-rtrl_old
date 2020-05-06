@@ -362,7 +362,8 @@ def SVCCA_distance(checkpoint_1, checkpoint_2, data, R=3):
 
     return cca.score(A_1, A_2)
 
-def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01):
+def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01,
+              latent_dim=10):
 
     #Generate data
     A = get_test_sim_data(checkpoint, data)
@@ -370,7 +371,6 @@ def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01):
 
     input_dim = train_data.shape[1]
     hidden_dim = 128
-    latent_dim = 10
 
     #set_trace()
 
