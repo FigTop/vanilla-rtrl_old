@@ -1245,7 +1245,7 @@ class KeRNL(Learning_Algorithm):
         self.B = np.zeros_like(self.B)
 
 class REINFORCE(Learning_Algorithm):
-    def __init__(self, rnn, **kwargs):
+    def __init__(self, rnn, sigma = 0, **kwargs):
         """Inits an instance of REINFORCE by specifying the optimizer used to train
         the A and alpha values and a noise standard deviation for the
         perturbations.
@@ -1274,6 +1274,7 @@ class REINFORCE(Learning_Algorithm):
         self.loss_avg = 0
         self.loss_prev = 0
         self.loss = 0
+        self.sigma = sigma
         
     def update_learning_vars(self):
         """Updates the eligibility traces used for learning"""
@@ -1281,22 +1282,22 @@ class REINFORCE(Learning_Algorithm):
         
         self.a_hat = np.concatenate([self.rnn.a_prev, self.rnn.x, np.array([1])])
         #postsynaptic variables/parameters
-        self.D = self.rnn.activation.f_prime(self.rnn.h_prev) * self.rnn.noise
+        self.D = self.rnn.activation.f_prime(self.rnn.h) * self.rnn.noise
         
         #matrix of pre/post activations
-        self.e_immediate = np.outer(self.D, self.a_hat)/0.5**2
+        self.e_immediate = np.outer(self.D, self.a_hat)/self.sigma**2
         self.e_trace = (1-self.decay) * self.e_trace + self.e_immediate
         self.loss_prev = self.loss
-        self.loss = self.rnn.loss.f(self.rnn.z, self.rnn.y)
+        self.loss = self.rnn.loss_
         self.loss_avg = (1 - self.loss_decay) * self.loss_avg + self.loss_decay * self.loss_prev
 
     def get_rec_grads(self):
         """Combine the eligibility trace and the reward to get an estimate
         of the gradient"""
-        return (self.loss - self.loss_avg) * self.e_trace/50
+        return (self.loss - self.loss_avg) * self.e_trace
 
 class REINFORCE_RFLO(Learning_Algorithm):
-    def __init__(self, rnn, **kwargs):
+    def __init__(self, rnn, sigma = 0, **kwargs):
         """Inits an instance of REINFORCE by specifying the optimizer used to train
         the A and alpha values and a noise standard deviation for the
         perturbations.
@@ -1326,6 +1327,10 @@ class REINFORCE_RFLO(Learning_Algorithm):
         self.loss_avg = 0
         self.loss_prev = 0
         self.loss = 0
+        self.n_col = self.rnn.n_h + self.rnn.n_in + 1
+        self.n_row = self.rnn.n_h
+        self.eye = np.zeros((self.rnn.n_h, self.n_col))
+        self.sigma = sigma
         
     def update_learning_vars(self):
         """Updates the eligibility traces used for learning"""
@@ -1333,12 +1338,14 @@ class REINFORCE_RFLO(Learning_Algorithm):
         
         self.a_hat = np.concatenate([self.rnn.a_prev, self.rnn.x, np.array([1])])
         self.a_n_hat = np.concatenate([self.rnn.a_n_prev, self.rnn.x, np.array([1])])
+        self.a_n_mat = self.eye * self.a_hat.reshape((1, self.n_col)) + (1 - self.eye) * self.a_n_hat.reshape((1, self.n_col))
         #postsynaptic variables/parameters
-        self.backprop_trace = ((self.rnn.activation.f_prime(self.rnn.h_prev) * np.diag(self.rnn.W_rec)).reshape([self.rnn.n_h, 1]) * self.backprop_trace
-                               + np.outer(self.rnn.activation.f_prime(self.rnn.h_prev), self.a_n_hat))
+        self.backprop_trace = ((self.rnn.activation.f_prime(self.rnn.h) * np.diag(self.rnn.W_rec)).reshape([self.rnn.n_h, 1]) * self.backprop_trace
+                               + self.rnn.activation.f_prime(self.rnn.h).reshape((self.n_row, 1)) * self.a_n_mat)
         
         #matrix of pre/post activations
-        self.e_immediate = self.rnn.noise.reshape([self.rnn.n_h, 1])*2/0.5**2 * self.backprop_trace
+        #assumes noise is split in half
+        self.e_immediate = self.rnn.noise.reshape([self.rnn.n_h, 1])/self.sigma**2 * self.backprop_trace
         self.e_trace = (1-self.decay) * self.e_trace + self.e_immediate
         self.loss_prev = self.loss
         self.loss = self.rnn.loss.f(self.rnn.z, self.rnn.y)
@@ -1347,7 +1354,7 @@ class REINFORCE_RFLO(Learning_Algorithm):
     def get_rec_grads(self):
         """Combine the eligibility trace and the reward to get an estimate
         of the gradient"""
-        return (self.loss - self.loss_avg) * self.e_trace / 20
+        return (self.loss - self.loss_avg) * self.e_trace
 
 
 
