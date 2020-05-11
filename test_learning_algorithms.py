@@ -777,26 +777,24 @@ class Test_KeRNL(unittest.TestCase):
 
         alpha = 0.3
 
+        #RFLO
+        np.random.seed(1)
         self.rnn_1 = RNN(self.W_in, self.W_rec, self.W_out,
-                         self.b_rec, self.b_out,
-                         activation=tanh,
-                         alpha=alpha,
-                         output=softmax,
-                         loss=softmax_cross_entropy)
-
+                 self.b_rec, self.b_out,
+                 activation=tanh,
+                 alpha=alpha,
+                 output=softmax,
+                 loss=softmax_cross_entropy)
+        self.optimizer_1 = Stochastic_Gradient_Descent(lr=0.001)
+        self.learn_alg_1 = RFLO(self.rnn_1, alpha)
+        #KeRNL with beta and gamma fixed to RFLO values
+        np.random.seed(1)
         self.rnn_2 = RNN(self.W_in, self.W_rec, self.W_out,
                          self.b_rec, self.b_out,
                          activation=tanh,
                          alpha=alpha,
                          output=softmax,
                          loss=softmax_cross_entropy)
-
-        #RFLO
-        np.random.seed(1)
-        self.optimizer_1 = Stochastic_Gradient_Descent(lr=0.001)
-        self.learn_alg_1 = RFLO(self.rnn_1, alpha)
-        #KeRNL with beta and gamma fixed to RFLO values
-        np.random.seed(1)
         self.optimizer_2 = Stochastic_Gradient_Descent(lr=0.001)
         self.KeRNL_optimizer = Stochastic_Gradient_Descent(lr=0)
         A = np.eye(self.rnn_2.n_h)
