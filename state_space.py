@@ -68,8 +68,8 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
                             plot_uncategorized_points=False,
                             plot_init_points=False, eig_norm_color=False,
                             plot_graph_structure=False,
-                            plot_vae_sample=False,
-                            plot_test_sample=False):
+                            n_vae_samples=None,
+                            n_test_samples=None):
 
     rnn = checkpoint['rnn']
     test_sim = Simulation(rnn)
@@ -91,25 +91,31 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
     if plot_test_points:
         ssa.plot_in_state_space(test_sim.mons['rnn.a'][1000:], False, 'C0',
                                 '.', alpha=0.009)
-    if plot_test_sample:
-        T = checkpoint['VAE_T']
-        T_total = test_sim.mons['rnn.a'].shape[0]
-        t_start = np.random.randint(0, T_total - T)
-        ssa.plot_in_state_space(test_sim.mons['rnn.a'][t_start:t_start + T],
-                                False, 'C0', alpha=0.7)
-        plt.figure()
-        plt.plot(data['test']['X'][:, 0] + 2.5, (str(0.6)), linestyle='--')
-        plt.plot(data['test']['Y'][:, 0] + 2.5, 'C0')
-        plt.plot(test_sim.mons['rnn.y_hat'][:, 0] + 2.5, 'C3')
-        plt.plot(data['test']['X'][:, 1], (str(0.6)), linestyle='--')
-        plt.plot(data['test']['Y'][:, 1], 'C0')
-        plt.plot(test_sim.mons['rnn.y_hat'][:, 1], 'C3')
-        plt.plot(data['test']['X'][:, 2] - 2.5, (str(0.6)), linestyle='--')
-        plt.plot(data['test']['Y'][:, 2] - 2.5, 'C0')
-        plt.plot(test_sim.mons['rnn.y_hat'][:, 2] - 2.5, 'C3')
-        plt.xlim([t_start, t_start + T])
-        plt.yticks([])
-        plt.xlabel('time steps')
+    if n_test_samples is not None:
+        n = int(np.ceil(np.sqrt(n_test_samples)))
+        fig, ax = plt.subplots(n, n)
+        for i_ax in range(n_test_samples):
+            n1 = i_ax // n
+            n2 = i_ax % n
+            T = checkpoint['VAE_T']
+            T_total = test_sim.mons['rnn.a'].shape[0]
+            t_start = np.random.randint(0, T_total - T)
+            ssa.plot_in_state_space(test_sim.mons['rnn.a'][t_start:t_start + T],
+                                    False, 'C0', alpha=0.7)
+            ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 0] + 2.5,
+                            (str(0.6)), linestyle='--')
+            ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 0] + 2.5, 'C0')
+            ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 0] + 2.5, 'C2')
+            ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 1],
+                            (str(0.6)), linestyle='--')
+            ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 1], 'C0')
+            ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 1], 'C2')
+            ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 2] - 2.5,
+                            (str(0.6)), linestyle='--')
+            ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 2] - 2.5, 'C0')
+            ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 2] - 2.5, 'C2')
+            
+            ax[n1, n2].set_yticks([])
 
     if plot_init_points:
         ssa.plot_in_state_space(A_init, False, 'C9', 'x', alpha=1)
@@ -146,9 +152,10 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
             line = np.array([cluster_means[i], cluster_means[j]])
             ssa.plot_in_state_space(line, True, color='k', alpha=weight)
 
-    if plot_vae_sample:
+    if n_vae_samples is not None:
 
-        traj = sample_from_VAE(checkpoint)
-        ssa.plot_in_state_space(traj, True, 'C3', alpha=0.7)
+        for _ in range(n_vae_samples):
+            traj = sample_from_VAE(checkpoint)
+            ssa.plot_in_state_space(traj, True, 'C3', alpha=0.7)
 
     return ssa

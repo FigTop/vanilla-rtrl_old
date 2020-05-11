@@ -49,7 +49,7 @@ if os.environ['HOME'] == '/home/oem214':
         os.mkdir(save_dir)
 
 if os.environ['HOME'] == '/Users/omarschall':
-    params = {'algorithm': 'RFLO', 'i_start': 45000}
+    params = {'algorithm': 'E-BPTT', 'i_start': 45000}
     i_job = 0
     save_dir = '/Users/omarschall/vanilla-rtrl/library'
 
@@ -105,7 +105,7 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 #                    sigma_pert=0.5, N=600, parallelize=True,
 #                    N_iters=6000, same_LR_criterion=4000)
 
-# with open('notebooks/good_ones/sparsity_friend', 'wb') as f:
+# with open('notebooks/good_ones/vae_friend', 'wb') as f:
 #     pickle.dump(sim, f)
 # with open('notebooks/good_ones/sparsity_friend', 'rb') as f:
 #     sim = pickle.load(f)
@@ -119,7 +119,7 @@ get_graph_structure(sim.checkpoints[499999])
 
 big_data = task.gen_data(100, 500000)
 
-train_VAE(sim.checkpoints[499999], big_data, T=10, latent_dim=5)
+train_VAE(sim.checkpoints[499999], big_data, T=10, latent_dim=128, lr=0.001)
 
 # plot_checkpoint_results(sim.checkpoints[0], data, plot_test_points=True,
 #                         plot_cluster_means=True)
@@ -128,10 +128,10 @@ train_VAE(sim.checkpoints[499999], big_data, T=10, latent_dim=5)
 
 plot_checkpoint_results(sim.checkpoints[499999], data,
                         plot_cluster_means=False,
-                        plot_test_points=True,
+                        plot_test_points=False,
                         plot_graph_structure=True,
-                        plot_vae_sample=True,
-                        plot_test_sample=True)
+                        n_vae_samples=20,
+                        n_test_samples=20)
 
 
 

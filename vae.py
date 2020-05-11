@@ -13,42 +13,54 @@ import torch.optim as optim
 
 class Encoder(nn.Module):
 
-    def __init__(self, input_dim, hidden_dim, z_dim):
+    def __init__(self, input_dim, hidden_dims, z_dim):
 
         super().__init__()
-
-        self.linear = nn.Linear(input_dim, hidden_dim)
-        self.mu = nn.Linear(hidden_dim, z_dim)
-        self.var = nn.Linear(hidden_dim, z_dim)
+        
+        self.n_layers = len(hidden_dims)
+        self.linear_0 = nn.Linear(input_dim, hidden_dims[0])
+        for i in range(1, self.n_layers):
+            setattr(self, 'linear_{}'.format(i), nn.Linear(hidden_dims[i-1],
+                                                           hidden_dims[i]))
+        self.mu = nn.Linear(hidden_dims[-1], z_dim)
+        self.var = nn.Linear(hidden_dims[-1], z_dim)
 
     def forward(self, x):
+        
         # x is of shape [batch_size, input_dim]
-
-        hidden = F.relu(self.linear(x))
+        for i in range(self.n_layers):
+            layer_linear = getattr(self, 'linear_{}'.format(i))
+            x = F.tanh(layer_linear(x))
         # hidden is of shape [batch_size, hidden_dim]
-        z_mu = self.mu(hidden)
+        z_mu = self.mu(x)
         # z_mu is of shape [batch_size, latent_dim]
-        z_var = self.var(hidden)
+        z_var = self.var(x)
         # z_var is of shape [batch_size, latent_dim]
 
         return z_mu, z_var
 
 class Decoder(nn.Module):
 
-    def __init__(self, z_dim, hidden_dim, output_dim):
+    def __init__(self, z_dim, hidden_dims, output_dim):
 
         super().__init__()
 
-        self.linear = nn.Linear(z_dim, hidden_dim)
-        self.out = nn.Linear(hidden_dim, output_dim)
+        self.n_layers = len(hidden_dims)
+        self.linear_0 = nn.Linear(z_dim, hidden_dims[0])
+        for i in range(1, self.n_layers):
+            setattr(self, 'linear_{}'.format(i), nn.Linear(hidden_dims[i-1],
+                                                           hidden_dims[i]))
+        self.out = nn.Linear(hidden_dims[-1], output_dim)
 
     def forward(self, x):
         # x is of shape [batch_size, latent_dim]
 
-        hidden = F.relu(self.linear(x))
+        for i in range(self.n_layers):
+            layer_linear = getattr(self, 'linear_{}'.format(i))
+            x = F.tanh(layer_linear(x))
         # hidden is of shape [batch_size, hidden_dim]
 
-        predicted = self.out(hidden)
+        predicted = self.out(x)
         # predicted is of shape [batch_size, output_dim]
 
         return predicted

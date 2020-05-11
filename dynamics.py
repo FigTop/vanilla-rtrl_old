@@ -363,20 +363,21 @@ def SVCCA_distance(checkpoint_1, checkpoint_2, data, R=3):
     return cca.score(A_1, A_2)
 
 def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01,
-              latent_dim=10):
+              latent_dim=10, encoder_dims=[256, 256],
+              decoder_dims=[256]):
 
     #Generate data
     A = get_test_sim_data(checkpoint, data)
     train_data = torch.tensor(A.reshape((-1, T * checkpoint['rnn'].n_h)))
 
     input_dim = train_data.shape[1]
-    hidden_dim = 128
+    #hidden_dim = 128
 
     #set_trace()
 
     #Define objects
-    encoder = Encoder(input_dim, hidden_dim, latent_dim)
-    decoder = Decoder(latent_dim, hidden_dim, input_dim)
+    encoder = Encoder(input_dim, encoder_dims, latent_dim)
+    decoder = Decoder(latent_dim, decoder_dims, input_dim)
     model = VAE(encoder, decoder)
 
     # optimizer
@@ -388,6 +389,8 @@ def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01,
     model.train()
 
     losses = []
+    recon_losses = []
+    kl_losses = []
 
     for i_epoch in range(n_epochs):
 
@@ -422,6 +425,8 @@ def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01,
             # total loss
             loss = recon_loss + kl_loss
 
+            recon_losses.append(recon_loss.detach().numpy())
+            kl_losses.append(kl_loss.detach().numpy())
             losses.append(loss.detach().numpy())
 
             # backward pass
@@ -434,6 +439,8 @@ def train_VAE(checkpoint, data, T=20, n_epochs=5, lr=0.01,
         checkpoint['VAE'] = model
         checkpoint['VAE_T'] = T
         checkpoint['VAE_train_losses'] = losses
+        checkpoint['VAE_kl_losses'] = kl_losses
+        checkpoint['VAE_recon_losses'] = recon_losses
 
 def sample_from_VAE(checkpoint):
 
@@ -441,7 +448,7 @@ def sample_from_VAE(checkpoint):
     T = checkpoint['VAE_T']
     # sample and generate a image
 
-    z = torch.randn(1, model.dec.linear.in_features)
+    z = torch.randn(1, model.enc.mu.out_features)
 
     # run only the decoder
     reconstructed_traj = model.dec(z)
