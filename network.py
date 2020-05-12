@@ -261,4 +261,31 @@ class RNN:
 
         return (self.alpha**2) * ret
 
+class Hierarchical_RNN(RNN):
+    
+    def __init__(self, outer_rnn, inner_rnn):
+        
+        self.outer_rnn = outer_rnn
+        self.inner_rnn = inner_rnn
+        
+        self.update_outer = False
+        
+    def reset_network(self):
+        
+        self.outer_rnn.reset_network()
+        self.inner_rnn.reset_network()
+        
+    def next_state(self, x):
+        
+        x = np.concatenate([x, self.outer_rnn.y_hat])
+        
+        self.inner_rnn.next_state(x)
+        if self.update_outer:
+            self.outer_rnn.next_state()
+            
+    def z_out(self):
+        
+        self.inner_rnn.z_out()
+        self.outer_rnn.z_out()
+    
 

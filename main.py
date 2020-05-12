@@ -56,9 +56,9 @@ if os.environ['HOME'] == '/Users/omarschall':
     #np.random.seed(1)
 
 np.random.seed(0)
-task = Flip_Flop_Task(3, 0.05, tau_task=1)
-#task = Sine_Wave(0.05, [7, 12], method='regular')
-N_train = 500000
+#task = Flip_Flop_Task(3, 0.05, tau_task=1)
+task = Sine_Wave(0.05, [7, 12], method='random')
+N_train = 200000
 N_test = 10000
 data = task.gen_data(N_train, N_test)
 
@@ -82,9 +82,9 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=identity,
           loss=mean_squared_error)
 
-optimizer = SGD_Momentum(lr=0.001, mu=0.6, clip_norm=0.3)
+optimizer = SGD_Momentum(lr=0.01, mu=0.6, clip_norm=0.3)
 if params['algorithm'] == 'E-BPTT':
-    learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
+    learn_alg = Efficient_BPTT(rnn, 20, L2_reg=0.0001)
 elif params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001, L1_reg=0.0001)
 #learn_alg = Only_Output_Weights(rnn)
@@ -111,27 +111,27 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 #     sim = pickle.load(f)
 # # #result = {}
 # # # for i_checkpoint in range(0, 100000, 10000):
-analyze_checkpoint(sim.checkpoints[499999], data, verbose=False,
-                    sigma_pert=0.5, N=600, parallelize=True,
-                    N_iters=8000, same_LR_criterion=7000)
+# analyze_checkpoint(sim.checkpoints[499999], data, verbose=False,
+#                     sigma_pert=0.5, N=600, parallelize=True,
+#                     N_iters=8000, same_LR_criterion=7000)
 
-get_graph_structure(sim.checkpoints[499999])
+# get_graph_structure(sim.checkpoints[499999])
 
-big_data = task.gen_data(100, 500000)
+# big_data = task.gen_data(100, 500000)
 
-train_VAE(sim.checkpoints[499999], big_data, T=10, latent_dim=128, lr=0.001)
+#train_VAE(sim.checkpoints[499999], big_data, T=10, latent_dim=128, lr=0.001)
 
 # plot_checkpoint_results(sim.checkpoints[0], data, plot_test_points=True,
 #                         plot_cluster_means=True)
 
 # #     #result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
 
-plot_checkpoint_results(sim.checkpoints[499999], data,
-                        plot_cluster_means=False,
-                        plot_test_points=False,
-                        plot_graph_structure=True,
-                        n_vae_samples=20,
-                        n_test_samples=20)
+# plot_checkpoint_results(sim.checkpoints[499999], data,
+#                         plot_cluster_means=False,
+#                         plot_test_points=False,
+#                         plot_graph_structure=True,
+#                         n_vae_samples=20,
+#                         n_test_samples=20)
 
 
 
@@ -152,7 +152,7 @@ if os.environ['HOME'] == '/Users/omarschall':
     #plt.figure()
     #plt.plot(sim.mons['rnn.loss_'], sim.mons['learn_alg.rec_grads-norm'], '.', alpha=0.08)
 
-    rnn = sim.checkpoints[499999]['rnn']
+    rnn = sim.checkpoints[N_train - 1]['rnn']
     #rnn = sim.checkpoints[99999]['rnn']
     test_sim = Simulation(rnn)
     test_sim.run(data,
@@ -167,10 +167,10 @@ if os.environ['HOME'] == '/Users/omarschall':
     plt.plot(data['test']['X'][:, 1], (str(0.6)), linestyle='--')
     plt.plot(data['test']['Y'][:, 1], 'C0')
     plt.plot(test_sim.mons['rnn.y_hat'][:, 1], 'C3')
-    plt.plot(data['test']['X'][:, 2] - 2.5, (str(0.6)), linestyle='--')
-    plt.plot(data['test']['Y'][:, 2] - 2.5, 'C0')
-    plt.plot(test_sim.mons['rnn.y_hat'][:, 2] - 2.5, 'C3')
-    plt.xlim([0, 100])
+    # plt.plot(data['test']['X'][:, 2] - 2.5, (str(0.6)), linestyle='--')
+    # plt.plot(data['test']['Y'][:, 2] - 2.5, 'C0')
+    # plt.plot(test_sim.mons['rnn.y_hat'][:, 2] - 2.5, 'C3')
+    plt.xlim([0, 1000])
     plt.yticks([])
     plt.xlabel('time steps')
 
