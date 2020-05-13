@@ -36,8 +36,8 @@ if os.environ['HOME'] == '/home/oem214':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    #macro_configs = config_generator(i_start=list(range(0, 200000, 1000)))
-    macro_configs = config_generator(algorithm=[None])
+    macro_configs = config_generator(i_start=list(range(0, 200000, 1000)))
+    #macro_configs = config_generator(algorithm=[None])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -59,67 +59,67 @@ result = {}
 
 np.random.seed(0)
 task = Flip_Flop_Task(3, 0.05, tau_task=1)
-big_data = task.gen_data(100, 100000)
-smol_data = task.gen_data(100, 10000)
-data_path = '/scratch/oem214/vanilla-rtrl/library/vae_train'
-def process_all_results(data_path, N_jobs, rflo_checkpoints={}):
+# big_data = task.gen_data(100, 100000)
+data = task.gen_data(100, 10000)
+# data_path = '/scratch/oem214/vanilla-rtrl/library/vae_train'
+# def process_all_results(data_path, N_jobs, rflo_checkpoints={}):
     
-    for i in range(N_jobs):
+#     for i in range(N_jobs):
 
-        file_path = os.path.join(data_path, 'result_{}'.format(i))
+#         file_path = os.path.join(data_path, 'result_{}'.format(i))
     
-        try:
-            with open(file_path, 'rb') as f:
-                result = pickle.load(f)
-        except FileNotFoundError:
-            continue
+#         try:
+#             with open(file_path, 'rb') as f:
+#                 result = pickle.load(f)
+#         except FileNotFoundError:
+#             continue
             
-        rflo_checkpoints.update(result)
+#         rflo_checkpoints.update(result)
             
-    return rflo_checkpoints
+#     return rflo_checkpoints
 
 
-print('processing results...')
-rflo_checkpoints = process_all_results(data_path, 200, rflo_checkpoints={})
+# print('processing results...')
+# rflo_checkpoints = process_all_results(data_path, 200, rflo_checkpoints={})
 
-i_rflo = sorted([int(k.split('_')[-1]) for k in rflo_checkpoints.keys() if 'checkpoint' in k])
-checkpoints = [rflo_checkpoints['checkpoint_{}'.format(i_checkpoint)] for i_checkpoint in i_rflo]
+# i_rflo = sorted([int(k.split('_')[-1]) for k in rflo_checkpoints.keys() if 'checkpoint' in k])
+# checkpoints = [rflo_checkpoints['checkpoint_{}'.format(i_checkpoint)] for i_checkpoint in i_rflo]
 
-for checkpoint in checkpoints:
+# for checkpoint in checkpoints:
     
-    print('processing checkpoint {}'.format(checkpoint['i_t']))
-    transform = Vanilla_PCA(checkpoint, smol_data)
-    checkpoint['V'] = transform(np.eye(checkpoint['rnn'].n_h))
+#     print('processing checkpoint {}'.format(checkpoint['i_t']))
+#     transform = Vanilla_PCA(checkpoint, smol_data)
+#     checkpoint['V'] = transform(np.eye(checkpoint['rnn'].n_h))
 
-vae_distances = np.zeros((len(checkpoints), len(checkpoints)))
-pc_distances = np.zeros((len(checkpoints), len(checkpoints)))
-for i in range(len(checkpoints)):
+# vae_distances = np.zeros((len(checkpoints), len(checkpoints)))
+# pc_distances = np.zeros((len(checkpoints), len(checkpoints)))
+# for i in range(len(checkpoints)):
     
-    print('calcualtaing distance row {}'.format(i))
+#     print('calcualtaing distance row {}'.format(i))
     
-    for j in range(-10, 10):
+#     for j in range(-10, 10):
     
-        try:
-            checkpoint_1 = checkpoints[i]
-            checkpoint_2 = checkpoints[i + j]
-        except IndexError:
-            continue
+#         try:
+#             checkpoint_1 = checkpoints[i]
+#             checkpoint_2 = checkpoints[i + j]
+#         except IndexError:
+#             continue
 
-    #    rnn = checkpoint_1['rnn']
-    #    test_sim = Simulation(rnn)
-    #    test_sim.run(data,
-    #                  mode='test',
-    #                  monitors=['rnn.loss_'],
-    #                  verbose=False)
-    #    
-    #    losses.append(test_sim.mons['rnn.loss_'].mean())
-        vae_distances[i, i + j] = test_vae(model_checkpoint=checkpoint_1, data=big_data,
-                                           test_checkpoint=checkpoint_2) / 100000
+#     #    rnn = checkpoint_1['rnn']
+#     #    test_sim = Simulation(rnn)
+#     #    test_sim.run(data,
+#     #                  mode='test',
+#     #                  monitors=['rnn.loss_'],
+#     #                  verbose=False)
+#     #    
+#     #    losses.append(test_sim.mons['rnn.loss_'].mean())
+#         vae_distances[i, i + j] = test_vae(model_checkpoint=checkpoint_1, data=big_data,
+#                                            test_checkpoint=checkpoint_2) / 100000
         
-        pc_distances[i, i + j] = np.sum(checkpoint_1['V'] * checkpoint_2['V'])
+#         pc_distances[i, i + j] = np.sum(checkpoint_1['V'] * checkpoint_2['V'])
         
-result['vae_distances'] = vae_distances
-result['pc_distances'] = pc_distances
+# result['vae_distances'] = vae_distances
+# result['pc_distances'] = pc_distances
 #plt.figure()
 #plt.imshow(distances)
 
@@ -174,23 +174,23 @@ result['pc_distances'] = pc_distances
 
 # with open('notebooks/good_ones/vae_friend', 'wb') as f:
 #     pickle.dump(sim, f)
-# with open('notebooks/good_ones/vae_friend', 'rb') as f:
-#     sim = pickle.load(f)
+with open('notebooks/good_ones/vae_friend', 'rb') as f:
+    sim = pickle.load(f)
     
-# big_data = task.gen_data(100, 50000)
-# result = {}
+big_data = task.gen_data(100, 500000)
+result = {}
 
-# for i_checkpoint in range(params['i_start'], params['i_start'] + 1000, 100):
-#     train_VAE(sim.checkpoints[i_checkpoint], big_data, T=10,
-#               latent_dim=256, lr=0.001)
-#     result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
+for i_checkpoint in range(params['i_start'], params['i_start'] + 1000, 100):
+    train_VAE(sim.checkpoints[i_checkpoint], big_data, T=10,
+              latent_dim=256, lr=0.001)
     
+    analyze_checkpoint(sim.checkpoints[i_checkpoint], data, verbose=False,
+                    sigma_pert=0.5, N=600, parallelize=False,
+                    N_iters=8000, same_LR_criterion=7000)
     
+    get_graph_structure(sim.checkpoints[i_checkpoint], parallelize=False)
     
-    
-    # analyze_checkpoint(sim.checkpoints[N_train - 1], data, verbose=False,
-#                     sigma_pert=0.5, N=600, parallelize=True,
-#                     N_iters=8000, same_LR_criterion=7000)
+    result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
 
 # get_graph_structure(sim.checkpoints[N_train - 1])
 
