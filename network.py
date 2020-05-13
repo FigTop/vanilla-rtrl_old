@@ -263,25 +263,37 @@ class RNN:
 
 class Hierarchical_RNN(RNN):
     
-    def __init__(self, outer_rnn, inner_rnn):
+    def __init__(self, outer_rnn, inner_rnn, update_ratio=1):
         
         self.outer_rnn = outer_rnn
         self.inner_rnn = inner_rnn
         
         self.update_outer = False
+        self.update_ratio = update_ratio
+        self.i_t = 0
         
     def reset_network(self):
         
         self.outer_rnn.reset_network()
         self.inner_rnn.reset_network()
         
-    def next_state(self, x):
+    def next_state(self, x, clamped_input=None):
         
-        x = np.concatenate([x, self.outer_rnn.y_hat])
+        x_ = clamped_input
+        if clamped_input is None:
+            x_ = self.outer_rnn.y_hat
+        
+        x = np.concatenate([x, x_])
         
         self.inner_rnn.next_state(x)
         if self.update_outer:
             self.outer_rnn.next_state()
+            
+        self.i_t += 1
+        if self.i_t % self.update_ratio == 0:
+            self.update_outer = True
+        else:
+            self.update_outer = False
             
     def z_out(self):
         
