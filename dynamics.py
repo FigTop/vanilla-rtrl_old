@@ -455,3 +455,48 @@ def sample_from_VAE(checkpoint):
     traj = reconstructed_traj.view(T, -1).data
 
     return traj
+
+def test_vae(model_checkpoint, data, test_checkpoint=None):
+    
+    model = model_checkpoint['VAE']
+    n_h = model_checkpoint['rnn'].n_h
+    T = model_checkpoint['VAE_T']
+    
+    if test_checkpoint is None:
+        A = get_test_sim_data(model_checkpoint, data)
+        
+    else:
+        A = get_test_sim_data(test_checkpoint, data)
+        
+    test_data = torch.tensor(A.reshape((-1, T * n_h)))
+    
+    test_iterator = DataLoader(TensorDataset(test_data),
+                               batch_size=A.shape[0],
+                               shuffle=False)
+    input_dim = test_data.shape[1]
+    # set the evaluation mode
+    model.eval()
+
+    # test loss for the data
+    test_loss = 0
+    
+    with torch.no_grad():
+        for i, x in enumerate(test_iterator):
+            # reshape the data
+            x = x[0].view(-1, input_dim).type(torch.FloatTensor)
+
+            # forward pass
+            x_sample, z_mu, z_var = model(x)
+
+            # reconstruction loss
+            recon_loss = F.mse_loss(x_sample, x, size_average=False)
+            
+            # kl divergence loss
+            kl_loss = 0.5 * torch.sum(torch.exp(z_var) + z_mu**2 - 1.0 - z_var)
+            
+            # total loss
+            loss = recon_loss + kl_loss
+            test_loss += loss.item()
+
+    return test_loss
+
