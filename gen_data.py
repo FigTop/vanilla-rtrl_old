@@ -8,6 +8,7 @@ Created on Mon Sep 10 16:30:03 2018
 
 import numpy as np
 import pickle
+from pdb import set_trace
 
 class Task:
     """Parent class for all tasks. A Task is a class whose instances generate
@@ -319,8 +320,13 @@ class Flip_Flop_Task(Task):
             tau_task (int): The factor by which we temporally "stretch" the task
                 (similar to Add Task)."""
 
-        super().__init__(n_bit, n_bit)
+        self.n_bit = n_bit
 
+        n_in = np.maximum(n_bit, 2)
+
+        super().__init__(n_in, n_in)
+
+        
         self.p_flip = p_flip
         self.tau_task = tau_task
 
@@ -334,11 +340,16 @@ class Flip_Flop_Task(Task):
 
         probability = [self.p_flip / 2, 1 - self.p_flip, self.p_flip / 2]
         choices = [-1, 0, 1]
-        X = np.random.choice(choices, size=(N, self.n_in), p=probability)
-        X = np.tile(X, self.tau_task).reshape((self.tau_task*N, self.n_in))
+        X = np.random.choice(choices, size=(N, self.n_bit), p=probability)
+        X = np.tile(X, self.tau_task).reshape((self.tau_task*N, self.n_bit))
         Y = X.copy()
         for k in range(int(np.ceil(np.log2(N)))):
             Y[2 ** k:] = np.sign(Y[2 ** k:] + Y[:-2 ** k] / 2)
+            
+        if self.n_bit == 1:
+            X = np.tile(X, 2)
+            Y = np.tile(Y, 2)
+            
         return X, Y
 
 class Sine_Wave(Task):

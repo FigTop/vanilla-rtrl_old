@@ -97,23 +97,27 @@ def plot_checkpoint_results(checkpoint, data, ssa=None, plot_test_points=False,
         for i_ax in range(n_test_samples):
             n1 = i_ax // n
             n2 = i_ax % n
-            T = checkpoint['VAE_T']
+            try:
+                T = checkpoint['VAE_T']
+            except KeyError:
+                T = 10
             T_total = test_sim.mons['rnn.a'].shape[0]
             t_start = np.random.randint(0, T_total - T)
             ssa.plot_in_state_space(test_sim.mons['rnn.a'][t_start:t_start + T],
-                                    False, 'C0', alpha=0.7)
-            ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 0] + 2.5,
-                            (str(0.6)), linestyle='--')
-            ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 0] + 2.5, 'C0')
-            ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 0] + 2.5, 'C2')
-            ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 1],
-                            (str(0.6)), linestyle='--')
-            ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 1], 'C0')
-            ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 1], 'C2')
-            ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 2] - 2.5,
-                            (str(0.6)), linestyle='--')
-            ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 2] - 2.5, 'C0')
-            ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 2] - 2.5, 'C2')
+                                    True, 'C0', alpha=0.7)
+            for i_out in range(test_sim.rnn.n_out):
+                ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, i_out] + 2.5 * i_out,
+                                (str(0.6)), linestyle='--')
+                ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, i_out] + 2.5 * i_out, 'C0')
+                ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 0] + 2.5 * i_out, 'C2')
+                # ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, i_out],
+                #                 (str(0.6)), linestyle='--')
+                # ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 1], 'C0')
+                # ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 1], 'C2')
+                # ax[n1, n2].plot(data['test']['X'][t_start:t_start + T, 2] - 2.5,
+                #                 (str(0.6)), linestyle='--')
+                # ax[n1, n2].plot(data['test']['Y'][t_start:t_start + T, 2] - 2.5, 'C0')
+                # ax[n1, n2].plot(test_sim.mons['rnn.y_hat'][t_start:t_start + T, 2] - 2.5, 'C2')
             
             ax[n1, n2].set_yticks([])
 

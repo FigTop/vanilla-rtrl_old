@@ -55,7 +55,8 @@ def analyze_all_checkpoints(checkpoints, func, test_data, **kwargs):
     return results
 
 def analyze_checkpoint(checkpoint, data, N_iters=8000,
-                       same_LR_criterion=5000, N=200, **kwargs):
+                       same_LR_criterion=5000, N=200,
+                       n_PCs=3, **kwargs):
 
     print('Analyzing checkpoint {}...'.format(checkpoint['i_t']))
 
@@ -66,7 +67,7 @@ def analyze_checkpoint(checkpoint, data, N_iters=8000,
                   monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
                   verbose=False)
 
-    transform = Vanilla_PCA(checkpoint, data)
+    transform = Vanilla_PCA(checkpoint, data, n_PCs=n_PCs)
     V = transform(np.eye(rnn.n_h))
 
     fixed_points, initial_states = find_KE_minima(checkpoint, data, N=N,

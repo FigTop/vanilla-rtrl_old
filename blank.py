@@ -6,6 +6,68 @@ Created on Mon Mar 23 15:42:06 2020
 @author: omarschall
 """
 
+# data_path = '/scratch/oem214/vanilla-rtrl/library/vae_train'
+# def process_all_results(data_path, N_jobs, rflo_checkpoints={}):
+    
+#     for i in range(N_jobs):
+
+#         file_path = os.path.join(data_path, 'result_{}'.format(i))
+    
+#         try:
+#             with open(file_path, 'rb') as f:
+#                 result = pickle.load(f)
+#         except FileNotFoundError:
+#             continue
+            
+#         rflo_checkpoints.update(result)
+            
+#     return rflo_checkpoints
+
+
+# print('processing results...')
+# rflo_checkpoints = process_all_results(data_path, 200, rflo_checkpoints={})
+
+# i_rflo = sorted([int(k.split('_')[-1]) for k in rflo_checkpoints.keys() if 'checkpoint' in k])
+# checkpoints = [rflo_checkpoints['checkpoint_{}'.format(i_checkpoint)] for i_checkpoint in i_rflo]
+
+# vae_distances = np.zeros((len(checkpoints), len(checkpoints)))
+# pc_distances = np.zeros((len(checkpoints), len(checkpoints)))
+# graph_distances = np.zeros((len(checkpoints), len(checkpoints)))
+# for i in range(len(checkpoints)):
+    
+#     if i % 10 == 0:
+#         with open('/scratch/oem214/vanilla-rtrl/log/vae_test.log', 'a') as f:
+#             f.write('Calculating distnace row {}\n'.format(i))
+    
+#     for j in range(0, 6):
+    
+#         try:
+#             checkpoint_1 = checkpoints[i]
+#             checkpoint_2 = checkpoints[i + j]
+#         except IndexError:
+#             continue
+
+#     #    rnn = checkpoint_1['rnn']
+#     #    test_sim = Simulation(rnn)
+#     #    test_sim.run(data,
+#     #                  mode='test',
+#     #                  monitors=['rnn.loss_'],
+#     #                  verbose=False)
+#     #    
+#     #    losses.append(test_sim.mons['rnn.loss_'].mean())
+#         vae_distances[i, i + j] = test_vae(model_checkpoint=checkpoint_1, data=big_data,
+#                                             test_checkpoint=checkpoint_2) / 100000
+        
+#         pc_distances[i, i + j] = np.sum(checkpoint_1['V'] * checkpoint_2['V'])
+#         graph_distances[i, i + j] = netsimile(checkpoint_1['adjacency_matrix'],
+#                                               checkpoint_2['adjacency_matrix'])
+        
+# result['vae_distances'] = vae_distances
+# result['pc_distances'] = pc_distances
+# result['graph_distsances'] = graph_distances
+#plt.figure()
+#plt.imshow(distances)
+
 # with open('notebooks/good_ones/sparsity_friend', 'rb') as f:
 #     sim = pickle.load(f)
 # result = {}
