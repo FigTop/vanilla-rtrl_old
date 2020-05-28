@@ -75,7 +75,7 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_out,
             loss=softmax_cross_entropy)
 
 optimizer = Stochastic_Gradient_Descent(lr=0.001)
-learn_alg = UORO_LSTM(lstm)
+learn_alg = RTRL(lstm)
 comp_algs = []
 monitors = ['rnn.loss_', 'rnn.y_hat','rnn.h', 'rnn.c','grads_list','rnn.f','rnn.i','rnn.a','rnn.o']
 
@@ -84,8 +84,9 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
-        check_accuracy=False,
-        check_loss=True)
+        report_accuracy=False,
+        report_loss=True,
+        checkpoint_interval=None)
 
 #Filter losses
 #loss = sim.mons['net.loss_']

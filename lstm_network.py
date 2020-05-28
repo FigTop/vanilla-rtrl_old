@@ -348,7 +348,7 @@ class LSTM:
         self.papwf = np.concatenate([pcpwf, phpwf])
 
         self.papw = np.concatenate([self.papwf,self.papwi,self.papwa,self.papwo],axis=1)
-        print('self.papw',self.papw.shape)
+        #print('self.papw',self.papw.shape)
 
     def update_compact_M_immediate(self):
         """Updates the influence matrix via Eq. (1)."""
