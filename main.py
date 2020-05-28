@@ -60,20 +60,21 @@ if os.environ['HOME'] == '/Users/omarschall':
 
 np.random.seed(0)
 #task = Flip_Flop_Task(1, 0.05, tau_task=1)
-task = Add_Task(4, 6, deterministic=True, tau_task=1)
+task = Add_Task(6, 10, deterministic=True, tau_task=1)
 #task = Sine_Wave(0.05, [7, 12], method='regular')
-N_train = 60000
+N_train = 20000
 N_test = 10000
 data = task.gen_data(N_train, N_test)
 #big_data = task.gen_data(100, 100000)
 
 
 n_in = task.n_in
-n_hidden = 64
+n_hidden = 32
 n_out = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+#W_rec = np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0]
+W_rec = np.random.normal(0, np.sqrt(1/n_hidden), (n_hidden, n_hidden))
 W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
 W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
 
@@ -95,6 +96,8 @@ if params['algorithm'] == 'E-BPTT':
 elif params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001, L1_reg=0.0001)
 #learn_alg = Only_Output_Weights(rnn)
+
+learn_alg = Efficient_BPTT(rnn, T_truncation=10)
 
 comp_algs = []
 monitors = []
