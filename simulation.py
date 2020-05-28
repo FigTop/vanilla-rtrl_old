@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov  5 12:54:56 2018
-
 @author: omarschall
 """
 
-from copy import deepcopy
+from copy import copy, deepcopy
 import time
 from utils import (norm, classification_accuracy, normalized_dot_product,
                    get_spectral_radius, rgetattr)
@@ -14,10 +13,8 @@ import numpy as np
 
 class Simulation:
     """Simulates an RNN for a provided set of inputs and training procedures.
-
     By default, all variables are overwritten at each time step, but the user
     can specify which variables to track with 'monitors'.
-
     Has two types of attributes that are provided either upon init or
     when calling self.run. The distinction matters because init attributes
     should carry over into test runs, whereas run attributes will likely be
@@ -27,7 +24,6 @@ class Simulation:
     def __init__(self, rnn, allowed_kwargs_=set(), **kwargs):
         """Initialzes a simulation.Simulation object by specifying the
         attributes that will apply to both train and test instances.
-
         Args:
             rnn (network.RNN): The specific RNN instance being simulated.
             allowed_kwargs_ (set): Custom allowed keyword args for development
@@ -62,13 +58,11 @@ class Simulation:
 
     def run(self, data, mode='train', monitors=[], **kwargs):
         """Runs the network forward as many time steps as given by data.
-
         Can be run in either 'train' or 'test' mode, which specifies whether
         the network parameters are updated or not. In 'train' case, a
         learning algorithm (learn_alg) and optimizer (optimizer) must be
         specified to calculate gradients and apply them to the network,
         respectively.
-
         Args:
             data (dict): A dict containing two keys, 'train' and 'test',
                 each of which points to a dict containing keys 'X' and 'Y',
@@ -105,26 +99,24 @@ class Simulation:
             report_interval (int): Number of time steps between reports, if
                 verbose. Default is 1/10 the number of total time steps, for 10
                 total progress reports.
-            check_accuracy (bool): Boolean that indicates whether to run a test
+            report_accuracy (bool): Boolean that indicates whether to run test
                 simulation during each progress report to report classification
                 accuracy, as defined by the fraction of test time steps where
                 the argmax of the outputs matches that of the labels.
-            check_loss (bool): Same as check_accuracy but with test loss. If
+            report_loss (bool): Same as report_accuracy but with test loss. If
                 both are False, no test simulation is run.
             best_model_interval (int): Number of time steps between running
                 test simulations and saving the model if it has the lowest
                 yet validation loss.
-            save_model_interval (int): Number of time steps between running
-                test simulations and saving the top n_singular_vectors vectors
-                of V in the SVD of the hidden state.
-            n_singular_vectors (int): Number of singular vectors to keep for
-                analysis when saving test results."""
+            checkpoint_interval (int): Number of time steps between saving
+                rnn, learn_alg, optimizer, and i_t so that training can be
+                reproduced."""
 
         allowed_kwargs = {'learn_alg', 'optimizer', 'a_initial', 'sigma',
                           'update_interval', 'comp_algs', 'verbose',
-                          'report_interval', 'check_accuracy', 'check_loss',
-                          'best_model_interval', 'save_model_interval',
-                          'n_singular_vectors'}
+                          'report_interval', 'report_accuracy', 'report_loss',
+                          'best_model_interval', 'checkpoint_interval',
+                          'overwrite_checkpoints', 'i_start', 'i_end'}
         for k in kwargs:
             if k not in allowed_kwargs:
                 raise TypeError('Unexpected keyword argument '
@@ -141,13 +133,13 @@ class Simulation:
 
         #Set defaults
         self.verbose = True
-        self.check_accuracy = False
-        self.check_loss = False
+        self.report_accuracy = False
+        self.report_loss = False
         self.comp_algs = []
         self.report_interval = max(self.total_time_steps//10, 1)
         self.update_interval = 1
-        self.singular_vectors = []
-        self.n_singular_vectors = 3
+        self.i_start = 0
+        self.i_end = self.total_time_steps
         self.sigma = 0
 
         #Overwrite defaults with any provided keyword args
@@ -162,7 +154,7 @@ class Simulation:
 
         self.initialize_run()
 
-        for i_t in range(self.total_time_steps):
+        for i_t in range(self.i_start, self.i_end):
 
             self.i_t = i_t
 
@@ -188,6 +180,9 @@ class Simulation:
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
 
+        #Checkpoint final model
+        self.checkpoint_model()
+
         #Delete data to save space
         del(self.x_inputs)
         del(self.y_labels)
@@ -197,6 +192,10 @@ class Simulation:
 
         #Initial best validation loss is infinite
         self.best_val_loss = np.inf
+
+        #Set up checkpoints dict if doesn't already exist from previous run
+        if not hasattr(self, 'checkpoints'):
+            self.checkpoints = {}
 
         #Initialize rec_grads_dicts
         if self.mode == 'train':
@@ -288,18 +287,15 @@ class Simulation:
         #Only update on schedule (default update_interval=1)
         if self.i_t%self.update_interval == 0:
             #Get updated parameters
-            new_params = self.optimizer.get_updated_params(rnn.params,
+            rnn.params = self.optimizer.get_updated_params(rnn.params,
                                                            self.grads_list)
-            for name, p in zip(rnn.param_names, new_params):
-                
+            #rnn.W_rec, rnn.b_rec, rnn.W_out, rnn.b_out = rnn.params
+            for name, p in zip(rnn.param_names, rnn.params):
+                #print('name,p:',name,p.shape)
                 setattr(rnn, name, p)
 
     def end_time_step(self, data):
         """Cleans up after each time step in the time loop."""
-
-        #Current inputs/labels become previous inputs/labels
-        self.rnn.x_prev = np.copy(self.rnn.x)
-        self.rnn.y_prev = np.copy(self.rnn.y)
 
         #Compute spectral radii if desired
         self.get_radii_and_norms()
@@ -307,21 +303,28 @@ class Simulation:
         #Monitor relevant variables
         self.update_monitors()
 
-        #Test model at specified interval and save results for analysis
-        if self.save_model_interval is not None and self.mode == 'train':
-            if self.i_t % self.save_model_interval == 0:
-                self.get_test_singular_vectors(data)
-
         #Evaluate model and save if performance is best
         if self.best_model_interval is not None and self.mode == 'train':
             if self.i_t % self.best_model_interval == 0:
                 self.save_best_model(data)
+
+        if self.checkpoint_interval is not None and self.mode == 'train':
+            if type(self.checkpoint_interval) is int:
+                if self.i_t % self.checkpoint_interval == 0:
+                    self.checkpoint_model()
+            if type(self.checkpoint_interval) is list:
+                if self.i_t in self.checkpoint_interval:
+                    self.checkpoint_model()
 
         #Make report if conditions are met
         if (self.i_t % self.report_interval == 0 and
             self.i_t > 0 and
             self.verbose):
             self.report_progress(data)
+
+        #Current inputs/labels become previous inputs/labels
+        self.rnn.x_prev = self.rnn.x.copy()
+        self.rnn.y_prev = self.rnn.y.copy()
 
     def report_progress(self, data):
         """"Reports progress at specified interval, including test run
@@ -338,16 +341,17 @@ class Simulation:
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
 
-        if self.check_accuracy or self.check_loss:
+        if self.report_accuracy or self.report_loss:
             test_sim = self.get_test_sim()
             test_sim.run(data, mode='test',
                          monitors=['rnn.y_hat', 'rnn.loss_'],
-                         verbose=False)
-            if self.check_accuracy:
+                         verbose=False,
+                         a_initial=np.copy(self.rnn.a))
+            if self.report_accuracy:
                 acc = classification_accuracy(data, test_sim.mons['rnn.y_hat'])
                 accuracy = 'Test accuracy: {} \n'.format(acc)
                 summary += accuracy
-            if self.check_loss:
+            if self.report_loss:
                 test_loss = np.mean(test_sim.mons['rnn.loss_'])
                 loss_summary = 'Test loss: {} \n'.format(test_loss)
                 summary += loss_summary
@@ -400,17 +404,17 @@ class Simulation:
             self.best_rnn = val_sim.rnn
             self.best_val_loss = val_loss
 
-    def get_test_singular_vectors(self, data):
-        """Runs a test simulation and saves resulting top singular vectors
-        of rnn.a in self.singular_vectors."""
+    def checkpoint_model(self):
+        """Creates copies of all relevant objects for reproducing training
+        trajectory."""
 
-        test_sim = self.get_test_sim()
-        test_sim.run(data, mode='test',
-                     monitors=['rnn.a'],
-                     verbose=False)
-
-        U, S, V = np.linalg.svd(test_sim.mons['rnn.a'])
-        self.singular_vectors.append(V[:,:self.n_singular_vectors])
+        checkpoint = {'rnn': deepcopy(self.rnn),
+                      'learn_alg': deepcopy(self.learn_alg),
+                      'optimizer': deepcopy(self.optimizer),
+                      'i_t': copy(self.i_t)}
+        if (self.i_t not in self.checkpoints.keys() or 
+            self.overwrite_checkpoints):
+            self.checkpoints[self.i_t] = checkpoint
 
     def get_test_sim(self):
         """Creates what is effectively a copy of the current simulation, but
@@ -469,47 +473,33 @@ class Simulation:
         for key in self.rec_grads_dict:
             if len(self.rec_grads_dict[key]) >= self.T_lag:
                 del(self.rec_grads_dict[key][0])
+                
+    def resume_sim_at_checkpoint(self, data, i_checkpoint, N=None,
+                                 checkpoint_interval=None,
+                                 overwrite_checkpoints=False,
+                                 **kwargs):
 
+        checkpoint = self.checkpoints[i_checkpoint]
+        
+        rnn = deepcopy(checkpoint['rnn'])
+        learn_alg = deepcopy(checkpoint['learn_alg'])
+        optimizer = deepcopy(checkpoint['optimizer'])
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        if N is None:
+            i_checkpoints = sorted(self.checkpoints.keys())
+            j = i_checkpoints.index(i_checkpoint) + 1
+            N = i_checkpoints[j] - i_checkpoints[j-1]
+            
+        if checkpoint_interval is None:
+            checkpoint_interval = N // 10
+        
+        self.rnn = rnn
+        self.run(data, learn_alg=learn_alg, optimizer=optimizer,
+                 checkpoint_interval=checkpoint_interval,
+                 i_start=i_checkpoint + 1,
+                 i_end=i_checkpoint + N,
+                 overwrite_checkpoints=overwrite_checkpoints,
+                 **kwargs)
 
 
 

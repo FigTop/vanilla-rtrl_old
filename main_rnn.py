@@ -107,23 +107,25 @@ alpha = 1
 rnn = RNN(W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=identity,
-          loss=mean_squared_error)
+          output=softmax,
+          loss=softmax_cross_entropy)
 
 optimizer =  Stochastic_Gradient_Descent(lr=0.001)
 
 learn_alg = RTRL(rnn)
+learn_alg = Efficient_BPTT(rnn, T_truncation=10)
 
 comp_algs = []
-monitors = []
+monitors = ['rnn.loss_']
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
-        check_accuracy=False,
-        check_loss=True)
+        report_accuracy=False,
+        report_loss=True,
+        checkpoint_interval=None)
 
 
 
