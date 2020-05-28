@@ -59,9 +59,10 @@ if os.environ['HOME'] == '/Users/omarschall':
 # result = {}
 
 np.random.seed(0)
-task = Flip_Flop_Task(1, 0.05, tau_task=1)
+#task = Flip_Flop_Task(1, 0.05, tau_task=1)
+task = Add_Task(4, 6, deterministic=True, tau_task=1)
 #task = Sine_Wave(0.05, [7, 12], method='regular')
-N_train = 1000
+N_train = 60000
 N_test = 10000
 data = task.gen_data(N_train, N_test)
 #big_data = task.gen_data(100, 100000)
@@ -84,12 +85,13 @@ alpha = 1
 rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           activation=tanh,
           alpha=alpha,
-          output=identity,
-          loss=mean_squared_error)
+          output=softmax,
+          loss=softmax_cross_entropy)
 
 optimizer = SGD_Momentum(lr=0.005, mu=0.6, clip_norm=0.3)
+optimizer = Stochastic_Gradient_Descent(lr=0.001)
 if params['algorithm'] == 'E-BPTT':
-    learn_alg = Efficient_BPTT(rnn, 10, L2_reg=0.0001)
+    learn_alg = Efficient_BPTT(rnn, 10)#, L2_reg=0.0001)
 elif params['algorithm'] == 'RFLO':
     learn_alg = RFLO(rnn, alpha=alpha, L2_reg=0.0001, L1_reg=0.0001)
 #learn_alg = Only_Output_Weights(rnn)
@@ -104,20 +106,20 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         verbose=True,
         report_accuracy=False,
         report_loss=True,
-        checkpoint_interval=10)
+        checkpoint_interval=None)
 
-for i_checkpoint in range(0, 300, 10):
-    checkpoint = sim.checkpoints[i_checkpoint]
-    analyze_checkpoint(checkpoint, data, verbose=False,
-                       sigma_pert=0.5, N=200, parallelize=True, n_PCs=2,
-                       N_iters=3000, same_LR_criterion=2000)
-    get_graph_structure(checkpoint)
+# for i_checkpoint in range(0, 300, 10):
+#     checkpoint = sim.checkpoints[i_checkpoint]
+#     analyze_checkpoint(checkpoint, data, verbose=False,
+#                        sigma_pert=0.5, N=200, parallelize=True, n_PCs=2,
+#                        N_iters=3000, same_LR_criterion=2000)
+#     get_graph_structure(checkpoint)
     #train_VAE(checkpoint, big_data, T=10, latent_dim=256, lr=0.001)
 
 # with open('notebooks/good_ones/1d_friend_2', 'wb') as f:
 #     pickle.dump(sim, f)
-with open('notebooks/good_ones/1d_friend_2', 'rb') as f:
-    sim = pickle.load(f)
+# with open('notebooks/good_ones/1d_friend_2', 'rb') as f:
+#     sim = pickle.load(f)
     
 # big_data = task.gen_data(100, 500000)
 # result = {}
@@ -145,24 +147,24 @@ with open('notebooks/good_ones/1d_friend_2', 'rb') as f:
 
 # #     #result['checkpoint_{}'.format(i_checkpoint)] = deepcopy(sim.checkpoints[i_checkpoint])
 
-for i in range(180, 190, 10):
-    ssa = plot_checkpoint_results(sim.checkpoints[i], data,
-                                  plot_cluster_means=True,
-                                  plot_fixed_points=True,
-                                  plot_test_points=True,
-                                  plot_graph_structure=True,
-                                  n_vae_samples=None,
-                                  n_test_samples=None)
+# for i in range(180, 190, 10):
+#     ssa = plot_checkpoint_results(sim.checkpoints[i], data,
+#                                   plot_cluster_means=True,
+#                                   plot_fixed_points=True,
+#                                   plot_test_points=True,
+#                                   plot_graph_structure=True,
+#                                   n_vae_samples=None,
+#                                   n_test_samples=None)
 
 
-W_recs = [sim.checkpoints[i]['rnn'].W_rec for i in range(0, 240, 10)]
-W_in_norms = [norm(sim.checkpoints[i]['rnn'].W_in) for i in range(0, 240, 10)]
-plot_eigenvalues(sim.checkpoints[40]['rnn'].W_rec, sim.checkpoints[50]['rnn'].W_rec)
-plt.legend(['', 'Chkpt 5', 'Chkpt 6'])
+# W_recs = [sim.checkpoints[i]['rnn'].W_rec for i in range(0, 240, 10)]
+# W_in_norms = [norm(sim.checkpoints[i]['rnn'].W_in) for i in range(0, 240, 10)]
+# plot_eigenvalues(sim.checkpoints[40]['rnn'].W_rec, sim.checkpoints[50]['rnn'].W_rec)
+# plt.legend(['', 'Chkpt 5', 'Chkpt 6'])
 
-W_recs = [sim.checkpoints[i]['rnn'].W_rec.flatten() for i in range(0, 240, 10)]
-W_recs = np.array(W_recs)
-Delta_W = W_recs[1:] - W_recs[:-1]
+# W_recs = [sim.checkpoints[i]['rnn'].W_rec.flatten() for i in range(0, 240, 10)]
+# W_recs = np.array(W_recs)
+# Delta_W = W_recs[1:] - W_recs[:-1]
 
 # with open('notebooks/good_ones/{}_net_prezzy'.format(params['algorithm']), 'wb') as f:
 #     pickle.dump(sim, f)
