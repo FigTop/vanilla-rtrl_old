@@ -348,3 +348,38 @@ class LSTM:
         self.papwf = np.concatenate([pcpwf, phpwf])
 
         self.papw = np.concatenate([self.papwf,self.papwi,self.papwa,self.papwo],axis=1)
+        print('self.papw',self.papw.shape)
+
+    def update_compact_M_immediate(self):
+        """Updates the influence matrix via Eq. (1)."""
+
+        self.state_hat = np.concatenate([self.h_hat_prev, np.array([1])])
+        
+        #Calculate M_immediate
+        
+        r = self.o * self.tanh.f_prime(self.c)
+
+        # self.m = n_h_prev+1
+        pcpwo = np.zeros((self.n_h, self.n_h_hat+1))
+        D_o = (self.o-self.o**2) * self.tanh.f(self.c)
+        #phpwo = np.kron(self.state_hat, D_o)
+        phpwo = np.multiply.outer(D_o,self.state_hat)
+        self.papwo_c = np.concatenate([pcpwo, phpwo])
+
+        D_a = (1-self.a**2) * self.i
+        #pcpwa = np.kron(self.state_hat, D_a)
+        pcpwa = np.multiply.outer(D_a,self.state_hat)
+        phpwa = np.multiply.outer(D_a*r,self.state_hat)
+        self.papwa_c = np.concatenate([pcpwa, phpwa])
+
+        D_i = (self.i-self.i**2) * self.a
+        pcpwi = np.multiply.outer(D_i,self.state_hat)
+        phpwi = np.multiply.outer(D_i*r,self.state_hat)
+        self.papwi_c = np.concatenate([pcpwi, phpwi])
+
+        D_f = (self.f-self.f**2) * self.c_prev
+        pcpwf = np.multiply.outer(D_f,self.state_hat)
+        phpwf = np.multiply.outer(D_f*r,self.state_hat)
+        self.papwf_c = np.concatenate([pcpwf, phpwf])
+
+        self.papw_c = np.concatenate([self.papwf_c,self.papwi_c,self.papwa_c,self.papwo_c],axis=1)

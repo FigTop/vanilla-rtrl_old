@@ -14,8 +14,6 @@ from copy import deepcopy
 from learning_algorithms import Learning_Algorithm, Stochastic_Algorithm,RTRL
 
 
-
-
 class Only_Output_LSTM(RTRL):
     
     def __init__(self, rnn):
@@ -109,7 +107,7 @@ class UORO_LSTM(Stochastic_Algorithm):
 
         for b in self.B_dict:
             if self.B_dict[b] is None:
-                self.B_dict[b] = np.random.normal(0, 1, (self.n_t, self.m)) 
+                self.B_dict[b] = np.random.normal(0, 1, (self.n_h, self.n_h+self.n_in+1)) 
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
@@ -121,12 +119,12 @@ class UORO_LSTM(Stochastic_Algorithm):
                 get_influence_estimate."""
 
         self.rnn.get_a_jacobian() #Get updated network Jacobian
-        self.rnn.update_M_immediate() #Get immediate influence papw
-
-        A_f, B_f = self.get_influence_estimate(self.rnn.papwf,'f')
-        A_i, B_i = self.get_influence_estimate(self.rnn.papwi,'i')
-        A_a, B_a = self.get_influence_estimate(self.rnn.papwa,'a')
-        A_o, B_o = self.get_influence_estimate(self.rnn.papwo,'o')
+        self.rnn.update_compact_M_immediate() #Get immediate influence papw
+        print('self.rnn.papwf: ',self.rnn.papwf_c.shape)
+        A_f, B_f = self.get_influence_estimate(self.rnn.papwf_c,'f')
+        A_i, B_i = self.get_influence_estimate(self.rnn.papwi_c,'i')
+        A_a, B_a = self.get_influence_estimate(self.rnn.papwa_c,'a')
+        A_o, B_o = self.get_influence_estimate(self.rnn.papwo_c,'o')
 
         if update:
             self.A_f, self.B_f = A_f, B_f
@@ -150,6 +148,7 @@ class UORO_LSTM(Stochastic_Algorithm):
 
         #Get random projection of M_immediate onto \nu
         M_projection = (papw.T*self.nu).T 
+        print('M_projection: ',M_projection.shape)
 
         if self.epsilon is not None: #Forward differentiation method
             eps = self.epsilon
@@ -207,8 +206,11 @@ class UORO_LSTM(Stochastic_Algorithm):
         dLdw_i = self.q.dot(self.A_i) * self.B_i
         dLdw_a = self.q.dot(self.A_a) * self.B_a
         dLdw_o = self.q.dot(self.A_o) * self.B_o
-
-        return dLdw_f, dLdw_i, dLdw_a, dLdw_o
+        dLdw = np.concatenate([dLdw_f, dLdw_i, dLdw_a, dLdw_o],axis=1)
+        print('self.B_f',self.B_f.shape)
+        print('dLdw',dLdw.shape)
+        print('q',self.q.shape)
+        return dLdw
 
     def reset_learning(self):
         """Resets learning by re-randomizing the outer product approximation to
@@ -217,6 +219,6 @@ class UORO_LSTM(Stochastic_Algorithm):
         for a in self.A_dict:
             self.A_dict[a]= np.random.normal(0, 1, self.n_t)
         for b in self.B_dict:
-            self.B_dict[b] = np.random.normal(0, 1, (self.n_t, self.m))
+            self.B_dict[b] = np.random.normal(0, 1, (self.n_h, self.n_h+self.n_in+1))
 
     

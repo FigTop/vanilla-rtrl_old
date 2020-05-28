@@ -9,7 +9,7 @@ Created on Mon Sep 10 16:30:58 2018
 import numpy as np
 from network import RNN
 from lstm_network import LSTM
-from lstm_learning_algorithms import RTRL_LSTM, Only_Output_LSTM, UORO_LSTM
+from lstm_learning_algorithms import Only_Output_LSTM, UORO_LSTM
 from simulation import Simulation
 from gen_data import *
 try:
