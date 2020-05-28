@@ -107,7 +107,7 @@ class UORO_LSTM(Stochastic_Algorithm):
 
         for b in self.B_dict:
             if self.B_dict[b] is None:
-                self.B_dict[b] = np.random.normal(0, 1, (self.n_h, self.n_h+self.n_in+1)) 
+                self.B_dict[b] = np.random.normal(0, 1, (self.n_t, self.n_h+self.n_in+1)) 
 
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
