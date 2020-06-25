@@ -175,7 +175,7 @@ class Simulation:
 
             ### --- Clean up --- ###
 
-            self.end_time_step(data)
+            self.end_time_step(data,current_step=i_t)
 
         #At end of run, convert monitor lists into numpy arrays
         self.monitors_to_arrays()
@@ -294,14 +294,16 @@ class Simulation:
                 #print('name,p:',name,p.shape)
                 setattr(rnn, name, p)
 
-    def end_time_step(self, data):
+    def end_time_step(self, data,current_step,mons_update_every = 1):
         """Cleans up after each time step in the time loop."""
 
         #Compute spectral radii if desired
         self.get_radii_and_norms()
 
         #Monitor relevant variables
-        self.update_monitors()
+        if current_step % mons_update_every == 0:
+            
+            self.update_monitors()
 
         #Evaluate model and save if performance is best
         if self.best_model_interval is not None and self.mode == 'train':
@@ -338,6 +340,8 @@ class Simulation:
         if 'rnn.loss_' in self.mons.keys():
             interval = self.report_interval
             avg_loss = sum(self.mons['rnn.loss_'][-interval:])/interval
+            # print('interval: ',interval)
+            # print(len(self.mons['rnn.loss_']))
             loss = 'Average loss: {} \n'.format(avg_loss)
             summary += loss
 

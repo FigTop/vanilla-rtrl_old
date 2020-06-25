@@ -4,11 +4,11 @@
 Created on Mon Sep 10 16:30:58 2018
 @author: omarschall
 """
-
+#%%
 import numpy as np
 from network import RNN
 from lstm_network import LSTM
-from lstm_learning_algorithms import Only_Output_LSTM,UORO_LSTM
+from lstm_learning_algorithms import *
 from simulation import Simulation
 from gen_data import *
 try:
@@ -74,10 +74,11 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_out,
             output=softmax,
             loss=softmax_cross_entropy)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.001)
-learn_alg = RTRL(lstm)
+optimizer = Stochastic_Gradient_Descent(lr=0.003)
+learn_alg = UORO_LSTM(lstm)
+#learn_alg = RTRL(lstm)
 comp_algs = []
-monitors = ['rnn.loss_', 'rnn.y_hat','rnn.h', 'rnn.c','grads_list','rnn.f','rnn.i','rnn.a','rnn.o']
+monitors = ['rnn.loss_']
 
 sim = Simulation(lstm)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -151,9 +152,18 @@ if os.environ['HOME'] == '/home/oem214':
 
 
 
-
-
-
+#%%
+import matplotlib.pyplot as plt
+#np.save('UORO_papw',sim.mons['rnn.papw'])
+#np.save('UORO_papwc',sim.mons['rnn.papw_c'])
+#plt.spy(sim.mons['rnn.papwf'][2000][:,-96:])
+# papwf = sim.mons['rnn.papw'][0][:,:1120]
+# papwf
+# plt.spy(sim.mons['rnn.papw'][0][:,:1120])
+# plt.spy(sim.mons['rnn.papw'][0][:,1120:2240])
+# plt.spy(sim.mons['rnn.papw'][0][:,2240:3360])
+# plt.spy(sim.mons['rnn.papw'][0][:,3360:])
+#sim.mons['rnn.papwf'][19999]
 
 # n_in = task.n_in
 # n_hidden = 64
@@ -197,3 +207,6 @@ if os.environ['HOME'] == '/home/oem214':
 
 
 
+
+
+# %%

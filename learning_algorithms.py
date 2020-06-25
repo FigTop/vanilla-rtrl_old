@@ -328,6 +328,7 @@ class UORO(Stochastic_Algorithm):
         if self.B is None:
             self.B = np.random.normal(0, 1, (self.n_h, self.m))
 
+     
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
         approximation of the influence matrix by A and B.
@@ -382,6 +383,8 @@ class UORO(Stochastic_Algorithm):
             B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
             M_norm = norm(M_projection)
+           
+
             self.p0 = np.sqrt(B_norm/(A_norm + eps)) + eps
             self.p1 = np.sqrt(M_norm/(np.sqrt(self.n_h) + eps)) + eps
         else: #Backpropagation method
@@ -391,6 +394,10 @@ class UORO(Stochastic_Algorithm):
             B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
             M_norm = norm(M_projection)
+            # print('A_norm: ', A_norm)
+            # print('B_norm: ', B_norm)
+            # print('M_norm: ', M_norm)
+            
             self.p0 = np.sqrt(B_norm/A_norm)
             self.p1 = np.sqrt(M_norm/np.sqrt(self.n_h))
 

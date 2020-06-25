@@ -90,7 +90,7 @@ data = task.gen_data(20000, 10000)
 
 
 n_in = task.n_in
-n_hidden = 64
+n_hidden = 32
 n_out = task.n_out
 
 W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
@@ -112,8 +112,8 @@ rnn = RNN(W_rec, W_out, b_rec, b_out,
 
 optimizer =  Stochastic_Gradient_Descent(lr=0.001)
 
-learn_alg = RTRL(rnn)
-learn_alg = Efficient_BPTT(rnn, T_truncation=10)
+learn_alg = UORO(rnn)
+#learn_alg = Efficient_BPTT(rnn, T_truncation=10)
 
 comp_algs = []
 monitors = ['rnn.loss_']

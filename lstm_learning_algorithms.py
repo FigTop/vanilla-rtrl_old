@@ -43,7 +43,7 @@ class Stochastic_Algorithm(Learning_Algorithm):
             nu = np.random.uniform(-1, 1, self.n_nu)
 
         return nu
-
+ 
 
 class UORO_LSTM(Stochastic_Algorithm):
     """Implements the Unbiased Online Recurrent Optimization (UORO) algorithm
@@ -92,23 +92,16 @@ class UORO_LSTM(Stochastic_Algorithm):
                  from. Default is 'discrete'."""
 
         self.name = 'UORO' #Default algorithm name
-        allowed_kwargs_ = {'epsilon', 'P0', 'P1', 'A_f', 'B_f','A_i', 'B_i',
+        allowed_kwargs_ = {'epsilon', 'P0', 'P1','A','B', 'A_f', 'B_f','A_i', 'B_i',
         'A_a', 'B_a','A_o', 'B_o', 'nu_dist'}
         super().__init__(rnn, allowed_kwargs_, **kwargs)
         self.n_nu = self.n_t 
 
         #Initialize A and B arrays
-        self.A_dict = {'f':self.A_f,'i':self.A_i,'a':self.A_a,'o':self.A_o}
-        self.B_dict = {'f':self.B_f, 'i':self.B_i,'a':self.B_a,'o':self.B_o}
+        self.A = np.random.normal(0, 1, self.n_t) 
+        self.B = np.random.normal(0, 1, (self.n_h, (self.n_h+self.n_in+1)*4)) 
 
-        for a in self.A_dict:
-            if self.A_dict[a] is None:
-                self.A_dict[a] = np.random.normal(0, 1, self.n_t) 
-
-        for b in self.B_dict:
-            if self.B_dict[b] is None:
-                self.B_dict[b] = np.random.normal(0, 1, (self.n_t, self.n_h+self.n_in+1)) 
-
+            
     def update_learning_vars(self, update=True):
         """Implements Eqs. (1), (2), (3), and (4) to update the outer product
         approximation of the influence matrix by A and B.
@@ -120,19 +113,17 @@ class UORO_LSTM(Stochastic_Algorithm):
 
         self.rnn.get_a_jacobian() #Get updated network Jacobian
         self.rnn.update_compact_M_immediate() #Get immediate influence papw
-        print('self.rnn.papwf: ',self.rnn.papwf_c.shape)
-        A_f, B_f = self.get_influence_estimate(self.rnn.papwf_c,'f')
-        A_i, B_i = self.get_influence_estimate(self.rnn.papwi_c,'i')
-        A_a, B_a = self.get_influence_estimate(self.rnn.papwa_c,'a')
-        A_o, B_o = self.get_influence_estimate(self.rnn.papwo_c,'o')
+        
+        self.rnn.update_M_immediate()
+
+
+        A, B = self.get_influence_estimate(self.rnn.papw_c)
 
         if update:
-            self.A_f, self.B_f = A_f, B_f
-            self.A_i, self.B_i = A_i, B_i
-            self.A_a, self.B_a = A_a, B_a
-            self.A_o, self.B_o = A_o, B_o
+            self.A, self.B = A, B
 
-    def get_influence_estimate(self,papw,gate):
+
+    def get_influence_estimate(self,papw):
         """Generates one random outer-product estimate of the influence matrix.
 
         Samples a random vector nu of iid samples with 0 mean from a
@@ -145,16 +136,23 @@ class UORO_LSTM(Stochastic_Algorithm):
 
         #Sample random vector
         self.nu = self.sample_nu()
-
+        
+        #print('M_projection_original: ', M_projection_original.shape, M_projection_original)
+        #print('M_projection_origianl: ', norm(M_projection_original))ß
         #Get random projection of M_immediate onto \nu
-        M_projection = (papw.T*self.nu).T 
-        print('M_projection: ',M_projection.shape)
+        M_projection_o = (papw.T*self.nu).T 
+        
+        M_projection = M_projection_o[:32,:] + M_projection_o[32:,:]
+        
+        #print('M_projection: ', M_projection.shape, M_projection)
+    
+        
 
         if self.epsilon is not None: #Forward differentiation method
             eps = self.epsilon
             #Get perturbed state in direction of A
-            self.c_perturbed = self.rnn.c_prev + eps * self.A_dict[gate][:self.n_t]
-            self.h_perturbed = self.rnn.h_prev + eps * self.A_dict[gate][self.n_t:]
+            self.c_perturbed = self.rnn.c_prev + eps * self.A[:self.n_t]
+            self.h_perturbed = self.rnn.h_prev + eps * self.A[self.n_t:]
             #Get hypothetical next states from this perturbation
             self.a_perturbed_next = self.rnn.next_state(self.rnn.x,
                                                         self.c_perturbed,
@@ -164,19 +162,20 @@ class UORO_LSTM(Stochastic_Algorithm):
             c_h = np.concatenate([self.rnn.c, self.rnn.h])
             self.A_forwards = (self.a_perturbed_next - c_h) / eps
             #Calculate scaling factors
-            B_norm = norm(self.B_dict[gate])
+            B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
             M_norm = norm(M_projection)
             self.p0 = np.sqrt(B_norm/(A_norm + eps)) + eps
             self.p1 = np.sqrt(M_norm/(np.sqrt(self.n_t) + eps)) + eps
         else: #Backpropagation method
             #Get forward-propagated A
-            self.A_forwards = self.rnn.a_J.dot(self.A_dict[gate])
+            self.A_forwards = self.rnn.a_J.dot(self.A)
             #Calculate scaling factors
-            B_norm = norm(self.B_dict[gate])
+            B_norm = norm(self.B)
             A_norm = norm(self.A_forwards)
             M_norm = norm(M_projection)
             self.p0 = np.sqrt(B_norm/A_norm)
+
             self.p1 = np.sqrt(M_norm/np.sqrt(self.n_t))
 
         #Override with fixed P0 and P1 if given
@@ -187,8 +186,8 @@ class UORO_LSTM(Stochastic_Algorithm):
 
         #Update outer product approximation
         A = self.p0 * self.A_forwards + self.p1 * self.nu
-        B = (1/self.p0) * self.B_dict[gate] + (1 / self.p1) * M_projection
-
+        B = (1/self.p0) * self.B + (1 / self.p1) * M_projection
+        #print('p0',self.p0)
         return A, B
 
     def get_rec_grads(self):
@@ -202,23 +201,14 @@ class UORO_LSTM(Stochastic_Algorithm):
         Returns:
             An array of shape (n_h, m) representing the recurrent gradient."""
 
-        dLdw_f = self.q.dot(self.A_f) * self.B_f
-        dLdw_i = self.q.dot(self.A_i) * self.B_i
-        dLdw_a = self.q.dot(self.A_a) * self.B_a
-        dLdw_o = self.q.dot(self.A_o) * self.B_o
-        dLdw = np.concatenate([dLdw_f, dLdw_i, dLdw_a, dLdw_o],axis=1)
-        print('self.B_f',self.B_f.shape)
-        print('dLdw',dLdw.shape)
-        print('q',self.q.shape)
+        dLdw = self.q.dot(self.A) * self.B
+
         return dLdw
 
     def reset_learning(self):
         """Resets learning by re-randomizing the outer product approximation to
         random gaussian samples."""
 
-        for a in self.A_dict:
-            self.A_dict[a]= np.random.normal(0, 1, self.n_t)
-        for b in self.B_dict:
-            self.B_dict[b] = np.random.normal(0, 1, (self.n_h, self.n_h+self.n_in+1))
+        self.A = np.random.normal(0, 1, self.n_t) 
+        self.B = np.random.normal(0, 1, (self.n_h, (self.n_h+self.n_in+1)*4)) 
 
-    
