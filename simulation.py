@@ -136,11 +136,13 @@ class Simulation:
         self.report_accuracy = False
         self.report_loss = False
         self.comp_algs = []
-        self.report_interval = max(self.total_time_steps//10, 1)
+        self.report_interval = max(self.total_time_steps//100, 1)
         self.update_interval = 1
         self.i_start = 0
         self.i_end = self.total_time_steps
         self.sigma = 0
+        self.avg_loss_list =[]
+
 
         #Overwrite defaults with any provided keyword args
         self.__dict__.update(kwargs)
@@ -359,7 +361,7 @@ class Simulation:
                 test_loss = np.mean(test_sim.mons['rnn.loss_'])
                 loss_summary = 'Test loss: {} \n'.format(test_loss)
                 summary += loss_summary
-
+        self.avg_loss_list.append(avg_loss)
         print(summary.format(progress, time_elapsed))
 
     def update_monitors(self):

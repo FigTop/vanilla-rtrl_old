@@ -49,8 +49,8 @@ if os.environ['HOME'] == '/Users/yanqixu':
     save_dir = '/Users/yanqixu//Documents/1.0.MasterCDS/OnlineRNN/vanilla-rtrl/library'
     np.random.seed(0)
 
-task = Add_Task(6, 10, deterministic=True, tau_task=1)
-data = task.gen_data(20000, 10000)
+task = Add_Task(20, 50, deterministic=True, tau_task=1)
+data = task.gen_data(100000, 10000)
 
 # n_in = task.n_in
 # n_h = 32
@@ -111,9 +111,9 @@ rnn = RNN(W_rec, W_out, b_rec, b_out,
           loss=softmax_cross_entropy)
 
 optimizer =  Stochastic_Gradient_Descent(lr=0.001)
-
-learn_alg = UORO(rnn)
-#learn_alg = Efficient_BPTT(rnn, T_truncation=10)
+#learn_alg = Only_Output_Weights(rnn)
+#learn_alg = UORO(rnn)
+learn_alg = Efficient_BPTT(rnn, T_truncation=100)
 
 comp_algs = []
 monitors = ['rnn.loss_']

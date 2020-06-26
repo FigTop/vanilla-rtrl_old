@@ -141,8 +141,8 @@ class UORO_LSTM(Stochastic_Algorithm):
         #print('M_projection_origianl: ', norm(M_projection_original))ß
         #Get random projection of M_immediate onto \nu
         M_projection_o = (papw.T*self.nu).T 
-        
-        M_projection = M_projection_o[:32,:] + M_projection_o[32:,:]
+ 
+        M_projection = M_projection_o[:self.n_h,:] + M_projection_o[self.n_h:,:]
         
         #print('M_projection: ', M_projection.shape, M_projection)
     
