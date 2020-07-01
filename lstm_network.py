@@ -4,7 +4,7 @@
 import numpy as np
 from utils import *
 from functions import *
-
+from scipy.special import expit, logit
 
 class LSTM:
     """ Long short-term memory network.
@@ -220,24 +220,24 @@ class LSTM:
             self.h_hat_prev = np.append(self.h_prev, self.x, axis=0)
             self.c_prev = np.copy(self.c)
 
-            self.f = self.sigmoid.f(self.W_f.dot(self.h_hat_prev)+self.b_f)
-            self.i = self.sigmoid.f(self.W_i.dot(self.h_hat_prev)+self.b_i)
+            self.f = expit(self.W_f.dot(self.h_hat_prev)+self.b_f)
+            self.i = expit(self.W_i.dot(self.h_hat_prev)+self.b_i)
             self.a = self.tanh.f(self.W_a.dot(self.h_hat_prev)+self.b_a)
 
             self.c = self.a * self.i + self.f * self.c_prev
-            self.o = self.sigmoid.f(self.W_f.dot(self.h_hat_prev)+self.b_o)
+            self.o = expit(self.W_f.dot(self.h_hat_prev)+self.b_o)
             self.h = self.tanh.f(self.c) * self.o
             self.state = np.concatenate([self.c,self.h])
 
         else:
             h_hat_prev = np.append(h, self.x, axis=0)
 
-            f = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_f)
-            i = self.sigmoid.f(self.W_i.dot(h_hat_prev)+self.b_i)
+            f = expit(self.W_f.dot(h_hat_prev)+self.b_f)
+            i = expit(self.W_i.dot(h_hat_prev)+self.b_i)
             a = self.tanh.f(self.W_a.dot(h_hat_prev)+self.b_a)
 
             c = a * i + f * c
-            o = self.sigmoid.f(self.W_f.dot(h_hat_prev)+self.b_o)
+            o = expit(self.W_f.dot(h_hat_prev)+self.b_o)
             h = self.tanh.f(c) * o
 
             return np.concatenate([c, h])
@@ -281,13 +281,13 @@ class LSTM:
 
 
         h_hat_prev = np.append(h, x, axis=0)
-        f = self.sigmoid.f(self.W_f.dot(h_hat_prev) + self.b_f)
-        i = self.sigmoid.f(self.W_i.dot(h_hat_prev) + self.b_i)
+        f = expit(self.W_f.dot(h_hat_prev) + self.b_f)
+        i = expit(self.W_i.dot(h_hat_prev) + self.b_i)
         a = self.tanh.f(self.W_a.dot(h_hat_prev) + self.b_a)
 
         c_prev = c
         c = a * i + f * c_prev
-        o = self.sigmoid.f(self.W_f.dot(h_hat_prev) + self.b_o)
+        o = expit(self.W_f.dot(h_hat_prev) + self.b_o)
         h = self.tanh.f(c) * o
 
 

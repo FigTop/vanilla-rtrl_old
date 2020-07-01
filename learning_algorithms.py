@@ -62,9 +62,9 @@ class Learning_Algorithm:
 
         #Define basic learning algorithm properties
         self.rnn = rnn
-        self.n_in = self.rnn.n_in
-        self.n_h = self.rnn.n_h
-        self.n_t = self.rnn.n_t
+        self.n_in = self.rnn.n_in #2
+        self.n_h = self.rnn.n_h  #32
+        self.n_t = self.rnn.n_t  #64
         self.n_out = self.rnn.n_out
         self.m = self.rnn.m
         self.q = np.zeros(self.n_t)

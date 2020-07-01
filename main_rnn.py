@@ -50,7 +50,7 @@ if os.environ['HOME'] == '/Users/yanqixu':
     np.random.seed(0)
 
 task = Add_Task(20, 50, deterministic=True, tau_task=1)
-data = task.gen_data(100000, 10000)
+data = task.gen_data(800000, 10000)
 
 # n_in = task.n_in
 # n_h = 32

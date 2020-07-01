@@ -136,7 +136,7 @@ class Simulation:
         self.report_accuracy = False
         self.report_loss = False
         self.comp_algs = []
-        self.report_interval = max(self.total_time_steps//100, 1)
+        self.report_interval = max(self.total_time_steps//50, 1)
         self.update_interval = 1
         self.i_start = 0
         self.i_end = self.total_time_steps
@@ -289,6 +289,7 @@ class Simulation:
         #Only update on schedule (default update_interval=1)
         if self.i_t%self.update_interval == 0:
             #Get updated parameters
+
             rnn.params = self.optimizer.get_updated_params(rnn.params,
                                                            self.grads_list)
             #rnn.W_rec, rnn.b_rec, rnn.W_out, rnn.b_out = rnn.params
