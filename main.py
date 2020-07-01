@@ -49,7 +49,7 @@ if os.environ['HOME'] == '/Users/yanqixu':
     np.random.seed(0)
 
 task = Add_Task(6, 10, deterministic=True, tau_task=1)
-data = task.gen_data(100000, 10000) #10000000
+data = task.gen_data(1000000, 10000) #10000000
 
 n_in = task.n_in
 n_h = 32
@@ -74,14 +74,14 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_out,
             output=softmax,
             loss=softmax_cross_entropy)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.1)
+optimizer = Stochastic_Gradient_Descent(lr=0.0001)
 #learn_alg = Only_Output_LSTM(lstm)
-#learn_alg = UORO_LSTM(lstm)
-#learn_alg = RTRL(lstm) 0.1
-learn_alg = KF_RTRL_LSTM(lstm)
+learn_alg = UORO_LSTM(lstm)
+#learn_alg = RTRL(lstm) #0.1
+#learn_alg = KF_RTRL_LSTM(lstm)
 
 comp_algs = []
-monitors = ['rnn.loss_','P0','A']
+monitors = ['rnn.loss_']
 
 sim = Simulation(lstm)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
@@ -160,7 +160,7 @@ if os.environ['HOME'] == '/home/oem214':
 #%%
 import matplotlib.pyplot as plt
 
-plt.plot(sim.mons['rnn.A'])
+plt.plot(sim.mons['rnn.h'])
 
 #np.save('UORO_papw',sim.mons['rnn.papw'])
 #np.save('UORO_papwc',sim.mons['rnn.papw_c'])

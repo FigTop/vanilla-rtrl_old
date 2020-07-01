@@ -110,10 +110,10 @@ rnn = RNN(W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer =  Stochastic_Gradient_Descent(lr=0.001)
-#learn_alg = Only_Output_Weights(rnn)
+optimizer =  Stochastic_Gradient_Descent(lr=0.01)
+learn_alg = Only_Output_Weights(rnn)
 #learn_alg = UORO(rnn)
-learn_alg = Efficient_BPTT(rnn, T_truncation=100)
+#learn_alg = Efficient_BPTT(rnn, T_truncation=100)
 
 comp_algs = []
 monitors = ['rnn.loss_']
