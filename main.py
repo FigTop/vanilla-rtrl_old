@@ -25,7 +25,7 @@ import pickle
 from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 
-if os.environ['HOME'] == '/home/oem214':
+if os.environ['HOME'] == '/home/yx2105':
     n_seeds = 15
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
@@ -52,7 +52,7 @@ task = Add_Task(6, 10, deterministic=True, tau_task=1)
 data = task.gen_data(1000000, 10000) #10000000
 
 n_in = task.n_in
-n_h = 32
+n_h = 16
 n_out = task.n_out
 n_h_hat = n_h + n_in
 n_t = 2 * n_h
@@ -74,7 +74,8 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_out,
             output=softmax,
             loss=softmax_cross_entropy)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.0001)
+optimizer = SGD_Momentum(lr = 0.001, mu=0.005, clip_norm=0.3) #Stochastic_Gradient_Descent(lr=0.0001)
+#optimizer = Adam(lr = 0.001)
 #learn_alg = Only_Output_LSTM(lstm)
 learn_alg = UORO_LSTM(lstm)
 #learn_alg = RTRL(lstm) #0.1
@@ -113,6 +114,9 @@ test_sim.run(data,
 test_loss = np.mean(test_sim.mons['rnn.loss_'])
 processed_data = {'test_loss': test_loss}
 
+
+
+
 if os.environ['HOME'] == '/Users/omarschall':
 
     #plot_filtered_signals([sim.mons['net.loss_']])
@@ -142,18 +146,21 @@ if os.environ['HOME'] == '/Users/omarschall':
               [np.amin(y), np.amax(y)], 'k', linestyle='--')
     plt.axis('equal')
 
-if os.environ['HOME'] == '/home/oem214':
+if os.environ['HOME'] == '/home/yx2105' and file_exists:
 
-    result = {'sim': sim, 'i_seed': i_seed, 'task': task,
-              'config': params, 'i_config': i_config, 'i_job': i_job,
-              'processed_data': processed_data}
+    # result = {'sim': sim, 'i_seed': i_seed, 'task': task,
+    #           'config': params, 'i_config': i_config, 'i_job': i_job,
+    #           'processed_data': processed_data}
+    result['i_job'] = i_job
+    result['config'] = params
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
-    save_path = os.path.join(save_dir, 'rnn_'+str(i_job))
+    save_path = os.path.join(save_dir, 'result_'+str(i_job))
 
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
+
 
 
 

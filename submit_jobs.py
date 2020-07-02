@@ -11,29 +11,29 @@ import os
 import numpy as np
 import pickle
 
-def clear_results(job_file, data_path='/Users/omarschall/cluster_results/vanilla-rtrl/'):
+def clear_results(job_file, data_path='/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/'):
 
     job_name = job_file.split('/')[-1].split('.')[0]
     data_dir = os.path.join(data_path, job_name)
 
     subprocess.run(['rm', data_dir+'/*_*'])
 
-def retrieve_results(job_file, scratch_path='/scratch/oem214/vanilla-rtrl/',
-               username='oem214', domain='prince.hpc.nyu.edu'):
+def retrieve_results(job_file, scratch_path='/scratch/yx2105/vanilla-rtrl/',
+               username='yx2105', domain='prince.hpc.nyu.edu'):
 
     job_name = job_file.split('/')[-1].split('.')[0]
-    data_path = '/Users/omarschall/cluster_results/vanilla-rtrl/'
+    data_path = '/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/cluster_results/'
     data_dir = os.path.join(data_path, job_name)
 
     source_path = username+'@'+domain+':'+scratch_path+'library/'+job_name+'/'
 
     subprocess.run(['rsync', '-aav', source_path, data_dir])
 
-def submit_job(job_file, n_array, scratch_path='/scratch/oem214/vanilla-rtrl/',
-               username='oem214', domain='prince.hpc.nyu.edu'):
+def submit_job(job_file, n_array, scratch_path='/scratch/yx2105/vanilla-rtrl/',
+               username='yx2105', domain='prince.hpc.nyu.edu'):
 
     job_name = job_file.split('/')[-1]#
-    data_path = '/Users/omarschall/cluster_results/vanilla-rtrl/'
+    data_path = '/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/cluster_results/'
     data_dir = os.path.join(data_path, job_name.split('.')[0])
 
     if not os.path.exists(data_dir):
@@ -47,23 +47,23 @@ def submit_job(job_file, n_array, scratch_path='/scratch/oem214/vanilla-rtrl/',
     subprocess.run(['rsync',
                     '-aav',
                     '--exclude', '.git',
-                    '/Users/omarschall/vanilla-rtrl/',
+                    '/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/',
                     code_dir])
 
     subprocess.run(['rsync',
                     '-aav',
                     '--exclude', '.git',
-                    '/Users/omarschall/vanilla-rtrl/',
+                    '/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/',
                     username+'@'+domain+':'+scratch_path])
 
-    subprocess.run(['scp', job_file, username+'@'+domain+':/home/oem214/'])
+    subprocess.run(['scp', job_file, username+'@'+domain+':/home/yx2105/'])
 
     subprocess.run(['ssh', username+'@'+domain,
                     'sbatch', '--array=1-'+str(n_array), job_name])
 
 def write_job_file(job_name,
-                   sbatch_path='/Users/omarschall/vanilla-rtrl/job_scripts/',
-                   scratch_path='/scratch/oem214/vanilla-rtrl/',
+                   sbatch_path='/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/job_scripts/',
+                   scratch_path='/scratch/yx2105/vanilla-rtrl/',
                    nodes=1, ppn=1, mem=16, n_hours=24):
     """
     Create a job file.
@@ -110,7 +110,7 @@ def write_job_file(job_name,
             + 'SAVEPATH={}library/{}\n'.format(scratch_path, job_name)
             + 'export SAVEPATH\n'
             + 'module load python3/intel/3.6.3\n'
-            + 'cd /home/oem214/py3.6.3\n'
+            + 'cd /home/yx2105/py3.6.3\n'
             + 'source py3.6.3/bin/activate\n'
             + 'cd {}\n'.format(scratch_path)
             + 'pwd > {}.log\n'.format(log_name)
@@ -124,7 +124,7 @@ def write_job_file(job_name,
 def process_results(job_file):
 
     job_name = job_file.split('/')[-1].split('.')[0]
-    data_path = os.path.join('/Users/omarschall/cluster_results/vanilla-rtrl/',
+    data_path = os.path.join('/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/cluster_results/',
                              job_name)
     dir_list = os.listdir(data_path)
     dir_list.pop(dir_list.index('code'))
