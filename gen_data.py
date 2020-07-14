@@ -192,8 +192,12 @@ class Sequential_MNIST(Task):
         self.pixels_per_time_step = pixels_per_time_step
         self.inputs_per_image = 784 // self.pixels_per_time_step
 
-        with open('library/mnist.pkl', 'rb') as f:
-            mnist = pickle.load(f)
+        try:
+            with open('library/mnist.pkl', 'rb') as f:
+                mnist = pickle.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError('Must download mnist pickle file and' +
+                                    'store in ./library/, see class docs')
 
         self.mnist_images = np.concatenate([mnist['training_images'],
                                             mnist['test_images']], axis=0)
