@@ -22,10 +22,14 @@ import pickle
 from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 
+### --- Define task and generate training and test data --- ###
+
 task = Add_Task(5, 9, deterministic=True, tau_task=1)
 N_train = 30000
 N_test = 10000
 data = task.gen_data(N_train, N_test)
+
+### --- Initialize RNN object --- ###
 
 n_in = task.n_in
 n_hidden = 32
@@ -47,20 +51,25 @@ rnn = RNN(W_in, W_rec, W_out, b_rec, b_out,
           output=softmax,
           loss=softmax_cross_entropy)
 
-optimizer = Stochastic_Gradient_Descent(lr=0.03)
-learn_alg = RTRL(rnn, L2_reg=0.0001)
+### --- Choose optimizer and learning algorithm --- ###
 
-comp_algs = []
+optimizer = Stochastic_Gradient_Descent(lr=0.03)
+learn_alg = RTRL(rnn)
+
+
+### --- Pick variables to track and run simulation --- ###
+
 monitors = ['rnn.loss_']
 
 sim = Simulation(rnn)
 sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
-        comp_algs=comp_algs,
         monitors=monitors,
         verbose=True,
         report_accuracy=False,
         report_loss=True,
         checkpoint_interval=None)
+
+### --- Plot filtered training loss --- ###
 
 plt.figure()
 n_filter = 2000
@@ -77,6 +86,8 @@ test_sim.run(data,
               mode='test',
               monitors=['rnn.loss_', 'rnn.y_hat', 'rnn.a'],
               verbose=False)
+
+### --- Plot predictions and labels during test run --- ###
 
 plt.figure()
 plt.plot(test_sim.mons['rnn.y_hat'][:100,0], color='C3')
