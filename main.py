@@ -15,7 +15,6 @@ try:
 except ModuleNotFoundError:
     pass
 from optimizers import *
-from analysis_funcs import *
 from learning_algorithms import *
 from functions import *
 import os
