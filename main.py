@@ -17,9 +17,6 @@ except ModuleNotFoundError:
 from optimizers import *
 from learning_algorithms import *
 from functions import *
-import os
-import pickle
-from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 
 ### --- Define task and generate training and test data --- ###
@@ -72,7 +69,7 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
 ### --- Plot filtered training loss --- ###
 
 plt.figure()
-n_filter = 2000
+n_filter = 100
 filtered_loss = uniform_filter1d(sim.mons['rnn.loss_'], n_filter)
 plt.plot(filtered_loss)
 plt.xlabel('training time (steps)')
