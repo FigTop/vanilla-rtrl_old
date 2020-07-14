@@ -51,8 +51,11 @@ class Optimizer:
             return self.lr_
 
 class Adam(Optimizer):
+    """Note: code based on implementation from
+    https://gist.github.com/Harhro94/3b809c5ae778485a9ea9d253c4bfc90a, which
+    now appears to be a dead link.
     
-    """Adam optimizer.
+    Adam optimizer.
     Default parameters follow those provided in the original paper.
     # Arguments
         lr: float >= 0. Learning rate.
@@ -61,8 +64,8 @@ class Adam(Optimizer):
         epsilon: float >= 0. Fuzz factor.
         decay: float >= 0. Learning rate decay over each update.
     # References
-        - [Adam - A Method for Stochastic Optimization](http://arxiv.org/abs/1412.6980v8)
-    """
+        - [Adam - A Method for Stochastic Optimization]
+        (http://arxiv.org/abs/1412.6980v8)"""
 
     def __init__(self, lr=0.001, beta_1=0.9, beta_2=0.999,
                  epsilon=1e-8, decay=0., **kwargs):
@@ -88,11 +91,6 @@ class Adam(Optimizer):
         if hasattr(self, 'clipnorm') and self.clipnorm > 0:
             norm = np.sqrt(sum([np.sum(np.square(g)) for g in grads]))
             grads = [self.clip_norm(g, norm) for g in grads]
-            
-        '''
-        if hasattr(self, 'clipvalue') and self.clipvalue > 0:
-            grads = [K.clip(g, -self.clipvalue, self.clipvalue) for g in grads]
-        '''
         
         lr = self.lr
         if self.initial_decay > 0:
