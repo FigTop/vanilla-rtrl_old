@@ -306,7 +306,8 @@ class Sensorimotor_Mapping(Task):
         return X, Y
 
 class Flip_Flop_Task(Task):
-    """Generates data for the N-bit flip-flop task."""
+    """Generates data for the N-bit flip-flop task from Sussillo and Barak,
+    2013."""
 
     def __init__(self, n_bit, p_flip, tau_task=1):
 
