@@ -10,10 +10,7 @@ import numpy as np
 from network import *
 from simulation import *
 from gen_data import *
-try:
-    import matplotlib.pyplot as plt
-except ModuleNotFoundError:
-    pass
+import matplotlib.pyplot as plt
 from optimizers import *
 from learning_algorithms import *
 from functions import *
