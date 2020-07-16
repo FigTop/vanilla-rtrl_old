@@ -248,6 +248,7 @@ class RTRL(Learning_Algorithm):
         matrix form."""
 
         dLdw = self.q.dot(self.dadw).reshape((self.n_h, self.m), order='F')
+        
         return dLdw
 
     def reset_learning(self):

@@ -25,34 +25,36 @@ import pickle
 from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 
+print('Home env: ',os.environ['HOME'] )
+
 if os.environ['HOME'] == '/home/yx2105':
-    n_seeds = 15
+    n_seeds = 1
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator()
+    macro_configs = config_generator(units = [16,32,64], lr = [0.0001],optimizer=['Adam'],algorithm = ['uoro'], beta=[0.9],T=[20])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
     i_config = i_job//n_seeds
-    np.random.seed(i_job)
+    np.random.seed(0)
 
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
 if os.environ['HOME'] == '/Users/yanqixu':
-    params = {}
+    params = {'optimizer':'SGD', 'algorithm':'F-BPTT', 'lr':0.1, 'units':64,'T':50,'beta':0.9}
     i_job = 0
-    save_dir = '/Users/yanqixu//Documents/1.0.MasterCDS/OnlineRNN/vanilla-rtrl/library'
+    save_dir = '/Users/yanqixu/Documents/1.0.MasterCDS/OnlineRNN/vanilla-rtrl/library'
     np.random.seed(0)
 
-task = Add_Task(6, 10, deterministic=True, tau_task=1)
-data = task.gen_data(1000000, 10000) #10000000
+task = Add_Task(3, 5, deterministic=True, tau_task=1)
+data = task.gen_data(50000, 10000) #10000000
 
 n_in = task.n_in
-n_h = 16
+n_h = params['units']
 n_out = task.n_out
 n_h_hat = n_h + n_in
 n_t = 2 * n_h
@@ -74,13 +76,29 @@ lstm = LSTM(W_f, W_i, W_a, W_o, W_out,
             output=softmax,
             loss=softmax_cross_entropy)
 
-optimizer = SGD_Momentum(lr = 0.001, mu=0.005, clip_norm=0.3) #Stochastic_Gradient_Descent(lr=0.0001)
-#optimizer = Adam(lr = 0.001)
-#learn_alg = Only_Output_LSTM(lstm)
-learn_alg = UORO_LSTM(lstm)
-#learn_alg = RTRL(lstm) #0.1
-#learn_alg = KF_RTRL_LSTM(lstm)
+if params['optimizer'] == 'SGD':
+    optimizer = Stochastic_Gradient_Descent(params['lr'])
+elif params['optimizer'] == 'SGDmom':
+    optimizer = SGD_Momentum(params['lr'], mu=0.01, clip_norm=0.3) #mu=0.01
+elif params['optimizer'] == 'Adam':
+    optimizer = Adam(lr = params['lr'],beta_1=params['beta'])
 
+
+if params['algorithm'] == 'output':
+    learn_alg = Only_Output_LSTM(lstm)
+elif params['algorithm'] == 'uoro':
+    learn_alg = UORO_LSTM(lstm,nu_dist='gaussian')
+elif params['algorithm'] == 'rtrl':
+    learn_alg = RTRL(lstm) #0.1
+elif params['algorithm'] == 'kf':
+    learn_alg = KF_RTRL_LSTM(lstm)
+elif params['algorithm'] == 'E-BPTT':
+    learn_alg = Efficient_BPTT_LSTM(lstm, T_truncation=params['T'])
+elif params['algorithm'] == 'F-BPTT':
+    learn_alg = Future_BPTT_LSTM(lstm, T_truncation=params['T'])
+
+
+# run algorithm
 comp_algs = []
 monitors = ['rnn.loss_']
 
@@ -92,27 +110,6 @@ sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
         report_accuracy=False,
         report_loss=True,
         checkpoint_interval=None)
-
-
-
-#Filter losses
-#loss = sim.mons['net.loss_']
-#downsampled_loss = np.nanmean(loss.reshape((-1, 10000)), axis=1)
-#filtered_loss = uniform_filter1d(downsampled_loss, 10)
-#processed_data = {'filtered_loss': filtered_loss}
-#del(sim.mons['net.loss_'] )
-
-#Get validation losses
-np.random.seed(1)
-n_test = 10000
-data = task.gen_data(0, n_test)
-test_sim = deepcopy(sim)
-test_sim.run(data,
-             mode='test',
-             monitors=['rnn.loss_'],
-             verbose=False)
-test_loss = np.mean(test_sim.mons['rnn.loss_'])
-processed_data = {'test_loss': test_loss}
 
 
 
@@ -146,13 +143,13 @@ if os.environ['HOME'] == '/Users/omarschall':
               [np.amin(y), np.amax(y)], 'k', linestyle='--')
     plt.axis('equal')
 
-if os.environ['HOME'] == '/home/yx2105' and file_exists:
+if os.environ['HOME'] == '/home/yx2105':
 
-    # result = {'sim': sim, 'i_seed': i_seed, 'task': task,
-    #           'config': params, 'i_config': i_config, 'i_job': i_job,
-    #           'processed_data': processed_data}
-    result['i_job'] = i_job
-    result['config'] = params
+    result = {'sim': sim, 'i_seed': i_seed, 'task': task,
+              'config': params, 'i_config': i_config, 'i_job': i_job,
+              'processed_data': None}
+    result['average_loss'] = sim.avg_loss_list
+
     save_dir = os.environ['SAVEPATH']
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -166,8 +163,8 @@ if os.environ['HOME'] == '/home/yx2105' and file_exists:
 
 #%%
 import matplotlib.pyplot as plt
-
-plt.plot(sim.mons['rnn.h'])
+#sim.mons
+plt.plot(sim.mons['rnn.f'][:20])
 
 #np.save('UORO_papw',sim.mons['rnn.papw'])
 #np.save('UORO_papwc',sim.mons['rnn.papw_c'])
@@ -175,46 +172,10 @@ plt.plot(sim.mons['rnn.h'])
 # papwf = sim.mons['rnn.papw'][0][:,:1120]
 # papwf
 # plt.spy(sim.mons['rnn.papw'][0][:,:1120])
-# plt.spy(sim.mons['rnn.papw'][0][:,1120:2240])
+# plt.spy(sim.mons['rnn.papw'][0][:,1120:2240]
 # plt.spy(sim.mons['rnn.papw'][0][:,2240:3360])
 # plt.spy(sim.mons['rnn.papw'][0][:,3360:])
 #sim.mons['rnn.papwf'][19999]
-
-# n_in = task.n_in
-# n_hidden = 64
-# n_out = task.n_out
-
-# W_in  = np.random.normal(0, np.sqrt(1/(n_in)), (n_hidden, n_in))
-# W_rec = np.concatenate([np.linalg.qr(np.random.normal(0, 1, (n_hidden, n_hidden)))[0],
-#         W_in],axis=1)
-# W_out = np.random.normal(0, np.sqrt(1/(n_hidden)), (n_out, n_hidden))
-# W_FB = np.random.normal(0, np.sqrt(1/n_out), (n_out, n_hidden))
-
-# b_rec = np.zeros(n_hidden)
-# b_out = np.zeros(n_out)
-
-# alpha = 1
-
-# rnn = RNN(W_rec, W_out, b_rec, b_out,
-#           activation=tanh,
-#           alpha=alpha,
-#           output=identity,
-#           loss=mean_squared_error)
-
-# optimizer =  Stochastic_Gradient_Descent(lr=0.001)
-
-# learn_alg = RTRL(rnn)
-
-# comp_algs = []
-# monitors = []
-
-# sim = Simulation(rnn)
-# sim.run(data, learn_alg=learn_alg, optimizer=optimizer,
-#         comp_algs=comp_algs,
-#         monitors=monitors,
-#         verbose=True,
-#         check_accuracy=False,
-#         check_loss=True)
 
 
 

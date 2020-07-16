@@ -64,7 +64,7 @@ def submit_job(job_file, n_array, scratch_path='/scratch/yx2105/vanilla-rtrl/',
 def write_job_file(job_name,
                    sbatch_path='/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/job_scripts/',
                    scratch_path='/scratch/yx2105/vanilla-rtrl/',
-                   nodes=1, ppn=1, mem=16, n_hours=24):
+                   nodes=1, ppn=1, mem=16, n_hours=80):
     """
     Create a job file.
     Parameters
@@ -110,8 +110,8 @@ def write_job_file(job_name,
             + 'SAVEPATH={}library/{}\n'.format(scratch_path, job_name)
             + 'export SAVEPATH\n'
             + 'module load python3/intel/3.6.3\n'
-            + 'cd /home/yx2105/py3.6.3\n'
-            + 'source py3.6.3/bin/activate\n'
+ #           + 'cd /home/yx2105/py3.6.3\n'
+ #           + 'source py3.6.3/bin/activate\n'
             + 'cd {}\n'.format(scratch_path)
             + 'pwd > {}.log\n'.format(log_name)
             + 'date >> {}.log\n'.format(log_name)
@@ -193,3 +193,15 @@ def process_results(job_file):
             pass
 
     return configs_array, results_array, key_order, sim_dict
+
+
+if __name__ == "__main__":
+    
+    job_name = 'uoro_easy' #uoro_moredata
+    job_file = '/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/job_scripts/{}.s'.format(job_name)
+    n_array = 3
+    num_cpu = 1
+
+    write_job_file(job_name,ppn=num_cpu, mem=16)
+    submit_job(job_file,n_array=n_array)
+    #retrieve_results(job_file)

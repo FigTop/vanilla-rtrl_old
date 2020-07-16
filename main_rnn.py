@@ -27,6 +27,7 @@ from copy import deepcopy
 from scipy.ndimage.filters import uniform_filter1d
 
 if os.environ['HOME'] == '/home/oem214':
+
     n_seeds = 15
     try:
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
@@ -111,9 +112,9 @@ rnn = RNN(W_rec, W_out, b_rec, b_out,
           loss=softmax_cross_entropy)
 
 optimizer =  Stochastic_Gradient_Descent(lr=0.01)
-learn_alg = Only_Output_Weights(rnn)
+#learn_alg = Only_Output_Weights(rnn)
 #learn_alg = UORO(rnn)
-#learn_alg = Efficient_BPTT(rnn, T_truncation=100)
+learn_alg = Efficient_BPTT(rnn, T_truncation=100)
 
 comp_algs = []
 monitors = ['rnn.loss_']

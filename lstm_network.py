@@ -251,7 +251,7 @@ class LSTM:
         self.z = self.W_out.dot(self.state)+ self.b_out
 
 
-    def get_a_jacobian(self, update=True, x=None, c=None, h=None):
+    def get_a_jacobian(self, update=True, **kwargs):
         """Calculates the Jacobian of the network.
         J(c_k/c_i) = f_k^{t}
         J(h_k/c_i) = o_k^{t} tanh'(c_k^{t}) * J(c_k/c_i)
@@ -272,13 +272,20 @@ class LSTM:
                 the input value to use in calculating the Jacobian."""
 
 
+
         #Use kwargs instead of defaults if provided
-        if x == None:
-            x = self.x
-        if c == None:
-            c = self.c
-        if h == None:
-            h = self.h
+        if 'h' in kwargs.keys():
+            h = kwargs['h']
+        else:
+            h = np.copy(self.h)
+        if 'c' in kwargs.keys():
+            c = kwargs['c']
+        else:
+            c = np.copy(self.c)
+        if 'x' in kwargs.keys():
+            x = kwargs['x']
+        else:
+            x = np.copy(self.x)
 
 
         h_hat_prev = np.append(h, x, axis=0)
@@ -318,37 +325,57 @@ class LSTM:
         else: #Otherwise return
             return a_J
 
-    def update_M_immediate(self):
+    def update_M_immediate(self, update=True, **kwargs):
         """Updates the influence matrix via Eq. (1)."""
 
-        self.state_hat = np.concatenate([self.h_hat_prev, np.array([1])])
+        #Use kwargs instead of defaults if provided
+        if 'c' in kwargs.keys():
+            c = kwargs['c']
+        else:
+            c = np.copy(self.c)
+        if 'c_prev' in kwargs.keys():
+            c_prev = kwargs['c_prev']
+        else:
+            c_prev = np.copy(self.c_prev)
+        if 'state_hat' in kwargs.keys():
+            state_hat = kwargs['state_hat']
+        else:
+            state_hat = np.concatenate([self.h_hat_prev, np.array([1])])
         
         #Calculate M_immediate
         
-        r = self.o * self.tanh.f_prime(self.c)
+        r = self.o * self.tanh.f_prime(c)
 
         # self.m = n_h_prev+1
         pcpwo = np.zeros((self.n_h, (self.n_h_hat+1) * self.n_h))
-        D_o = np.diag((self.o-self.o**2) * self.tanh.f(self.c))
-        phpwo = np.kron(self.state_hat, D_o)
+        D_o = np.diag((self.o-self.o**2) * self.tanh.f(c))
+        phpwo = np.kron(state_hat, D_o)
         self.papwo = np.concatenate([pcpwo, phpwo])
 
         D_a = np.diag((1-self.a**2) * self.i)
-        pcpwa = np.kron(self.state_hat, D_a)
+        pcpwa = np.kron(state_hat, D_a)
         phpwa = (pcpwa.T * r).T
         self.papwa = np.concatenate([pcpwa, phpwa])
 
         D_i = np.diag((self.i-self.i**2) * self.a)
-        pcpwi = np.kron(self.state_hat, D_i)
+        pcpwi = np.kron(state_hat, D_i)
         phpwi = (pcpwi.T * r).T
         self.papwi = np.concatenate([pcpwi, phpwi])
 
-        D_f = np.diag((self.f-self.f**2) * self.c_prev)
-        pcpwf = np.kron(self.state_hat, D_f)
+        D_f = np.diag((self.f-self.f**2) * c_prev)
+        pcpwf = np.kron(state_hat, D_f)
         phpwf = (pcpwf.T * r).T
         self.papwf = np.concatenate([pcpwf, phpwf])
 
-        self.papw = np.concatenate([self.papwf,self.papwi,self.papwa,self.papwo],axis=1)
+        papw = np.concatenate([self.papwf,self.papwi,self.papwa,self.papwo],axis=1)
+
+
+        if update: #Update if update is True
+            self.papw = np.copy(papw)
+        else: #Otherwise return
+            return papw
+
+
         #print('self.papwf',self.papwf.shape)
 
     def update_compact_M_immediate(self):
