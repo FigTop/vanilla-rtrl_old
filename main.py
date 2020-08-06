@@ -33,7 +33,7 @@ if os.environ['HOME'] == '/home/yx2105':
         i_job = int(os.environ['SLURM_ARRAY_TASK_ID']) - 1
     except KeyError:
         i_job = 0
-    macro_configs = config_generator(units = [16,32,64], lr = [0.0001],optimizer=['Adam'],algorithm = ['uoro'], beta=[0.9],T=[20])
+    macro_configs = config_generator(units = [8,16,32,64], lr = [0.001,0.0005],optimizer=['Adam'],algorithm = ['kf'], beta=[0.9],T=[10])
     micro_configs = tuple(product(macro_configs, list(range(n_seeds))))
 
     params, i_seed = micro_configs[i_job]
@@ -45,13 +45,13 @@ if os.environ['HOME'] == '/home/yx2105':
         os.mkdir(save_dir)
 
 if os.environ['HOME'] == '/Users/yanqixu':
-    params = {'optimizer':'SGD', 'algorithm':'F-BPTT', 'lr':0.1, 'units':64,'T':50,'beta':0.9}
+    params = {'optimizer':'Adam', 'algorithm':'kf', 'lr':0.0005, 'units':32,'T':20,'beta':0.9}
     i_job = 0
     save_dir = '/Users/yanqixu/Documents/1.0.MasterCDS/OnlineRNN/vanilla-rtrl/library'
     np.random.seed(0)
 
-task = Add_Task(3, 5, deterministic=True, tau_task=1)
-data = task.gen_data(50000, 10000) #10000000
+task = Add_Task(6, 10, deterministic=True, tau_task=1)
+data = task.gen_data(800000, 10000) #10000000
 
 n_in = task.n_in
 n_h = params['units']

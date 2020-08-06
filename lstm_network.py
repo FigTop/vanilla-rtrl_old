@@ -369,7 +369,7 @@ class LSTM:
 
         papw = np.concatenate([self.papwf,self.papwi,self.papwa,self.papwo],axis=1)
 
-
+       
         if update: #Update if update is True
             self.papw = np.copy(papw)
         else: #Otherwise return

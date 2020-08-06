@@ -197,11 +197,12 @@ def process_results(job_file):
 
 if __name__ == "__main__":
     
-    job_name = 'uoro_easy' #uoro_moredata
+    job_name = 'kf_adam' 
     job_file = '/Users/yanqixu/Documents/1.0.MasterCDS/project-OnlineRNN/vanilla-rtrl/job_scripts/{}.s'.format(job_name)
-    n_array = 3
+    n_array = 8
     num_cpu = 1
 
-    write_job_file(job_name,ppn=num_cpu, mem=16)
-    submit_job(job_file,n_array=n_array)
-    #retrieve_results(job_file)
+    #write_job_file(job_name,ppn=num_cpu, mem=16)
+    #submit_job(job_file,n_array=n_array)
+    retrieve_results(job_file)
+    

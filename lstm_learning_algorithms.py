@@ -294,9 +294,9 @@ class KF_RTRL_LSTM(Stochastic_Algorithm):
         D_f = np.diag((self.rnn.f-self.rnn.f**2) * self.rnn.c_prev)
 
 
-        D_c = np.concatenate([D_a,D_i,D_f],axis=1)
+        D_c = np.concatenate([D_f,D_i,D_a],axis=1)
         D_h = (D_c.T*r).T
-        self.D = np.concatenate([D_o,np.concatenate([D_c,D_h])],axis=1)
+        self.D = np.concatenate([np.concatenate([D_c,D_h]),D_o],axis=1)
 
 
         self.rnn.get_a_jacobian()
@@ -304,10 +304,14 @@ class KF_RTRL_LSTM(Stochastic_Algorithm):
 
         A, B = self.get_influence_estimate()
         
-        # test = np.kron(self.a_hat,self.D[:,:32])
-        # papw, D_o_test = self.rnn.update_M_immediate(update=False)
+        # test1 = np.kron(self.a_hat,self.D[:,:32])
+        # test2 = np.kron(self.a_hat,self.D[:,32:64])
+        # test3 = np.kron(self.a_hat,self.D[:,64:96])
+        # test4 = np.kron(self.a_hat,self.D[:,96:128])
+        # test = np.concatenate([test1,test2,test3,test4],axis=1)
+        # papw = self.rnn.update_M_immediate(update=False)
         
-        # if np.isclose(test, D_o_test).all():
+        # if np.isclose(test, papw).all():
         #     print('True')
         # else:
         #     print('False')
@@ -358,16 +362,15 @@ class KF_RTRL_LSTM(Stochastic_Algorithm):
         Returns:
             An array of shape (n_h, m) representing the recurrent gradient."""
 
-        self.qB = self.q.dot(self.B) #Unit-specific learning signal
-
-        y = self.qB.shape[0]//4
-        B1,B2,B3,B4 = self.qB[:y], self.qB[y:2*y],self.qB[2*y:3*y],self.qB[3*y:4*y]
-        p1 = np.kron(self.A, B1).reshape((self.n_h, self.m//4), order='F')
-        p2 = np.kron(self.A, B2).reshape((self.n_h, self.m//4), order='F')
-        p3 = np.kron(self.A, B3).reshape((self.n_h, self.m//4), order='F')
-        p4 = np.kron(self.A, B4).reshape((self.n_h, self.m//4), order='F')
-
-        return np.concatenate([p1,p2,p3,p4],axis=1)
+        y = self.B.shape[1]//4
+        B1,B2,B3,B4 = self.B[:,:y], self.B[:,y:2*y],self.B[:,2*y:3*y],self.B[:,3*y:4*y]
+        p1 = np.kron(self.A, B1)
+        p2 = np.kron(self.A, B2)
+        p3 = np.kron(self.A, B3)
+        p4 = np.kron(self.A, B4)
+        #print(p4.shape)
+        p = np.concatenate([p1,p2,p3,p4],axis=1)
+        return self.q.dot(p).reshape((self.n_h, self.m), order='F')
 
     def reset_learning(self):
         """Resets learning by re-randomizing the outer product approximation to
